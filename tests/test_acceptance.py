@@ -31,7 +31,10 @@ class PairCases(unittest.TestCase):
                 found = rule.judge(case["before"], case["after"], floor=case["floor"],
                                    tolerance=case["tolerance"], noise=case["noise"])  # fmt: skip
                 self.assertEqual(found, (case["class"], case["direction"], case["band"]), case["from"])
-                self.assertEqual(list(rule.severity(case["before"], case["after"], case["class"])), case["severity"])
+                rank, far = rule.severity(case["before"], case["after"], case["class"])
+                self.assertEqual(rank, case["severity"][0])
+                # log10 may differ in its last digit between C libraries (Linux, macOS)
+                self.assertTrue(math.isclose(far, case["severity"][1], rel_tol=1e-12, abs_tol=1e-300))
 
     def test_every_class_has_a_case(self):
         self.assertEqual({c["class"] for c in CASES}, set(rule.CLASSES))
