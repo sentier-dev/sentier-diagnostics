@@ -507,7 +507,16 @@
       node.appendChild(el('span', null, ['■ not claimed, ◐ off claim, ○ claimed, not moved']));
     }
 
+    // the file's own word for an item, in the page's own sentences
+    function sayWords() {
+      var spans = root.querySelectorAll('[data-sd-word]');
+      for (var i = 0; i < spans.length; i++) spans[i].textContent = spans[i].getAttribute('data-sd-word') === 'many' ? D.item.many : D.item.one;
+      q('grid-region').setAttribute('aria-label', 'After divided by before, per ' + D.item.one + ' and indicator');
+      q('item-close').setAttribute('aria-label', 'Close the ' + D.item.one);
+    }
+
     function renderHeader() {
+      sayWords();
       if (standalone) doc.title = D.title;
       q('title').textContent = D.title;
       q('about').textContent = D.about || '';

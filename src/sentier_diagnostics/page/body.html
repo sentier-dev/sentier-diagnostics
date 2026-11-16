@@ -33,16 +33,16 @@
     <div class="sd-wrap"><table class="sd-table" data-sd="steps-table"></table></div>
     <h4 data-sd="total-heading">The whole way</h4>
     <p class="sd-note">Every difference between the first state and the last is the sum of the steps' differences.
-      "Largest step" counts, per indicator, the items whose largest share comes from each step, of the steps that moved them;
-      "spread over steps" counts the items whose whole way moved while no single step did.
+      "Largest step" counts, per indicator, the <span data-sd-word="many">items</span> whose largest share comes from each step, of the steps that moved them;
+      "spread over steps" counts the <span data-sd-word="many">items</span> whose whole way moved while no single step did.
       The split is exact up to rounding, and it depends on the order of the steps where two steps touch the same results.</p>
     <div class="sd-wrap"><table class="sd-table" data-sd="total-table"></table></div>
   </section>
 
   <section class="sd-section" data-sd="grid">
     <h3>Matrix</h3>
-    <p class="sd-note">Each cell is the result after divided by the result before, for one item and indicator, in the comparison chosen above.
-      A heading sorts by how far the two lie apart, the furthest first. Choose a row (click it, or press Enter on it) to open the item.</p>
+    <p class="sd-note">Each cell is the result after divided by the result before, for one <span data-sd-word="one">item</span> and indicator, in the comparison chosen above.
+      A heading sorts by how far the two lie apart, the furthest first. Choose a row (click it, or press Enter on it) to open the <span data-sd-word="one">item</span>.</p>
     <div class="sd-controls">
       <label class="sd-field sd-grow"><span>Name</span><input type="search" data-sd="grid-find" placeholder="Filter by name, place or id" autocomplete="off" spellcheck="false"></label>
       <label class="sd-field"><span>Group</span><select data-sd="grid-group"></select></label>
@@ -54,7 +54,7 @@
       <p class="sd-legend" data-sd="grid-legend" aria-hidden="true"></p>
     </div>
     <p class="sd-quiet" data-sd="matrix-said"></p>
-    <div class="sd-wrap sd-grid-wrap" role="region" aria-label="After divided by before, per item and indicator">
+    <div class="sd-wrap sd-grid-wrap" data-sd="grid-region" role="region" aria-label="After divided by before, per item and indicator">
       <table class="sd-grid" data-sd="grid-table"></table>
       <p class="sd-more"><button type="button" class="sd-button" data-sd="grid-more" hidden>Show more</button></p>
     </div>

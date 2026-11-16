@@ -420,3 +420,15 @@ test('the data can come from a global, as a site\'s own data.js sets it', () => 
   assert.equal(drawn.byId.content.hidden, false);
   assert.equal(drawn.byId.unchecked.hidden, true);
 });
+
+test('the page\'s own sentences say the file\'s word for an item', () => {
+  const data = example();
+  data.item = { one: 'dataset', many: 'datasets' };
+  const drawn = dom.page(data);
+  const words = drawn.root.querySelectorAll('[data-sd-word]');
+  assert.ok(words.length >= 4);
+  for (const span of words) assert.equal(span.textContent, span.getAttribute('data-sd-word') === 'many' ? 'datasets' : 'dataset');
+  assert.equal(drawn.byId['item-close'].getAttribute('aria-label'), 'Close the dataset');
+  assert.equal(drawn.byId['grid-region'].getAttribute('aria-label'), 'After divided by before, per dataset and indicator');
+});
+

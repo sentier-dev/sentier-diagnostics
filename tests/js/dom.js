@@ -108,7 +108,7 @@ class FakeNode {
   all() { return this.text !== undefined ? [] : [this].concat(...this.childNodes.map((c) => c.all())); }
 }
 
-// the root of body.html and every element in it that carries `data-sd`, each a child of the
+// the root of body.html and every element in it that carries `data-sd` or `data-sd-word`, each a child of the
 // root; the data scripts as the Python writes them where `scripts` holds them
 function body(scripts) {
   const html = fs.readFileSync(path.join(PAGE, 'body.html'), 'utf8');
@@ -116,6 +116,8 @@ function body(scripts) {
   root.setAttribute('class', 'sentier-diagnostics');
   root.setAttribute('data-sentier-diagnostics', '');
   for (const [whole, tag] of html.matchAll(/<([a-z0-9]+)\b[^>]*>/g)) {
+    const word = /\sdata-sd-word="([^"]+)"/.exec(whole);
+    if (word) { const span = new FakeNode(tag); span.setAttribute('data-sd-word', word[1]); root.appendChild(span); continue; }
     const name = /\sdata-sd="([^"]+)"/.exec(whole);
     if (!name) continue;
     const node = new FakeNode(tag);
