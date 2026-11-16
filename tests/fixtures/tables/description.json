@@ -1,0 +1,31 @@
+{
+ "title": "Made-up tables: published, recomputed, fixed",
+ "about": "Four made-up items in two indicators, read from CSV tables.",
+ "item": {"one": "product", "many": "products"},
+ "audience": "public",
+ "indicators": [
+  {"id": "x:climate", "name": "Climate change", "short": "Climate", "unit": "kg CO2 eq"},
+  {"id": "x:water", "name": "Water use", "short": "Water", "unit": "m3"}
+ ],
+ "items": "items.csv",
+ "states": [
+  {"id": "published", "label": "Published", "kind": "published", "results": "published.csv",
+   "join": {"compared": 4, "unmatched": 0, "ambiguous": 0, "note": null}},
+  {"id": "repro", "label": "Recomputed", "results": "repro.csv", "identity": {"commit": "0000001"}},
+  {"id": "fixed", "label": "Fixed", "results": "fixed.csv", "identity": {"commit": "0000002"}}
+ ],
+ "steps": [
+  {"id": "step-0", "label": "Reproduction", "kind": "reproduction",
+   "tolerance": {"value": 5e-4, "basis": "published rounding"},
+   "claim": {"text": "Nothing moves.", "by": {"kind": "code", "name": "reproduction rule"}, "scope": []}},
+  {"id": "fix-1", "label": "Fix of wheat", "kind": "fix",
+   "noise": {"tables": [{"label": "build a", "results": "repro.csv"}, {"label": "build b", "results": "again.csv"}]},
+   "claim": {"text": "Wheat goes down in climate change.", "by": {"kind": "person", "name": "A. Author"},
+             "scope": [{"indicators": ["x:climate"], "items": ["w1"], "direction": "down", "largest": 0.5, "expect": "must"}]}}
+ ],
+ "explanations": [
+  {"text": "Compost's water use was not computed in the reproduction.", "by": {"kind": "person", "name": "B. Reviewer"},
+   "step": "step-0", "indicator": "x:water", "item": "c1", "finding": "none found"}
+ ],
+ "notes": ["Made-up tables for the tests."]
+}

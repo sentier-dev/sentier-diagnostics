@@ -1,0 +1,649 @@
+"""The format of a diagnostics file, `sentier-diagnostics/1`, and its check.
+
+A file is data from a run, so it is checked before anything shows it. `errors(data)`
+returns everything wrong with it; an empty list means a page can show it. The check
+refuses a key the format does not name, a text that is too long or holds a control
+character, a number that is not finite, an id the file does not hold, and a list that is
+too long. It then works the classes, directions, bands and verdicts of every listed item
+out again from the item's own results and the file's rule, and refuses a file whose
+written answers differ: a writer that counts differently cannot pass. It checks that the
+counts add up, and that no item that had to be listed is missing without being counted
+as not listed.
+
+A file of another major version is refused with that reason: within a major version keys
+are only added.
+
+Parts of the shape check are adapted from `before_after.py` of sentier-bafu (MIT,
+Copyright (c) 2026 sentier.dev); see NOTICE.
+"""
+
+from __future__ import annotations
+
+import re
+import unicodedata
+from collections.abc import Mapping
+
+from . import claims, rule
+
+FORMAT = "sentier-diagnostics/1"
+FAMILY = "sentier-diagnostics/"
+TIERS = ("items", "counts")
+AUDIENCES = ("public", "local")
+FINDINGS = ("reason", "none found")
+MISSING_SIDES = ("before", "after", "both")
+JOIN_KEYS = {"compared", "unmatched", "ambiguous", "note"}
+STATE_KINDS = ("published", "build")
+TOLERANCE_BASES = ("default", "declared", "measured", "published rounding")
+FLOOR_BASES = ("median", "declared", "none")
+ORIGIN_KINDS = ("person", "code", "model")
+TOTAL = "total"
+
+#: The largest file a page reads: it holds the whole file.
+MAX_BYTES = 12 * 1024 * 1024
+MAX_INDICATORS, MAX_STATES, MAX_ITEMS, MAX_SCOPE, MAX_SCOPE_ITEMS = 100, 30, 5000, 50, 500
+MAX_EXPLANATIONS, MAX_NOTES, MAX_IDENTITY = 500, 20, 12
+MAX_ID, MAX_LABEL, MAX_WORD, MAX_TEXT, MAX_LONG = 100, 80, 40, 600, 2000
+FILE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.json")
+
+KEYS = {
+    "format", "tier", "audience", "title", "about", "item", "indicators", "rule", "states", "steps",
+    "counts", "attribution", "items", "items_count", "explanations", "notes", "made_by",
+}  # fmt: skip
+INDICATOR_KEYS = {"id", "name", "short", "unit"}
+RULE_KEYS = {"floor_factor", "floors_from", "beyond", "total_tolerance", "floors"}
+FLOOR_KEYS = {"indicator", "unit", "value", "basis", "n"}
+STATE_KEYS = {"id", "label", "about", "kind", "identity", "join"}
+STEP_KEYS = {"id", "from", "to", "label", "about", "kind", "explained", "link", "claim",
+             "tolerance", "noise"}  # fmt: skip
+CLAIM_KEYS = {"text", "by", "reach", "scope"}
+SCOPE_KEYS = {"indicators", "items", "direction", "largest", "expect"}
+ORIGIN_KEYS = {"kind", "name", "model", "run_by"}
+BLOCK_KEYS = {"pairs", "classes", "missing", "directions", "bands", "verdicts", "closer", "further"}
+ITEM_KEYS = {"id", "name", "place", "group", "unit", "values", "classes", "directions",
+             "bands", "verdicts", "breakdowns"}  # fmt: skip
+COUNT_KEYS = {"all", "qualifying", "listed", "not_listed"}
+EXPLANATION_KEYS = {"about", "finding", "text", "by", "source", "not_checked"}
+
+#: The verdicts a pair of each class can have.
+ALLOWED_VERDICTS = {
+    rule.MISSING: {claims.NOT_JUDGED},
+    rule.NEAR_ZERO: {claims.NOT_JUDGED},
+    rule.AGREES: {claims.UNCHANGED, claims.NOT_MOVED},
+    rule.WITHIN_NOISE: {claims.NOISE},
+    **{kind: {claims.AS_CLAIMED, claims.OFF_CLAIM, claims.NOT_CLAIMED} for kind in rule.MOVES},
+}
+
+
+# ------------------------------------------------------------------------ small checks
+
+
+def is_text(value, limit: int = MAX_TEXT) -> bool:
+    """A text a page can show: not empty, not too long, no control character."""
+    return (
+        isinstance(value, str)
+        and 0 < len(value) <= limit
+        and bool(value.strip())
+        and not any(unicodedata.category(c) == "Cc" for c in value)
+    )
+
+
+def is_optional(value, limit: int = MAX_TEXT) -> bool:
+    return value is None or is_text(value, limit)
+
+
+def is_count(value) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def is_share(value) -> bool:
+    return rule.is_value(value) and value >= 0
+
+
+def is_link(value) -> bool:
+    return value is None or (is_text(value, 500) and value.startswith("https://"))
+
+
+def origin_errors(found, where: str) -> list[str]:
+    """Who wrote a claim or an explanation."""
+    if not isinstance(found, dict) or set(found) != ORIGIN_KEYS:
+        return [f"{where}: `by` is not {{kind, name, model, run_by}}"]
+    if found["kind"] not in ORIGIN_KINDS:
+        return [f"{where}: `by.kind` is not one of {', '.join(ORIGIN_KINDS)}"]
+    if not all(is_optional(found[k], MAX_LABEL) for k in ("name", "model", "run_by")):
+        return [f"{where}: `by` holds a text that is too long or not a text"]
+    if found["kind"] in ("person", "code") and found["name"] is None:
+        return [f"{where}: a {found['kind']} is named (`by.name`)"]
+    if found["kind"] == "model" and (found["model"] is None or found["run_by"] is None):
+        return [f"{where}: a text by a model names the model and who ran it"]
+    return []
+
+
+# ------------------------------------------------------------------------ the parts
+
+
+def _indicators(data, found) -> list[str]:
+    indicators = data.get("indicators")
+    if not isinstance(indicators, list) or not 0 < len(indicators) <= MAX_INDICATORS:
+        found.append(f"`indicators` is not a list of 1 to {MAX_INDICATORS}")
+        return []
+    ids = []
+    for one in indicators:
+        if not isinstance(one, dict) or set(one) != INDICATOR_KEYS:
+            found.append("an indicator is not {id, name, short, unit}")
+            return []
+        if not is_text(one["id"], MAX_ID) or not is_text(one["name"], MAX_ID):
+            found.append("an indicator has no `id` or `name` that is a short text")
+            return []
+        if not is_optional(one["short"], MAX_WORD) or not is_optional(one["unit"], MAX_WORD):
+            found.append(f"indicator {one['id']!r}: `short` or `unit` is not a short text")
+        ids.append(one["id"])
+    if len(set(ids)) != len(ids):
+        found.append("two indicators have the same id")
+        return []
+    return ids
+
+
+def _states(data, found) -> list[str]:
+    states = data.get("states")
+    if not isinstance(states, list) or not 2 <= len(states) <= MAX_STATES:
+        found.append(f"`states` is not a list of 2 to {MAX_STATES}")
+        return []
+    ids = []
+    for k, one in enumerate(states):
+        if not isinstance(one, dict) or set(one) != STATE_KEYS or not is_text(one["id"], MAX_ID):
+            found.append(f"a state is not {{{', '.join(sorted(STATE_KEYS))}}}")
+            return []
+        where = f"state {one['id']!r}"
+        if not is_text(one["label"], MAX_LABEL) or not is_optional(one["about"]):
+            found.append(f"{where}: `label` or `about` is not a text")
+        if one["kind"] not in STATE_KINDS:
+            found.append(f"{where}: `kind` is not one of {', '.join(STATE_KINDS)}")
+        elif one["kind"] == "published" and k != 0:
+            found.append(f"{where}: only the first state can be the published results")
+        identity = one["identity"]
+        if not (
+            isinstance(identity, dict)
+            and len(identity) <= MAX_IDENTITY
+            and all(is_text(k2, MAX_WORD) and is_text(v, 200) for k2, v in identity.items())
+        ):
+            found.append(f"{where}: `identity` is not a short table of texts")
+        join = one["join"]
+        if join is not None and not (
+            isinstance(join, dict)
+            and set(join) == JOIN_KEYS
+            and all(is_count(join[k2]) for k2 in ("compared", "unmatched", "ambiguous"))
+            and is_optional(join["note"])
+        ):
+            found.append(f"{where}: `join` is not {{compared, unmatched, ambiguous, note}}")
+        ids.append(one["id"])
+    if len(set(ids)) != len(ids):
+        found.append("two states have the same id")
+        return []
+    return ids
+
+
+def claim_errors(found_claim, where, indicators, tier) -> list[str]:
+    if not isinstance(found_claim, dict) or set(found_claim) != CLAIM_KEYS:
+        return [f"{where}: `claim` is not {{text, by, reach, scope}}"]
+    found = []
+    if not is_text(found_claim["text"]):
+        found.append(f"{where}: a claim says what it claims (`text`)")
+    if found_claim["by"] is not None:
+        found += origin_errors(found_claim["by"], where)
+    if found_claim["reach"] is not None and not is_count(found_claim["reach"]):
+        found.append(f"{where}: the reach of a claim is not a count")
+    entries = found_claim["scope"]
+    if not isinstance(entries, list) or len(entries) > MAX_SCOPE:
+        return [*found, f"{where}: the scope of a claim is not a list of at most {MAX_SCOPE}"]
+    for entry in entries:
+        if not isinstance(entry, dict) or set(entry) != SCOPE_KEYS:
+            return [*found, f"{where}: a scope entry is not {{{', '.join(sorted(SCOPE_KEYS))}}}"]
+        named, items = entry["indicators"], entry["items"]
+        if named != "*" and not (isinstance(named, list) and set(named) <= set(indicators)):
+            found.append(f"{where}: a scope names an indicator the file does not hold")
+        if items not in ("*", None):
+            if tier == "counts":
+                found.append(f"{where}: a file of counts lists no item in a claim")
+            elif not (
+                isinstance(items, list)
+                and len(items) <= MAX_SCOPE_ITEMS
+                and all(is_text(i, MAX_ID) for i in items)
+            ):
+                found.append(f"{where}: the items of a scope are not at most {MAX_SCOPE_ITEMS} ids")
+        if entry["direction"] not in claims.WAYS:
+            found.append(f"{where}: a scope's direction is not one of {', '.join(claims.WAYS)}")
+        if entry["largest"] is not None and not is_share(entry["largest"]):
+            found.append(f"{where}: a scope's largest move is not a share")
+        if entry["expect"] not in claims.EXPECTS:
+            found.append(f"{where}: a scope says whether its values must or may move")
+    return found
+
+
+def _steps(data, found, states, indicators, tier) -> list[dict]:
+    steps = data.get("steps")
+    if not isinstance(steps, list) or len(steps) != max(0, len(states) - 1):
+        found.append("`steps` is not a list of one step fewer than the states")
+        return []
+    ids = []
+    for k, one in enumerate(steps):
+        if not isinstance(one, dict) or set(one) != STEP_KEYS or not is_text(one["id"], MAX_ID):
+            found.append(f"a step is not {{{', '.join(sorted(STEP_KEYS))}}}")
+            return []
+        where = f"step {one['id']!r}"
+        if one["id"] == TOTAL:
+            found.append(f"{where}: `total` names the whole way and is no step's id")
+        if (one["from"], one["to"]) != (states[k], states[k + 1]):
+            found.append(f"{where}: it does not lead from state {states[k]!r} to {states[k + 1]!r}")
+        if not is_text(one["label"], MAX_LABEL) or not is_optional(one["about"]):
+            found.append(f"{where}: `label` or `about` is not a text")
+        if not is_text(one["kind"], MAX_WORD) or not isinstance(one["explained"], bool):
+            found.append(f"{where}: a step has a `kind` and says whether a cause explains it")
+        if not is_link(one["link"]):
+            found.append(f"{where}: `link` is not an https address")
+        if one["claim"] is not None:
+            found += claim_errors(one["claim"], where, indicators, tier)
+        said = one["tolerance"]
+        if not (
+            isinstance(said, dict)
+            and set(said) == {"value", "basis", "note"}
+            and is_share(said["value"])
+            and said["basis"] in TOLERANCE_BASES
+            and is_optional(said["note"])
+        ):
+            found.append(f"{where}: `tolerance` is not {{value, basis, note}}")
+            return []
+        noise = one["noise"]
+        if not (
+            isinstance(noise, dict)
+            and set(noise) == {"measured", "between", "by", "note"}
+            and isinstance(noise["measured"], bool)
+            and is_optional(noise["note"])
+        ):
+            found.append(f"{where}: `noise` is not {{measured, between, by, note}}")
+            return []
+        if noise["measured"]:
+            if not (
+                isinstance(noise["between"], list)
+                and len(noise["between"]) == 2
+                and all(is_text(n, MAX_LABEL) for n in noise["between"])
+                and isinstance(noise["by"], dict)
+                and set(noise["by"]) <= set(indicators)
+                and all(is_share(v) for v in noise["by"].values())
+            ):
+                found.append(f"{where}: measured noise names the two builds and a size per indicator")
+                return []
+        elif noise["between"] is not None or noise["by"] is not None:
+            found.append(f"{where}: noise that was not measured has no builds and no sizes")
+        ids.append(one["id"])
+    if len(set(ids)) != len(ids):
+        found.append("two steps have the same id")
+        return []
+    return steps
+
+
+def _rule(data, found, indicators, states, steps) -> dict | None:
+    said = data.get("rule")
+    if not isinstance(said, dict) or set(said) != RULE_KEYS:
+        found.append(f"`rule` is not {{{', '.join(sorted(RULE_KEYS))}}}")
+        return None
+    if not is_share(said["floor_factor"]) or said["floors_from"] not in states:
+        found.append("`rule`: the floor factor is not a share, or the floors come from no state")
+    if said["beyond"] != rule.BEYOND_FACTOR:
+        found.append(f"`rule.beyond` is {rule.BEYOND_FACTOR:g}: one rule for every file")
+    if steps and said["total_tolerance"] != max(s["tolerance"]["value"] for s in steps):
+        found.append("`rule.total_tolerance` is not the largest tolerance of the steps")
+    floors = said["floors"]
+    if not isinstance(floors, list):
+        found.append("`rule.floors` is not a list")
+        return None
+    table = {}
+    for one in floors:
+        if not (
+            isinstance(one, dict)
+            and set(one) == FLOOR_KEYS
+            and one["indicator"] in indicators
+            and is_optional(one["unit"], MAX_WORD)
+            and is_share(one["value"])
+            and one["basis"] in FLOOR_BASES
+            and is_count(one["n"])
+        ):
+            found.append("a floor is not {indicator, unit, value, basis, n} of a known indicator")
+            return None
+        key = (one["indicator"], one["unit"])
+        if key in table:
+            found.append(f"two floors for {one['indicator']!r} in unit {one['unit']!r}")
+        table[key] = one["value"]
+    return table
+
+
+def _block(block, where, step) -> list[str]:
+    if not isinstance(block, dict) or set(block) != BLOCK_KEYS:
+        return [f"{where}: counts are not {{{', '.join(sorted(BLOCK_KEYS))}}}"]
+    found = []
+    if not is_count(block["pairs"]):
+        return [f"{where}: `pairs` is not a count"]
+    classes, bands, verdicts = block["classes"], block["bands"], block["verdicts"]
+    if not (isinstance(classes, dict) and set(classes) == set(rule.CLASSES)
+            and all(map(is_count, classes.values()))):  # fmt: skip
+        return [f"{where}: `classes` is not a count for each class"]
+    if sum(classes.values()) != block["pairs"]:
+        found.append(f"{where}: the classes do not add up to the pairs")
+    missing = block["missing"]
+    if not (isinstance(missing, dict) and set(missing) == set(MISSING_SIDES)
+            and all(map(is_count, missing.values()))):  # fmt: skip
+        return [*found, f"{where}: `missing` is not a count for before, after and both"]
+    if sum(missing.values()) != classes[rule.MISSING]:
+        found.append(f"{where}: missing before, after and on both sides do not add up to missing")
+    if not (isinstance(bands, dict) and set(bands) == set(rule.BANDS)
+            and all(map(is_count, bands.values()))):  # fmt: skip
+        return [*found, f"{where}: `bands` is not a count for each band"]
+    if sum(bands.values()) != classes[rule.DIFFERS] + classes[rule.BEYOND]:
+        found.append(f"{where}: the bands do not add up to what differs and what is beyond 10x")
+    ways = block["directions"]
+    if not (isinstance(ways, dict) and set(ways) == set(rule.DIRECTIONS)
+            and all(map(is_count, ways.values()))):  # fmt: skip
+        return [*found, f"{where}: `directions` is not a count for up and for down"]
+    if sum(ways.values()) != sum(classes[k] for k in rule.MOVES):
+        found.append(f"{where}: up and down do not add up to what moved")
+    for way in rule.DIRECTIONS:
+        banded = sum(n for name, n in bands.items() if name.startswith(way + ","))
+        if banded > ways[way]:
+            found.append(f"{where}: more bands {way} than values that went {way}")
+    has_claim = step is not None and step["claim"] is not None
+    if has_claim:
+        if not (isinstance(verdicts, dict) and set(verdicts) == set(claims.VERDICTS)
+                and all(map(is_count, verdicts.values()))):  # fmt: skip
+            return [*found, f"{where}: `verdicts` is not a count for each verdict"]
+        if sum(verdicts.values()) != block["pairs"]:
+            found.append(f"{where}: the verdicts do not add up to the pairs")
+    elif verdicts is not None:
+        found.append(f"{where}: verdicts without a claim")
+    for key in ("closer", "further"):
+        if block[key] is not None and not is_count(block[key]):
+            found.append(f"{where}: `{key}` is not a count")
+    moved = sum(classes[k] for k in rule.MOVES)
+    if is_count(block["closer"]) and is_count(block["further"]):
+        if block["closer"] + block["further"] > moved:
+            found.append(f"{where}: more came closer or went further than moved")
+    return found
+
+
+def _counts(data, found, indicators, steps, total_pairs):
+    counts = data.get("counts")
+    if not isinstance(counts, dict) or set(counts) != {"steps", TOTAL}:
+        found.append("`counts` is not {steps, total}")
+        return {}
+    by_step = counts["steps"]
+    if not isinstance(by_step, dict) or set(by_step) != {s["id"] for s in steps}:
+        found.append("`counts.steps` does not hold every step")
+        return {}
+    blocks = {}
+    for one in [*steps, None]:
+        key = one["id"] if one else TOTAL
+        table = by_step[key] if one else counts[TOTAL]
+        if not isinstance(table, dict) or set(table) != set(indicators):
+            found.append(f"counts of {key!r} do not hold every indicator")
+            return {}
+        for indicator in indicators:
+            errors = _block(table[indicator], f"counts of {key!r} in {indicator!r}", one)
+            found += errors
+            if not errors and table[indicator]["pairs"] != total_pairs:
+                found.append(f"counts of {key!r} in {indicator!r}: not every item is counted")
+            blocks[(key, indicator)] = table[indicator]
+    return blocks
+
+
+def _attribution(data, found, indicators, steps, blocks):
+    said = data.get("attribution")
+    if not isinstance(said, dict) or set(said) != set(indicators):
+        found.append("`attribution` does not hold every indicator")
+        return
+    for indicator in indicators:
+        one = said[indicator]
+        where = f"attribution in {indicator!r}"
+        if not (
+            isinstance(one, dict)
+            and set(one) == {"dominant", "not_attributable", "unexplained_moved"}
+            and isinstance(one["dominant"], dict)
+            and set(one["dominant"]) == {s["id"] for s in steps}
+            and all(map(is_count, one["dominant"].values()))
+            and is_count(one["not_attributable"])
+            and is_count(one["unexplained_moved"])
+        ):
+            found.append(f"{where}: not {{dominant per step, not_attributable, unexplained_moved}}")
+            continue
+        block = blocks.get((TOTAL, indicator))
+        if block:
+            moved = sum(block["classes"][k] for k in rule.MOVES)
+            if sum(one["dominant"].values()) + one["not_attributable"] != moved:
+                found.append(f"{where}: does not account for every item whose total moved")
+
+
+def _items(data, found, indicators, states, steps, floors, tier, blocks):
+    listed = data.get("items")
+    said = data.get("items_count")
+    if not (isinstance(said, dict) and set(said) == COUNT_KEYS and all(map(is_count, said.values()))):
+        found.append("`items_count` is not {all, qualifying, listed, not_listed} in counts")
+        return []
+    if said["qualifying"] != said["listed"] + said["not_listed"] or said["qualifying"] > said["all"]:
+        found.append("`items_count`: the items listed and not listed are not those worth a look")
+    if not isinstance(listed, list) or len(listed) > MAX_ITEMS or len(listed) != said["listed"]:
+        found.append(f"`items` is not a list of the {said['listed']} items said to be listed")
+        return []
+    if tier == "counts" and listed:
+        found.append("a file of counts holds no item")
+        return []
+    nsteps = len(steps)
+    claims_by_step = [s["claim"] for s in steps]
+    any_claim = any(claims_by_step)
+    seen, previous_key, occurrences = set(), None, {}
+    for item in listed:
+        if not isinstance(item, dict) or set(item) != ITEM_KEYS or not is_text(item["id"], MAX_ID):
+            found.append(f"an item is not {{{', '.join(sorted(ITEM_KEYS))}}}")
+            return []
+        where = f"item {item['id']!r}"
+        if item["id"] in seen:
+            found.append(f"{where} is listed twice")
+        seen.add(item["id"])
+        if not is_text(item["name"], 300):
+            found.append(f"{where}: `name` is not a text")
+        if not (is_optional(item["place"], 60) and is_optional(item["group"], MAX_LABEL)
+                and is_optional(item["unit"], MAX_WORD)):  # fmt: skip
+            found.append(f"{where}: `place`, `group` or `unit` is not a short text")
+        tables = [item[k] for k in ("values", "classes", "directions", "bands")]
+        if not all(isinstance(t, dict) and set(t) == set(indicators) for t in tables):
+            found.append(f"{where}: results, classes, directions and bands are given for every indicator")
+            return []
+        if any_claim != isinstance(item["verdicts"], dict):
+            found.append(f"{where}: verdicts are given where, and only where, a step has a claim")
+            return []
+        breakdowns = item["breakdowns"]
+        if breakdowns is not None and not (
+            isinstance(breakdowns, dict)
+            and set(breakdowns) <= {s["id"] for s in steps} | {TOTAL}
+            and all(isinstance(f, str) and FILE_NAME.fullmatch(f) for f in breakdowns.values())
+        ):
+            found.append(f"{where}: `breakdowns` names a step it does not know or a file that is a path")
+        worth, keys = False, []
+        for indicator in indicators:
+            values = item["values"][indicator]
+            kinds, ways, bands = (item[k][indicator] for k in ("classes", "directions", "bands"))
+            if not (isinstance(values, list) and len(values) == len(states)
+                    and all(v is None or rule.is_value(v) for v in values)):  # fmt: skip
+                found.append(f"{where}, {indicator}: the results are not one finite number or null per state")
+                return []
+            if not all(isinstance(x, list) and len(x) == nsteps + 1 for x in (kinds, ways, bands)):
+                found.append(f"{where}, {indicator}: classes, directions and bands are one per step and the total")
+                return []
+            floor = floors.get((indicator, item["unit"]))
+            if floor is None:
+                found.append(f"{where}, {indicator}: the file holds no floor for unit {item['unit']!r}")
+                return []
+            verdicts = item["verdicts"][indicator] if any_claim else None
+            if any_claim and not (isinstance(verdicts, list) and len(verdicts) == nsteps):
+                found.append(f"{where}, {indicator}: verdicts are one per step")
+                return []
+            for k in [*range(nsteps), None]:
+                at = nsteps if k is None else k
+                name = TOTAL if k is None else steps[k]["id"]
+                before, after = (values[0], values[-1]) if k is None else (values[k], values[k + 1])
+                if k is None:
+                    tol, level = data["rule"]["total_tolerance"], None
+                else:
+                    tol = steps[k]["tolerance"]["value"]
+                    noise = steps[k]["noise"]
+                    level = (noise["by"] or {}).get(indicator) if noise["measured"] else None
+                expected = rule.judge(before, after, floor=floor, tolerance=tol, noise=level)
+                if (kinds[at], ways[at], bands[at]) != expected:
+                    found.append(
+                        f"{where}, {indicator}, {name}: written as {kinds[at]!r}/{ways[at]!r}/"
+                        f"{bands[at]!r}, the rule gives {expected[0]!r}/{expected[1]!r}/{expected[2]!r}"
+                    )
+                    return []
+                occurrences[(name, indicator, kinds[at])] = occurrences.get((name, indicator, kinds[at]), 0) + 1
+                keys.append(rule.severity(before, after, kinds[at]))
+                worth = worth or kinds[at] not in rule.QUIET
+                if k is None or not any_claim:
+                    continue
+                said_verdict = verdicts[k]
+                step_claim = claims_by_step[k]
+                if step_claim is None:
+                    if said_verdict is not None:
+                        found.append(f"{where}, {indicator}, {name}: a verdict without a claim")
+                    continue
+                if said_verdict not in ALLOWED_VERDICTS[kinds[at]]:
+                    found.append(f"{where}, {indicator}, {name}: {kinds[at]!r} cannot be {said_verdict!r}")
+                    return []
+                worth = worth or said_verdict == claims.NOT_MOVED
+                if claims.judgeable(step_claim):
+                    covering = [
+                        e for e in claims.entries_for(step_claim, indicator)
+                        if claims.covers(e, item["id"], indicator)
+                    ]  # fmt: skip
+                    again = claims.verdict(kinds[at], before, after, ways[at], covering)
+                    if again != said_verdict:
+                        found.append(f"{where}, {indicator}, {name}: written {said_verdict!r}, the claim gives {again!r}")
+                        return []
+        if not worth:
+            found.append(f"{where}: listed, though nothing in it is worth a look")
+        key = (min(keys), item["id"])
+        if previous_key is not None and key < previous_key:
+            found.append(f"{where}: the items are not listed the worst first")
+        previous_key = key
+    # nothing listed can be more than was counted; with nothing left out, exactly as much
+    for (name, indicator, kind), n in occurrences.items():
+        block = blocks.get((name, indicator))
+        if kind in rule.QUIET or not block:
+            continue
+        counted = block["classes"][kind]
+        if n > counted or (said["not_listed"] == 0 and n != counted):
+            found.append(
+                f"counts of {name!r} in {indicator!r}: {counted} {kind!r}, {n} listed, "
+                f"{said['not_listed']} said not to be listed"
+            )
+    if said["not_listed"] == 0:
+        for (name, indicator), block in blocks.items():
+            for kind in rule.MOVES | {rule.MISSING}:
+                if block["classes"][kind] and not occurrences.get((name, indicator, kind)):
+                    found.append(
+                        f"counts of {name!r} in {indicator!r}: {block['classes'][kind]} "
+                        f"{kind!r}, none listed and none said not to be listed"
+                    )
+    return [i["id"] for i in listed]
+
+
+def _explanations(data, found, indicators, steps, items, tier):
+    said = data.get("explanations")
+    if not isinstance(said, list) or len(said) > MAX_EXPLANATIONS:
+        found.append(f"`explanations` is not a list of at most {MAX_EXPLANATIONS}")
+        return
+    step_ids = {s["id"] for s in steps} | {TOTAL}
+    for k, one in enumerate(said):
+        where = f"explanation {k + 1}"
+        if not isinstance(one, dict) or set(one) != EXPLANATION_KEYS:
+            found.append(f"{where}: not {{{', '.join(sorted(EXPLANATION_KEYS))}}}")
+            continue
+        about = one["about"]
+        if not (isinstance(about, dict) and set(about) == {"step", "indicator", "item"}):
+            found.append(f"{where}: `about` is not {{step, indicator, item}}")
+            continue
+        if all(v is None for v in about.values()):
+            found.append(f"{where}: it is about something: a step, an indicator or an item")
+        if about["step"] is not None and about["step"] not in step_ids:
+            found.append(f"{where}: about a step the file does not hold")
+        if about["indicator"] is not None and about["indicator"] not in indicators:
+            found.append(f"{where}: about an indicator the file does not hold")
+        if about["item"] is not None:
+            if tier == "counts":
+                found.append(f"{where}: a file of counts explains no single item")
+            elif about["item"] not in items:
+                found.append(f"{where}: about an item the file does not list")
+        if one["finding"] not in FINDINGS:
+            found.append(f"{where}: `finding` is not one of {', '.join(FINDINGS)}")
+        if not is_text(one["text"], MAX_LONG):
+            found.append(f"{where}: `text` is not a text of at most {MAX_LONG} characters")
+        if one["by"] is None:
+            found.append(f"{where}: every explanation says who wrote it (`by`)")
+        else:
+            found += origin_errors(one["by"], where)
+        source = one["source"]
+        if source is not None and not (
+            isinstance(source, dict)
+            and set(source) == {"link", "doc"}
+            and is_link(source["link"])
+            and is_optional(source["doc"], 200)
+        ):
+            found.append(f"{where}: `source` is not {{link, doc}}")
+        if not is_optional(one["not_checked"]):
+            found.append(f"{where}: `not_checked` is not a text")
+
+
+# ------------------------------------------------------------------------ the whole file
+
+
+def errors(data) -> list[str]:
+    """Everything wrong with a diagnostics file; nothing when a page can show it."""
+    if not isinstance(data, Mapping):
+        return ["not a diagnostics file: not an object"]
+    said = data.get("format")
+    if said != FORMAT:
+        if isinstance(said, str) and said.startswith(FAMILY):
+            return [f"format {said!r}: this reader knows {FORMAT} only"]
+        return [f"not a diagnostics file of format {FORMAT}"]
+    found = [f"a key this format does not know: {key}" for key in sorted(set(data) - KEYS)]
+    found += [f"a key this format requires: {key}" for key in sorted(KEYS - set(data))]
+    if found:
+        return found
+    tier = data["tier"]
+    if tier not in TIERS:
+        return [f"`tier` is not one of {', '.join(TIERS)}"]
+    if data["audience"] not in AUDIENCES:
+        return [f"`audience` is not one of {', '.join(AUDIENCES)}"]
+    if not is_text(data["title"], 120) or not is_optional(data["about"]):
+        found.append("`title` is not a short text, or `about` not a text")
+    item = data["item"]
+    if not (isinstance(item, dict) and set(item) == {"one", "many"}
+            and all(is_text(w, 30) for w in item.values())):  # fmt: skip
+        found.append("`item` is not {one, many}")
+    if not is_text(data["made_by"], 60):
+        found.append("`made_by` is not a short text")
+    notes = data["notes"]
+    if not isinstance(notes, list) or len(notes) > MAX_NOTES or not all(map(is_text, notes)):
+        found.append(f"`notes` is not a list of at most {MAX_NOTES} texts")
+    indicators = _indicators(data, found)
+    states = _states(data, found)
+    if not indicators or not states:
+        return found
+    steps = _steps(data, found, states, indicators, tier)
+    if not steps:
+        return found
+    floors = _rule(data, found, indicators, states, steps)
+    count = data["items_count"]
+    total_pairs = count.get("all") if isinstance(count, dict) else None
+    blocks = _counts(data, found, indicators, steps, total_pairs)
+    if floors is None or not blocks:
+        return found
+    _attribution(data, found, indicators, steps, blocks)
+    items = _items(data, found, indicators, states, steps, floors, tier, blocks)
+    _explanations(data, found, indicators, steps, set(items), tier)
+    return found

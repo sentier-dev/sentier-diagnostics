@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sentier-diagnostics"
+dynamic = ["version"]
+description = "What changed, before and after, in the impact assessment results of a life cycle inventory database, and why."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Départ de Sentier" }]
+requires-python = ">=3.10"
+# Standard library only, at run time and in the tests. Keep it so: the projects that use
+# this run it with `uv run --no-project` on the Python their runners have.
+dependencies = []
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering",
+]
+
+[project.urls]
+Repository = "https://github.com/sentier-dev/sentier-diagnostics"
+
+[project.scripts]
+sentier-diagnostics = "sentier_diagnostics.cli:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "sentier_diagnostics.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+sentier_diagnostics = ["page/*.html", "page/*.js", "page/*.css"]
+
+[tool.ruff]
+# The lowest Python this supports. A formatter set to a newer one rewrites
+# `except (A, B):` as `except A, B:`, which Python 3.13 and older cannot read.
+target-version = "py310"
+line-length = 110
