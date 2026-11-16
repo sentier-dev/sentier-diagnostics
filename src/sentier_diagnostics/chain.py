@@ -103,17 +103,23 @@ def step(id: str, label: str, *, kind: str, explained: bool = True, about: str |
 
 
 def state(id: str, label: str, *, kind: str = "build", about: str | None = None,
-          identity: Mapping[str, str] | None = None, join: Mapping | None = None) -> dict:  # fmt: skip
+          identity: Mapping[str, str | None] | None = None, join: Mapping | None = None) -> dict:  # fmt: skip
     """One state: a set of results. `kind` is "published" for the results its publisher released.
+
+    `identity` is a short table of texts (commit, release, machine); an entry whose value is
+    None is left out, so that a writer can pass what it may not know.
 
     `join` is what the reader that made the state counted when it matched its rows to items:
     `{"compared": n, "unmatched": n, "ambiguous": n, "note": text or None}`.
+
+    >>> state("b", "Build", identity={"commit": "0e1f5be", "machine": None})["identity"]
+    {'commit': '0e1f5be'}
     """
     if join is not None:
         join = {"compared": join["compared"], "unmatched": join.get("unmatched", 0),
                 "ambiguous": join.get("ambiguous", 0), "note": join.get("note")}  # fmt: skip
     return {"id": id, "label": label, "about": about, "kind": kind,
-            "identity": dict(identity or {}), "join": join}  # fmt: skip
+            "identity": {k: v for k, v in (identity or {}).items() if v is not None}, "join": join}  # fmt: skip
 
 
 def explanation(text: str, by: dict, *, step: str | None = None, indicator: str | None = None,
