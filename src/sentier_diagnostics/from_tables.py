@@ -28,10 +28,9 @@ without `expect` says what may move (`"may"`), as SPEC section 6 says.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
-from . import chain, claims, tables
+from . import chain, claims, fileformat, tables
 
 KEYS = {"title", "about", "item", "indicators", "items", "states", "steps", "listed", "tier", "audience", "claim_lists",
         "explanations", "notes", "floor_factor"}  # fmt: skip
@@ -44,13 +43,88 @@ def _origin(said):
                          run_by=said.get("run_by"))  # fmt: skip
 
 
+def _text(value) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _table(value, keys) -> bool:
+    return isinstance(value, dict) and all(isinstance(k, str) for k in value) and set(keys) <= set(value)
+
+
+def _number(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def description_errors(spec) -> list[str]:
+    """What keeps a description from being read, one sentence each, before any table is
+    opened. What the description says is checked again, in full, when the file is built."""
+    if not isinstance(spec, dict):
+        return ["a description is a JSON object"]
+    found = [f"a key a description does not know: {k}" for k in sorted(set(spec) - KEYS)]
+    for key in ("title", "items"):
+        if not _text(spec.get(key)):
+            found.append(f"`{key}` is a text")
+    for key, check, says in (
+        ("about", _text, "a text"),
+        ("tier", _text, "a text"),
+        ("audience", _text, "a text"),
+        ("listed", lambda v: isinstance(v, int) and not isinstance(v, bool) and v >= 0, "a whole number"),
+        ("claim_lists", lambda v: isinstance(v, bool), "true or false"),
+        ("floor_factor", _number, "a number"),
+        ("item", lambda v: _table(v, ("one", "many")) and all(map(_text, v.values())), "{one, many} in words"),
+        ("notes", lambda v: isinstance(v, list) and all(map(_text, v)), "a list of texts"),
+    ):
+        if key in spec and spec[key] is not None and not check(spec[key]):
+            found.append(f"`{key}` is {says}")
+    indicators = spec.get("indicators")
+    if not (isinstance(indicators, list) and indicators and all(_table(i, ("id", "name")) for i in indicators)):
+        found.append("`indicators` is a list of {id, name, short, unit}")
+    states = spec.get("states")
+    if not (isinstance(states, list) and len(states) >= 2
+            and all(_table(s, ("id", "label", "results")) and _text(s["results"]) for s in states)):  # fmt: skip
+        found.append("`states` is a list of at least two {id, label, results}, `results` naming a table")
+        states = []
+    known = {s["id"] for s in states if isinstance(s.get("id"), str)}
+    steps = spec.get("steps")
+    if not (isinstance(steps, list) and all(_table(s, ("id", "label", "kind")) for s in steps)):
+        return [*found, "`steps` is a list of {id, label, kind}"]
+    for one in steps:
+        where = f"step {one['id']!r}"
+        said = one.get("claim")
+        if said is not None:
+            if not (_table(said, ("text",)) and _text(said["text"])):
+                found.append(f"{where}: a claim says what it claims (`text`)")
+            elif not (isinstance(said.get("scope", []), list) and all(isinstance(e, dict) for e in said.get("scope", []))):
+                found.append(f"{where}: a claim's `scope` is a list of entries")
+            elif said.get("by") is not None and not isinstance(said["by"], dict):
+                found.append(f"{where}: a claim's `by` is {{kind, name}}")
+        said = one.get("tolerance")
+        if said is not None and not (_table(said, ("value",)) and _number(said["value"])):
+            found.append(f"{where}: a tolerance is {{value, basis, note}} with a number as its value")
+        said = one.get("noise")
+        if said is not None:
+            pair = said.get("states") if isinstance(said, dict) else None
+            tables_ = said.get("tables") if isinstance(said, dict) else None
+            if pair is not None:
+                if not (isinstance(pair, list) and len(pair) == 2 and all(isinstance(s, str) and s in known for s in pair)):
+                    found.append(f"{where}: a noise's `states` names two states of this chain")
+            elif not (isinstance(tables_, list) and len(tables_) == 2
+                      and all(_table(t, ("label", "results")) and _text(t["results"]) for t in tables_)):  # fmt: skip
+                found.append(f"{where}: a noise is {{states: [a, b]}} or {{tables: [{{label, results}}, {{label, results}}]}}")
+    explanations = spec.get("explanations", [])
+    if not (isinstance(explanations, list) and all(_table(e, ("text",)) for e in explanations)):
+        found.append("`explanations` is a list of {text, by, ...}")
+    return found
+
+
 def build(path: Path) -> dict:
-    """The diagnostics file a description and its tables give, checked."""
+    """The diagnostics file a description and its tables give, checked. Every mistake is a
+    ValueError that says what is wrong (`tables.TableError` for a table)."""
     path = Path(path)
-    spec = json.loads(path.read_text(encoding="utf-8"))
-    unknown = set(spec) - KEYS
-    if unknown:
-        raise ValueError(f"{path}: keys a description does not know: {', '.join(sorted(unknown))}")
+    spec = fileformat.load_json(path)
+    errors = description_errors(spec)
+    if errors:
+        raise ValueError(f"{path}: " + "; ".join(errors))
     here = path.parent
     indicators = spec["indicators"]
     ids = [i["id"] for i in indicators]
@@ -63,6 +137,13 @@ def build(path: Path) -> dict:
                 f"state {state_id!r}: items without a row in {spec['items']} (and so without "
                 f"a reference unit): {', '.join(sorted(unknown)[:10])}"
             )
+    # an item of the items table that no results table holds is missing in every state:
+    # counted, never dropped
+    first = values[spec["states"][0]["id"]]
+    held = {item for by_indicator in values.values() for column in by_indicator.values() for item in column}
+    for item in sorted(set(items) - held):
+        for indicator in ids:
+            first[indicator][item] = None
     # noise is taken beyond the floors the chain counts with: those of its first state
     floor_factor = spec.get("floor_factor", chain.rule.FLOOR_FACTOR)
     units = {k: v["unit"] for k, v in items.items()}

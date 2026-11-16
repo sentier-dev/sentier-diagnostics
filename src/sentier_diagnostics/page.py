@@ -7,7 +7,9 @@ breakdowns the file names go into `breakdowns.js` the same way. Served over HTTP
 page can also read a JSON file named in its address (`index.html?file=diagnostics.json`),
 and it can open a file a reader chooses.
 
-The page shows what the file says. It works out no class, no direction and no count.
+The page shows what the file says. It works out no class, no direction and no count of
+its own: it only adds the file's counts up (the classes that moved into "moved", a step's
+counts over its indicators), and splits one item's difference into the steps' shares.
 """
 
 from __future__ import annotations
@@ -44,10 +46,9 @@ def write(data: Mapping, folder: Path, breakdowns: Mapping[str, Mapping] | None 
     found = fileformat.errors(data)
     if found:
         raise ValueError("not a diagnostics file: " + "; ".join(found[:10]))
-    for name, one in (breakdowns or {}).items():
-        errors = breakdown.errors(one) + breakdown.against(one, data)
-        if errors:
-            raise ValueError(f"{name}: " + "; ".join(errors))
+    errors = breakdown_errors(data, breakdowns or {})
+    if errors:
+        raise ValueError("; ".join(errors))
     script = as_script("SENTIER_DIAGNOSTICS", data)
     if len(script) > fileformat.MAX_BYTES:  # ASCII: one byte per character
         raise ValueError(
@@ -66,9 +67,30 @@ def write(data: Mapping, folder: Path, breakdowns: Mapping[str, Mapping] | None 
     return folder / "index.html"
 
 
+def breakdown_errors(data: Mapping, breakdowns: Mapping[str, Mapping]) -> list[str]:
+    """Everything wrong with the breakdowns given for a checked diagnostics file: each one
+    alone, then against every item and step that names it (it must be theirs), or against
+    the file where nothing names it."""
+    found, broken = [], set()
+    for name, one in breakdowns.items():
+        errors = breakdown.errors(one)
+        if errors:
+            broken.add(name)
+            found += [f"{name}: {e}" for e in errors]
+    named = set()
+    for name, item, key in breakdown.namings(data):
+        if name in breakdowns and name not in broken:
+            named.add(name)
+            found += [f"{name}: {e}" for e in breakdown.against(breakdowns[name], data, (item, key))]
+    for name in sorted(set(breakdowns) - named - broken):
+        found += [f"{name}: {e}" for e in breakdown.against(breakdowns[name], data)]
+    return found
+
+
 def named_breakdowns(data: Mapping, beside: Path) -> tuple[dict, list[str]]:
     """The breakdowns a file names that lie beside it, read; and the names of those that
-    do not (a project may keep them to itself)."""
+    do not (a project may keep them to itself). A breakdown that cannot be read is refused
+    with its name."""
     found, absent = {}, []
     names = sorted({f for item in data["items"] for f in (item["breakdowns"] or {}).values()})
     for name in names:
@@ -76,5 +98,5 @@ def named_breakdowns(data: Mapping, beside: Path) -> tuple[dict, list[str]]:
         if not path.is_file():
             absent.append(name)
             continue
-        found[name] = json.loads(path.read_text(encoding="utf-8"))
+        found[name] = fileformat.load_json(path)
     return found, absent

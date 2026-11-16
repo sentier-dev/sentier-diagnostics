@@ -220,6 +220,16 @@ def build(
     items = sorted({item for s in order for i in ids for item in table[s][i]})
     for item in items:
         units.setdefault(item, None)
+    # a claim names items of this chain: an id no state holds is a mistake, not a claim
+    for one in steps:
+        for entry in (one.get("claim") or {}).get("scope", ()):
+            if entry["items"] not in ("*", None):
+                unknown = set(entry["items"]) - set(items)
+                if unknown:
+                    shown = ", ".join(sorted(unknown)[:5]) + (", ..." if len(unknown) > 5 else "")
+                    raise ValueError(
+                        f"step {one['id']!r}: its claim names {len(unknown)} items no state holds ({shown})"
+                    )
 
     # floors: one per indicator and reference unit, from the first state
     computed = rule.floors_of(table[order[0]], units, floor_factor)
@@ -321,12 +331,10 @@ def build(
     attribution = {}
     for indicator in ids:
         dominant = {s["id"]: 0 for s in out_steps}
-        not_attributable = unexplained_moved = 0
+        not_attributable = spread = unexplained_moved = 0
         for item in items:
-            if any(
-                not s["explained"] and found[(k, indicator, item)][2] in rule.MOVES
-                for k, s in enumerate(out_steps)
-            ):
+            kinds = [found[(k, indicator, item)][2] for k in range(len(out_steps))]
+            if any(not s["explained"] and kinds[k] in rule.MOVES for k, s in enumerate(out_steps)):
                 unexplained_moved += 1
             if found[(None, indicator, item)][2] not in rule.MOVES:
                 continue
@@ -334,10 +342,13 @@ def build(
             if any(v is None for v in series):
                 not_attributable += 1
                 continue
-            deltas = [abs(series[k + 1] - series[k]) for k in range(len(out_steps))]
-            dominant[out_steps[deltas.index(max(deltas))]["id"]] += 1
+            carrier = rule.largest_step(series, kinds)
+            if carrier is None:
+                spread += 1
+            else:
+                dominant[out_steps[carrier]["id"]] += 1
         attribution[indicator] = {"dominant": dominant, "not_attributable": not_attributable,
-                                  "unexplained_moved": unexplained_moved}  # fmt: skip
+                                  "spread": spread, "unexplained_moved": unexplained_moved}  # fmt: skip
 
     # the items worth a look, the worst first
     def worth(item):
@@ -468,15 +479,8 @@ def write(data: Mapping, path: Path) -> Path:
 
 def read(path: Path) -> dict:
     """A file, read and checked; raises ValueError with every error found."""
-    try:
-        data = json.loads(Path(path).read_text(encoding="utf-8"), parse_constant=_refuse)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ValueError(f"{path}: cannot be read ({error})") from None
+    data = fileformat.load_json(path)
     errors = fileformat.errors(data)
     if errors:
         raise ValueError(f"{path}: " + "; ".join(errors[:10]))
     return data
-
-
-def _refuse(constant):
-    raise json.JSONDecodeError(f"{constant} is not a number a file may hold", constant, 0)

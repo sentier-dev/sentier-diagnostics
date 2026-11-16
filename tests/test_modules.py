@@ -8,6 +8,7 @@ import doctest
 import importlib
 import io
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -91,6 +92,39 @@ class Validator(unittest.TestCase):
 
     def test_control_characters_in_text(self):
         self.refuses(lambda d: d.update(title="a\u0000b"))
+
+    def test_values_of_any_type_are_faults_and_never_raise(self):
+        """Every node of the example replaced by values of other types: the check returns
+        faults that name a place, and never raises or stops without one (issue 4)."""
+        odd = ([], {}, [[]], {"a": 1}, "x", -1, 1.5, True, None, 10**400, [None])
+        data = json.loads(json.dumps(self.data))
+        data["items"] = data["items"][:5]  # five items hold every kind of node, and the explained ones
+        data["items_count"].update(listed=5, not_listed=data["items_count"]["qualifying"] - 5)
+
+        def nodes(node, at=()):
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    yield node, key
+                    yield from nodes(value)
+            elif isinstance(node, list):  # the first, second and last of a list stand for the rest
+                for key in sorted({0, 1, len(node) - 1} & set(range(len(node)))):
+                    yield node, key
+                    yield from nodes(node[key])
+
+        stopped = []
+        for parent, key in list(nodes(data)):
+            kept = parent[key]
+            for value in odd:
+                parent[key] = value
+                try:
+                    found = fileformat.errors(data)
+                except Exception as error:  # noqa: BLE001 - the test is that nothing raises
+                    self.fail(f"{key!r} = {value!r}: {type(error).__name__}: {error}")
+                self.assertIsInstance(found, list)
+                stopped += [(key, value) for e in found if e.startswith(fileformat.STOPPED)]
+            parent[key] = kept
+        self.assertEqual(stopped, [])
+        self.assertEqual(fileformat.errors(data), [])
 
     def test_a_claim_list_in_a_file_of_counts(self):
         data = example.build(tier="counts")
@@ -194,6 +228,10 @@ class Tables(unittest.TestCase):
         path.write_text(text, encoding="utf-8")
         return path
 
+    def test_a_byte_order_mark_is_not_part_of_the_first_column(self):
+        found = tables.read_results(self.write("\ufeffitem,x:a,x:b\np,1,2\n"), [A, B])
+        self.assertEqual(found, {A: {"p": 1.0}, B: {"p": 2.0}})
+
     def test_an_empty_cell_is_missing(self):
         found = tables.read_results(self.write("item,x:a,x:b\np,,0\n"), [A, B])
         self.assertEqual(found, {A: {"p": None}, B: {"p": 0.0}})
@@ -208,10 +246,19 @@ class Tables(unittest.TestCase):
             "item,x:a,x:b\np,one,2\n",  # not a number
             "item,x:a,x:b\n,1,2\n",  # no item
             "",  # empty
+            "item,x:a,x:b\np,1_5,2\n",  # Python reads 1_5 as 15
+            "item,x:a,x:b\np,１２,2\n",  # full-width digits
+            "item,x:a,x:b\np,٣,2\n",  # Arabic-Indic digits
+            "item,x:a,x:b\np,1e-400,2\n",  # a result that is not zero, read as zero
+            "item,x:a,x:b\np,0x10,2\n",  # not a decimal
         ):
             with self.subTest(text):
                 with self.assertRaises(tables.TableError):
                     tables.read_results(self.write(text), [A, B])
+
+    def test_decimal_numbers_as_machines_write_them(self):
+        found = tables.read_results(self.write("item,x:a,x:b\np,-0,+1.5E+3\nq,.5,0e-400\nr,7.,1e-300\n"), [A, B])
+        self.assertEqual(found, {A: {"p": 0.0, "q": 0.5, "r": 7.0}, B: {"p": 1500.0, "q": 0.0, "r": 1e-300}})
 
     def test_items_need_a_unit_column(self):
         with self.assertRaises(tables.TableError):
@@ -235,6 +282,68 @@ class Breakdowns(unittest.TestCase):
         good = breakdown.build("p", "s0", "s1", {A: ("kg", [("a", None, 1.0, 2.0)])})
         bad = helpers.mutated(good, lambda d: d["indicators"][A].update(rest=[0.5, 0.0], total=[1.5, 2.0]))
         self.assertTrue(breakdown.errors(bad))
+
+    def test_a_breakdown_is_of_the_item_and_step_that_name_it(self):
+        data, wheat = example.build(), example.wheat_breakdown()
+        self.assertEqual(breakdown.against(wheat, data, ("p01", "fix-1")), [])
+        for named_by in (("p05", "fix-1"), ("p01", "total"), ("p01", "mapping-2")):
+            with self.subTest(named_by):
+                found = breakdown.against(wheat, data, named_by)
+                self.assertTrue(any("named by" in e for e in found), found)
+
+    def test_check_refuses_a_breakdown_named_by_another_item(self):
+        data = example.build()
+        rice = next(i for i in data["items"] if i["id"] == "p05")
+        rice["breakdowns"] = {"total": "p01-fix-1.json"}
+        folder = Path(tempfile.mkdtemp())
+        chain.write(data, folder / chain.FILE)
+        breakdown.write(example.wheat_breakdown(), folder / "p01-fix-1.json")
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(cli.check([folder / chain.FILE]), 1)
+        self.assertIn("named by 'p05'", out.getvalue())
+        with self.assertRaises(ValueError):
+            page.write(data, folder / "page", {"p01-fix-1.json": example.wheat_breakdown()})
+
+
+class Attribution(unittest.TestCase):
+    """Which step carries an item's whole difference (SPEC 7; issue 8)."""
+
+    def chain_of(self, values, noise):
+        steps = [chain.step(f"s{k}", f"Step {k}", kind="fix",
+                            noise=chain.noise(("x", "y"), {A: n}) if n else None)
+                 for k, n in enumerate(noise)]  # fmt: skip
+        return chain.build(
+            "Attribution",
+            indicators=helpers.INDICATORS,
+            states=[chain.state("p", "Published", kind="published")]
+            + [chain.state(f"b{k}", f"Build {k}") for k in range(len(noise))],
+            steps=steps,
+            values={"p": {A: {"i": values[0]}}} | {f"b{k}": {A: {"i": v}} for k, v in enumerate(values[1:])},
+            units={"i": "kg"},
+        )
+
+    def test_a_step_that_did_not_move_carries_nothing(self):
+        data = self.chain_of([1.0, 1.045, 1.075], [0.05, None])
+        self.assertEqual([data["items"][0]["classes"][A][k] for k in range(3)],
+                         [rule.WITHIN_NOISE, rule.DIFFERS, rule.DIFFERS])  # fmt: skip
+        self.assertEqual(data["attribution"][A]["dominant"], {"s0": 0, "s1": 1})
+
+    def test_a_whole_way_that_moved_while_no_step_did_is_spread(self):
+        data = self.chain_of([1.0, 1.04, 1.08], [0.05, 0.05])
+        self.assertEqual(data["items"][0]["classes"][A][2], rule.DIFFERS)
+        self.assertEqual(data["attribution"][A]["dominant"], {"s0": 0, "s1": 0})
+        self.assertEqual(data["attribution"][A]["spread"], 1)
+        self.assertEqual(fileformat.errors(data), [])
+        self.assertIn("| Spread over steps |", summary.text(data))
+
+    def test_a_tie_goes_to_the_earlier_step(self):
+        data = self.chain_of([1.0, 2.0, 3.0], [None, None])
+        self.assertEqual(data["attribution"][A]["dominant"], {"s0": 1, "s1": 0})
+
+    def test_the_validator_works_the_spread_out_again(self):
+        data = self.chain_of([1.0, 1.04, 1.08], [0.05, 0.05])
+        moved = helpers.mutated(data, lambda d: d["attribution"][A].update(spread=0, dominant={"s0": 1, "s1": 0}))
+        self.assertTrue(any("attribution" in e for e in fileformat.errors(moved)))
 
 
 class FromTables(unittest.TestCase):
@@ -318,6 +427,56 @@ class FromTables(unittest.TestCase):
         self.assertEqual(chain.noise_of({"a": 1.0, "b": 0.05}, {"a": 1.0, "b": 0.0}, floor=floor), 0.0)
         said = chain.noise(("a", "b"), {A: 0.0, B: None})
         self.assertEqual(said["by"], {A: 0.0})
+
+    SMALL = {"title": "t", "indicators": [{"id": A, "name": "A", "short": "A", "unit": "kg"}], "items": "items.csv",
+             "states": [{"id": "s0", "label": "0", "results": "s0.csv"}, {"id": "s1", "label": "1", "results": "s1.csv"}],
+             "steps": [{"id": "st", "label": "step", "kind": "fix"}]}  # fmt: skip
+    SMALL_TABLES = {"items.csv": "item,unit\na,kg\nb,kg\n", "s0.csv": f"item,{A}\na,1.0\nb,2.0\n",
+                    "s1.csv": f"item,{A}\na,1.5\nb,2.0\n"}  # fmt: skip
+
+    def test_an_item_without_results_is_missing_in_every_state(self):
+        """An item of the items table that no results table holds is counted, as missing on
+        both sides of every step (issue 13)."""
+        with tempfile.TemporaryDirectory() as folder:
+            tables_ = self.SMALL_TABLES | {"items.csv": "item,unit\na,kg\nb,kg\nghost,kg\n"}
+            data = from_tables.build(self.description(Path(folder), tables_, self.SMALL))
+        self.assertEqual(data["items_count"]["all"], 3)
+        self.assertEqual(data["counts"]["steps"]["st"][A]["missing"], {"before": 0, "after": 0, "both": 1})
+        ghost = next(i for i in data["items"] if i["id"] == "ghost")
+        self.assertEqual(ghost["values"][A], [None, None])
+
+    def test_ordinary_mistakes_are_sentences_not_tracebacks(self):
+        """Each mistake ends in one ValueError that says what is wrong, and the command prints
+        it after `error:` and exits 1 (issue 11)."""
+        cases = {
+            "a results table that is not there": ({}, {"s1.csv": None}),
+            "a cell larger than a CSV field may be": ({}, {"s1.csv": f"item,{A}\na,{'1' * 140000}\nb,2\n"}),
+            "listed that is a text": ({"listed": "5"}, {}),
+            "no title": ({"title": None}, {}),
+            "an indicator without an id": ({"indicators": [{"name": "A"}]}, {}),
+            "a state without results": ({"states": [{"id": "s0", "label": "0"}, {"id": "s1", "label": "1", "results": "s1.csv"}]}, {}),
+            "a step that is a text": ({"steps": ["st"]}, {}),
+            "a claim without text": ({"steps": [{"id": "st", "label": "s", "kind": "fix", "claim": {"scope": []}}]}, {}),
+            "a noise of three states": ({"steps": [{"id": "st", "label": "s", "kind": "fix", "noise": {"states": ["s0", "s1", "s1"]}}]}, {}),
+            "a noise of an unknown state": ({"steps": [{"id": "st", "label": "s", "kind": "fix", "noise": {"states": ["s0", "x"]}}]}, {}),
+            "a tolerance without a value": ({"steps": [{"id": "st", "label": "s", "kind": "fix", "tolerance": {"basis": "declared"}}]}, {}),
+        }  # fmt: skip
+        for name, (changes, table_changes) in cases.items():
+            with self.subTest(name), tempfile.TemporaryDirectory() as folder:
+                spec = {k: v for k, v in (self.SMALL | changes).items() if v is not None}
+                tables_ = {k: v for k, v in (self.SMALL_TABLES | table_changes).items() if v is not None}
+                path = self.description(Path(folder), tables_, spec)
+                with self.assertRaises(ValueError) as caught:
+                    from_tables.build(path)
+                self.assertNotIn("Traceback", str(caught.exception))
+                with contextlib.redirect_stderr(io.StringIO()) as err:
+                    self.assertEqual(cli.main(["build", str(path), "--out", str(Path(folder) / "out.json")]), 1)
+                self.assertTrue(err.getvalue().startswith("error: "), err.getvalue())
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "d.json"
+            path.write_text("[1, 2]", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                from_tables.build(path)
 
     def test_an_unknown_key_in_a_description(self):
         spec = json.loads((FIXTURES / "description.json").read_text(encoding="utf-8"))
@@ -419,6 +578,78 @@ class Summary(unittest.TestCase):
         said = summary.text(example.build())
         self.assertIn("Water 2.4 %", said)
 
+    def test_texts_of_the_file_are_not_markdown(self):
+        """A text from the file cannot add a table column, a link, markup or a mention to a
+        pull request the summary is pasted into (issue 17)."""
+        data = example.build()
+        data["title"] = "A <b>title</b> for @someone, see [this](https://example.org) | *now*"
+        data["steps"][1]["label"] = "fix|x"
+        data["steps"][1]["kind"] = "_k_"
+        data["indicators"][0]["short"] = "C`O`2"
+        data["notes"] = ["ask @team about #12"]
+        self.assertEqual(fileformat.errors(data), [])
+        said = summary.text(data)
+        for raw in ("<b>", "@someone", "@team", "[this](", "fix|x", "*now*", "_k_", "C`O`2"):
+            self.assertNotIn(raw, said)
+        row = next(line for line in said.splitlines() if line.startswith("| 1. "))
+        header = next(line for line in said.splitlines() if line.startswith("| Step |"))
+        unescaped = lambda line: len(re.findall(r"(?<!\\)\|", line))  # noqa: E731
+        self.assertEqual(unescaped(row), unescaped(header))
+
+
+class Verdicts(unittest.TestCase):
+    """How a pair is held against its claim (SPEC 6; issues 3, 12 and 16)."""
+
+    def verdict(self, kind, before, after, entries):
+        way = rule.direction(before, after, kind)
+        return claims.verdict(kind, before, after, way, entries)
+
+    def test_a_must_that_did_not_move_beyond_the_noise_or_the_floor_is_unmet(self):
+        must = claims.scope([A], {"p"}, "down", None, claims.MUST)
+        may = claims.scope([A], {"p"}, "down", None, claims.MAY)
+        for kind in (rule.AGREES, rule.WITHIN_NOISE, rule.NEAR_ZERO):
+            with self.subTest(kind):
+                self.assertEqual(self.verdict(kind, 1.0, 1.0, [must]), claims.NOT_MOVED)
+        self.assertEqual(self.verdict(rule.WITHIN_NOISE, 1.0, 1.0, [may]), claims.NOISE)
+        self.assertEqual(self.verdict(rule.NEAR_ZERO, 0.0, 0.0, [may]), claims.NOT_JUDGED)
+        self.assertEqual(self.verdict(rule.MISSING, None, 1.0, [must]), claims.NOT_JUDGED)
+
+    def test_a_must_is_judged_on_its_own_where_entries_overlap(self):
+        must_down = claims.scope([A], {"p"}, "down", None, claims.MUST)
+        may_any = claims.scope([A], {"p"}, "any", None, claims.MAY)
+        self.assertEqual(self.verdict(rule.DIFFERS, 1.0, 2.0, [must_down, may_any]), claims.OFF_CLAIM)
+        self.assertEqual(self.verdict(rule.DIFFERS, 2.0, 1.0, [must_down, may_any]), claims.AS_CLAIMED)
+        self.assertEqual(self.verdict(rule.DIFFERS, 1.0, 2.0, [may_any]), claims.AS_CLAIMED)
+
+    def test_a_zero_reference_is_never_within_a_relative_largest(self):
+        capped = claims.scope([A], {"p"}, "up", 0.3, claims.MAY)
+        self.assertEqual(self.verdict(rule.ZERO_REFERENCE, 9e-10, 1.1e-9, [capped]), claims.OFF_CLAIM)
+        uncapped = claims.scope([A], {"p"}, "up", None, claims.MAY)
+        self.assertEqual(self.verdict(rule.ZERO_REFERENCE, 9e-10, 1.1e-9, [uncapped]), claims.AS_CLAIMED)
+
+    def test_a_scope_item_no_state_holds_is_refused(self):
+        with self.assertRaises(ValueError):
+            helpers.two_states({A: {"p": 1.0}}, {A: {"p": 2.0}}, claim=helpers.claim_down({"p", "typo"}))
+
+    def test_a_must_on_a_near_zero_pair_is_listed_and_valid(self):
+        data = helpers.two_states({A: {"p": 1.0, "q": 1.0, "z": 0.0}}, {A: {"p": 1.0, "q": 2.0, "z": 0.0}},
+                                  claim=helpers.claim_down({"z"}))  # fmt: skip
+        self.assertEqual(fileformat.errors(data), [])
+        z = next(i for i in data["items"] if i["id"] == "z")
+        self.assertEqual(z["verdicts"][A], [claims.NOT_MOVED])
+
+    def test_reach_is_the_size_of_the_lists_beside_a_star(self):
+        found = claims.published(claims.claim("t", [claims.scope([A], {"p", "q"}), claims.scope([B])]), keep_items=False)
+        self.assertEqual(found["reach"], 2)
+        self.assertEqual([e["items"] for e in found["scope"]], [None, "*"])
+
+    def test_a_scope_may_list_as_many_items_as_a_file(self):
+        many = {f"i{k}" for k in range(600)}
+        data = helpers.two_states({A: dict.fromkeys(many, 1.0)}, {A: dict.fromkeys(many, 1.0)},
+                                  claim=claims.claim("t", [claims.scope([A], many)], by=claims.origin("person", "A")))  # fmt: skip
+        self.assertEqual(fileformat.errors(data), [])
+        self.assertEqual(len(data["steps"][0]["claim"]["scope"][0]["items"]), 600)
+
 
 class Chain(unittest.TestCase):
     def test_a_file_with_its_keys_in_another_order_is_written_whole(self):
@@ -438,6 +669,35 @@ class Chain(unittest.TestCase):
             claims.published(claims.claim("t", [claims.scope([A], {"p", "q"})], reach=4900))
         self.assertEqual(claims.published(claims.claim("t", [claims.scope([A], {"p", "q"})]))["reach"], 2)
 
+    def test_a_lone_surrogate_is_not_a_text(self):
+        data = example.build()
+        data["title"] = "half \ud800 a character"
+        self.assertTrue(fileformat.errors(data))
+
+    def test_no_approval_hides_in_a_state_identity(self):
+        """SPEC 8: a file carries no status and no approval, and `identity` is no way round it."""
+        for key in ("status", "accepted_by", "Approved", "approval"):
+            with self.subTest(key):
+                data = helpers.mutated(example.build(), lambda d, key=key: d["states"][1]["identity"].update({key: "yes"}))
+                self.assertTrue(any("identity" in e for e in fileformat.errors(data)))
+
+    def test_a_key_written_twice_is_refused_when_read(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "d.json"
+            text = chain.dumps(example.build())
+            path.write_text(text.replace('"tier": "items",', '"tier": "items", "tier": "counts",', 1), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                chain.read(path)
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(cli.check([path]), 1)
+            self.assertIn("twice", out.getvalue())
+
+    def test_the_limit_of_listed_items_is_named(self):
+        data = example.build()
+        data["items"] = data["items"] * 501  # 5,010: the count agrees, only the limit is met
+        data["items_count"].update(listed=len(data["items"]), qualifying=len(data["items"]), all=len(data["items"]))
+        self.assertTrue(any("of at most 5000" in e for e in fileformat.errors(data)))
+
     def test_check_refuses_a_file_larger_than_a_page_holds(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "d.json"
@@ -447,6 +707,132 @@ class Chain(unittest.TestCase):
             with contextlib.redirect_stdout(out):
                 self.assertEqual(cli.check([path]), 1)
             self.assertIn("bytes", out.getvalue())
+
+
+class EachRuleOnItsOwn(unittest.TestCase):
+    """Each check of the validator, broken on its own in the example: its own fault must be
+    named. Other checks often refuse the same file too, so a test that asserts only that
+    the file is refused cannot tell a check that works from one that is gone (issue 15)."""
+
+    def refused(self, change, said):
+        found = fileformat.errors(helpers.mutated(example.build(), change))
+        self.assertTrue(any(said in e for e in found), f"{said!r} not in {found}")
+
+    @staticmethod
+    def block(d, step="fix-1", indicator="x:climate"):
+        return d["counts"]["steps"][step][indicator]
+
+    def test_bands_add_up_to_what_differs(self):
+        self.refused(lambda d: self.block(d)["bands"].update({"up, factor 1-1.1": 1}),
+                     "the bands do not add up to what differs")  # fmt: skip
+
+    def test_no_more_bands_up_than_went_up(self):
+        def change(d):
+            self.block(d)["bands"].update({"up, factor 1.1-1.25": 2, "down, factor 1.25-2": 0})
+
+        self.refused(change, "more bands up than values that went up")
+
+    def test_up_and_down_add_up_to_what_moved(self):
+        self.refused(lambda d: self.block(d)["directions"].update(up=2), "up and down do not add up to what moved")
+
+    def test_verdicts_add_up_to_the_pairs(self):
+        self.refused(lambda d: self.block(d)["verdicts"].update(unchanged=8), "the verdicts do not add up to the pairs")
+
+    def test_every_item_is_counted(self):
+        self.refused(lambda d: d["items_count"].update(all=11, qualifying=10), "not every item is counted")
+
+    def test_the_attribution_accounts_for_every_item_that_moved(self):
+        self.refused(lambda d: d["attribution"]["x:climate"].update(spread=1),
+                     "does not account for every item whose total moved")  # fmt: skip
+
+    def test_a_link_is_https(self):
+        self.refused(lambda d: d["steps"][1].update(link="http://example.org/fix-1"), "is not an https address")
+
+    def test_a_breakdown_is_named_by_a_file_name_not_a_path(self):
+        self.refused(lambda d: d["items"][0].update(breakdowns={"fix-1": "../p01-fix-1.json"}),
+                     "a file that is a path")  # fmt: skip
+
+    def test_an_item_is_listed_once(self):
+        def change(d):
+            d["items"][1] = d["items"][0]
+
+        self.refused(change, "is listed twice")
+
+    def test_two_steps_have_two_ids(self):
+        self.refused(lambda d: d["steps"][2].update(id="fix-1"), "two steps have the same id")
+
+    def test_a_step_leads_from_one_state_to_the_next(self):
+        self.refused(lambda d: d["steps"][1].update(**{"from": "published"}), "does not lead from state")
+
+    def test_the_tolerance_of_the_whole_way_is_the_largest(self):
+        self.refused(lambda d: d["rule"].update(total_tolerance=1e-3), "not the largest tolerance of the steps")
+
+    def test_a_person_is_named(self):
+        self.refused(lambda d: d["explanations"][0]["by"].update(name=None), "a person is named")
+
+    def test_a_listed_verdict_fits_its_class(self):
+        def change(d):
+            item = next(i for i in d["items"] if i["classes"]["x:climate"][1] == rule.AGREES)
+            item["verdicts"]["x:climate"][1] = claims.AS_CLAIMED
+
+        self.refused(change, "'agrees' cannot be 'as claimed'")
+
+    def test_a_file_of_counts_explains_no_single_item(self):
+        def change(d):
+            d["tier"] = "counts"
+            d["items"] = []
+            for entry in (e for s in d["steps"] if s["claim"] for e in s["claim"]["scope"]):
+                if isinstance(entry["items"], list):
+                    entry["items"] = None  # a file of counts keeps its claim lists private
+            d["items_count"].update(listed=0, not_listed=d["items_count"]["qualifying"])
+
+        self.refused(change, "a file of counts explains no single item")
+
+    def test_an_item_with_nothing_worth_a_look_is_not_listed(self):
+        same = {"p": 1.0, "q": 1.0}
+        quiet = helpers.two_states({A: same, B: same}, {A: {"p": 2.0, "q": 1.0}, B: same})
+        loud = helpers.two_states({A: same, B: same}, {A: {"p": 2.0, "q": 3.0}, B: same})
+        self.assertEqual([i["id"] for i in quiet["items"]], ["p"])
+        q = next(i for i in loud["items"] if i["id"] == "q")
+        q["values"][A] = [1.0, 1.0]
+        q["classes"][A] = [rule.AGREES, rule.AGREES]
+        q["directions"][A] = q["bands"][A] = [None, None]
+        quiet["items"].append(q)
+        quiet["items_count"].update(listed=2, qualifying=2)
+        found = fileformat.errors(quiet)
+        self.assertTrue(any("listed, though nothing in it is worth a look" in e for e in found), found)
+
+    def test_write_refuses_a_file_larger_than_a_page_holds(self):
+        data = example.build()
+        with tempfile.TemporaryDirectory() as folder, self.assertRaises(ValueError) as said:
+            original, fileformat.MAX_BYTES = fileformat.MAX_BYTES, 1000
+            try:
+                chain.write(data, Path(folder) / "d.json")
+            finally:
+                fileformat.MAX_BYTES = original
+        self.assertIn("a page holds 1000 at most", str(said.exception))
+
+
+class SummaryCounts(unittest.TestCase):
+    """The summary prints the file's counts as they are (issue 15)."""
+
+    def setUp(self):
+        self.data = helpers.three_states({A: {"p": 1.0, "q": 1.0, "r": 1.0}}, {A: {"p": 1.5, "q": None, "r": -1.0}},
+                                         {A: {"p": 1.75, "q": 3.0, "r": 0.0}}, explained=(True, False))  # fmt: skip
+        self.lines = summary.text(self.data).splitlines()
+
+    def cells(self, start):
+        row = next(line for line in self.lines if line.startswith(start))
+        return [c.strip() for c in row.strip("|").split("|")]
+
+    def test_values_moved_counts_every_class_that_moved(self):
+        # step 0: p differs, r changes sign; q is missing, which is not a move
+        self.assertEqual(self.cells("| 0. First step")[3], "2")
+
+    def test_not_attributable_is_printed(self):
+        header, row = self.cells("| Indicator"), self.cells("| A |")
+        self.assertEqual(row[header.index("Not attributable")], "1")
+        self.assertEqual(row[header.index("Spread over steps")], "0")
 
 
 if __name__ == "__main__":

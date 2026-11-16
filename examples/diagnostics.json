@@ -988,6 +988,7 @@
     "mapping-2": 2
    },
    "not_attributable": 0,
+   "spread": 0,
    "unexplained_moved": 0
   },
   "x:water": {
@@ -998,6 +999,7 @@
     "mapping-2": 1
    },
    "not_attributable": 1,
+   "spread": 0,
    "unexplained_moved": 1
   },
   "x:tox": {
@@ -1008,6 +1010,7 @@
     "mapping-2": 2
    },
    "not_attributable": 0,
+   "spread": 0,
    "unexplained_moved": 0
   }
  },

@@ -10,25 +10,17 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
 from . import __version__, breakdown, chain, example, fileformat, from_tables, page, summary
 
 
-def _load(path: Path):
-    try:
-        return json.loads(Path(path).read_text(encoding="utf-8"), parse_constant=chain._refuse)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ValueError(f"{path}: cannot be read ({error})") from None
-
-
 def check(paths) -> int:
     failed = 0
     for path in paths:
         try:
-            data = _load(path)
+            data = fileformat.load_json(path)
         except ValueError as error:
             print(f"FAIL {error}")
             failed += 1
@@ -41,9 +33,12 @@ def check(paths) -> int:
             if size > fileformat.MAX_BYTES:
                 errors.append(f"{size} bytes, and a page holds {fileformat.MAX_BYTES} at most: list fewer items")
             if not errors:
-                found, absent = page.named_breakdowns(data, Path(path).parent)
-                for name, one in found.items():
-                    errors += [f"{name}: {e}" for e in breakdown.errors(one) or breakdown.against(one, data)]
+                try:
+                    found, absent = page.named_breakdowns(data, Path(path).parent)
+                except ValueError as error:
+                    found, absent = {}, []
+                    errors.append(str(error))
+                errors += page.breakdown_errors(data, found)
                 for name in absent:
                     print(f"note {path}: names the breakdown {name}, which is not beside it (not checked)")
         if errors:
@@ -100,7 +95,7 @@ def main(argv=None) -> int:
             where = page.write(data, args.out / "page", {"p01-fix-1.json": one})
             print(f"wrote {args.out / chain.FILE} and {where}")
             return 0
-    except (ValueError, KeyError) as error:
+    except (ValueError, OSError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
     return 2

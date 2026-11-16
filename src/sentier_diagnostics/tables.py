@@ -20,8 +20,10 @@ This reads tables a project wrote; it reads no database. Standard library only.
 
 from __future__ import annotations
 
+import contextlib
 import csv
 import math
+import re
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -46,29 +48,53 @@ def _header(path: Path, rows) -> list[str]:
     return header
 
 
-def number(text: str, where: str) -> float | None:
-    """A cell as a result: empty is missing; anything but a finite number is refused.
+#: A number as a machine writes it: ASCII digits, an optional sign, point and exponent.
+#: Python's `float` also takes `1_5` (as 15) and digits of other scripts; a table holding
+#: those was more likely written by mistake than on purpose.
+DECIMAL = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
 
-    >>> number("1.5", "x"), number(" ", "x"), number("-2e-3", "x")
-    (1.5, None, -0.002)
+
+def number(text: str, where: str) -> float | None:
+    """A cell as a result: empty is missing; anything but a finite decimal number is
+    refused, and so is a number that is not zero but too small to be held (it would be
+    read as zero).
+
+    >>> number("1.5", "x"), number(" ", "x"), number("-2e-3", "x"), number("0e-999", "x")
+    (1.5, None, -0.002, 0.0)
     """
     text = text.strip()
     if not text:
         return None
-    try:
-        value = float(text)
-    except ValueError:
-        raise TableError(f"{where}: {text!r} is not a number") from None
+    if not DECIMAL.fullmatch(text):
+        raise TableError(f"{where}: {text!r} is not a decimal number")
+    value = float(text)
     if not math.isfinite(value):
         raise TableError(f"{where}: {text!r} is not a finite number")
+    if value == 0 and re.search(r"[1-9]", re.split(r"[eE]", text)[0]):
+        raise TableError(f"{where}: {text!r} is too small to be held: it would be read as zero")
     return value
+
+
+@contextlib.contextmanager
+def _reading(path: Path):
+    """A table opened for reading, where a file that cannot be opened, cannot be decoded or
+    is not CSV is a TableError with its name (and the row, where the reader knows it)."""
+    try:
+        with path.open(newline="", encoding="utf-8") as handle:
+            yield handle
+    except OSError as error:
+        raise TableError(f"{path}: cannot be read ({error.strerror or error})") from None
+    except UnicodeDecodeError:
+        raise TableError(f"{path}: not a text in UTF-8") from None
+    except csv.Error as error:
+        raise TableError(f"{path}: not a table that can be read ({error})") from None
 
 
 def read_results(path: Path, indicators: Iterable[str]) -> dict[str, dict[str, float | None]]:
     """`{indicator: {item: result}}` from a table of results, fail-closed."""
     path = Path(path)
     wanted = list(indicators)
-    with path.open(newline="", encoding="utf-8") as handle:
+    with _reading(path) as handle:
         rows = csv.reader(handle)
         header = _header(path, rows)
         expected = {"item", *wanted}
@@ -101,7 +127,7 @@ def read_results(path: Path, indicators: Iterable[str]) -> dict[str, dict[str, f
 def read_items(path: Path) -> dict[str, dict[str, str | None]]:
     """`{item: {"unit", "name", "place", "group"}}` from a table of items."""
     path = Path(path)
-    with path.open(newline="", encoding="utf-8") as handle:
+    with _reading(path) as handle:
         rows = csv.reader(handle)
         header = _header(path, rows)
         unknown = set(header) - set(ITEM_COLUMNS)

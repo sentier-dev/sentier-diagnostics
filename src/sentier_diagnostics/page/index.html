@@ -51,12 +51,13 @@
     <section id="overview">
       <h2>Steps</h2>
       <p class="quiet">Each step is compared with the state before it, and held against its claim where it has one.
-        Step 0 checks that the published results are reproduced; it is the start, not the goal.</p>
+        <span id="steps-zero" hidden>Step 0 checks that the published results are reproduced; it is the start, not the goal.</span></p>
       <div class="table-wrap"><table id="steps-table"></table></div>
       <h3 id="total-heading">The whole way</h3>
       <p class="quiet">Every difference between the first state and the last is the sum of the steps' differences.
-        "Largest step" counts, per indicator, the items whose largest share comes from each step.
-        The split is exact, and it depends on the order of the steps where two steps touch the same results.</p>
+        "Largest step" counts, per indicator, the items whose largest share comes from each step, of the steps that moved them;
+        "spread over steps" counts the items whose whole way moved while no single step did.
+        The split is exact up to rounding, and it depends on the order of the steps where two steps touch the same results.</p>
       <div class="table-wrap"><table id="total-table"></table></div>
     </section>
 

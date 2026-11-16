@@ -10,8 +10,8 @@ written answers differ: a writer that counts differently cannot pass. It checks 
 counts add up, and that no item that had to be listed is missing without being counted
 as not listed.
 
-A file of another major version is refused with that reason: within a major version keys
-are only added.
+A file of another major version is refused with that reason. The reader refuses every key
+it does not know, so any change to the keys is a new major version (SPEC 4.1).
 
 Parts of the shape check are adapted from `before_after.py` of sentier-bafu (MIT,
 Copyright (c) 2026 sentier.dev); see NOTICE.
@@ -19,9 +19,11 @@ Copyright (c) 2026 sentier.dev); see NOTICE.
 
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
 from collections.abc import Mapping
+from pathlib import Path
 
 from . import claims, rule
 
@@ -40,7 +42,9 @@ TOTAL = "total"
 
 #: The largest file a page reads: it holds the whole file.
 MAX_BYTES = 12 * 1024 * 1024
-MAX_INDICATORS, MAX_STATES, MAX_ITEMS, MAX_SCOPE, MAX_SCOPE_ITEMS = 100, 30, 5000, 50, 500
+MAX_INDICATORS, MAX_STATES, MAX_ITEMS, MAX_SCOPE = 100, 30, 5000, 50
+#: An entry of a claim may list as many items as a file may.
+MAX_SCOPE_ITEMS = MAX_ITEMS
 MAX_EXPLANATIONS, MAX_NOTES, MAX_IDENTITY = 500, 20, 12
 MAX_ID, MAX_LABEL, MAX_WORD, MAX_TEXT, MAX_LONG = 100, 80, 40, 600, 2000
 FILE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.json")
@@ -62,29 +66,78 @@ BLOCK_KEYS = {"pairs", "classes", "missing", "directions", "bands", "verdicts", 
 ITEM_KEYS = {"id", "name", "place", "group", "unit", "values", "classes", "directions",
              "bands", "verdicts", "breakdowns"}  # fmt: skip
 COUNT_KEYS = {"all", "qualifying", "listed", "not_listed"}
+ATTRIBUTION_KEYS = {"dominant", "not_attributable", "spread", "unexplained_moved"}
 EXPLANATION_KEYS = {"about", "finding", "text", "by", "source", "not_checked"}
 
 #: The verdicts a pair of each class can have.
 ALLOWED_VERDICTS = {
     rule.MISSING: {claims.NOT_JUDGED},
-    rule.NEAR_ZERO: {claims.NOT_JUDGED},
+    rule.NEAR_ZERO: {claims.NOT_JUDGED, claims.NOT_MOVED},
     rule.AGREES: {claims.UNCHANGED, claims.NOT_MOVED},
-    rule.WITHIN_NOISE: {claims.NOISE},
+    rule.WITHIN_NOISE: {claims.NOISE, claims.NOT_MOVED},
     **{kind: {claims.AS_CLAIMED, claims.OFF_CLAIM, claims.NOT_CLAIMED} for kind in rule.MOVES},
 }
+
+
+# ------------------------------------------------------------------------ reading
+
+
+def load_json(path) -> object:
+    """A JSON file, read strictly: `NaN` and `Infinity` are refused, and so is a key written
+    twice in one object (the last would win silently). Raises ValueError naming the file.
+
+    >>> import tempfile, pathlib
+    >>> where = pathlib.Path(tempfile.mkdtemp()) / "twice.json"
+    >>> _ = where.write_text('{"a": 1, "a": 2}')
+    >>> load_json(where)  # doctest: +ELLIPSIS
+    Traceback (most recent call last):
+    ValueError: ...twice.json: cannot be read (the key 'a' is written twice in one object)
+    """
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"), parse_constant=_refuse_constant,
+                          object_pairs_hook=_refuse_twice)  # fmt: skip
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, _Twice) as error:
+        raise ValueError(f"{path}: cannot be read ({error})") from None
+
+
+class _Twice(ValueError):
+    pass
+
+
+def _refuse_twice(pairs):
+    found = {}
+    for key, value in pairs:
+        if key in found:
+            raise _Twice(f"the key {key!r} is written twice in one object")
+        found[key] = value
+    return found
+
+
+def _refuse_constant(constant):
+    raise json.JSONDecodeError(f"{constant} is not a number a file may hold", constant, 0)
 
 
 # ------------------------------------------------------------------------ small checks
 
 
 def is_text(value, limit: int = MAX_TEXT) -> bool:
-    """A text a page can show: not empty, not too long, no control character."""
+    """A text a page can show: not empty, not too long, no control character and no half of
+    a character (a lone surrogate, which cannot be written as UTF-8).
+
+    >>> is_text("Wheat"), is_text("a\\nb"), is_text("half \\ud800"), is_text(" ")
+    (True, False, False, False)
+    """
     return (
         isinstance(value, str)
         and 0 < len(value) <= limit
         and bool(value.strip())
-        and not any(unicodedata.category(c) == "Cc" for c in value)
+        and not any(unicodedata.category(c) in ("Cc", "Cs") for c in value)
     )
+
+
+#: A word that says a state was approved: SPEC 8 allows no approval of any kind in a file,
+#: and a state's free `identity` table is no way round it.
+APPROVAL = re.compile(r"status|accept|approv", re.IGNORECASE)
 
 
 def is_optional(value, limit: int = MAX_TEXT) -> bool:
@@ -166,7 +219,9 @@ def _states(data, found) -> list[str]:
             and len(identity) <= MAX_IDENTITY
             and all(is_text(k2, MAX_WORD) and is_text(v, 200) for k2, v in identity.items())
         ):
-            found.append(f"{where}: `identity` is not a short table of texts")
+            found.append(f"{where}: `identity` is not a table of at most {MAX_IDENTITY} short texts")
+        elif any(APPROVAL.search(k2) for k2 in identity):
+            found.append(f"{where}: `identity` names what makes a state, never a status or an approval (SPEC 8)")
         join = one["join"]
         if join is not None and not (
             isinstance(join, dict)
@@ -183,6 +238,19 @@ def _states(data, found) -> list[str]:
 
 
 def claim_errors(found_claim, where, indicators, tier) -> list[str]:
+    """Everything wrong with a claim: its shape first, then whether its `reach` is the size of
+    its lists."""
+    found = _claim_shape(found_claim, where, indicators, tier)
+    if found:
+        return found
+    size = claims.reach_of(found_claim["scope"])
+    if size is not None and found_claim["reach"] != size:
+        found.append(f"{where}: the reach of a claim is {found_claim['reach']}, and its lists name {size} items")
+    return found
+
+
+def _claim_shape(found_claim, where, indicators, tier) -> list[str]:
+    """What keeps a claim from being read: a page or the validator cannot judge with it."""
     if not isinstance(found_claim, dict) or set(found_claim) != CLAIM_KEYS:
         return [f"{where}: `claim` is not {{text, by, reach, scope}}"]
     found = []
@@ -199,8 +267,10 @@ def claim_errors(found_claim, where, indicators, tier) -> list[str]:
         if not isinstance(entry, dict) or set(entry) != SCOPE_KEYS:
             return [*found, f"{where}: a scope entry is not {{{', '.join(sorted(SCOPE_KEYS))}}}"]
         named, items = entry["indicators"], entry["items"]
-        if named != "*" and not (isinstance(named, list) and set(named) <= set(indicators)):
-            found.append(f"{where}: a scope names an indicator the file does not hold")
+        if named != "*" and not (
+            isinstance(named, list) and all(isinstance(i, str) for i in named) and set(named) <= set(indicators)
+        ):
+            found.append(f"{where}: a scope's indicators are not '*' or ids the file holds")
         if items not in ("*", None):
             if tier == "counts":
                 found.append(f"{where}: a file of counts lists no item in a claim")
@@ -216,11 +286,6 @@ def claim_errors(found_claim, where, indicators, tier) -> list[str]:
             found.append(f"{where}: a scope's largest move is not a share")
         if entry["expect"] not in claims.EXPECTS:
             found.append(f"{where}: a scope says whether its values must or may move")
-    lists = [e["items"] for e in entries if isinstance(e["items"], list)]
-    if entries and len(lists) == len(entries) and all(is_text(i, MAX_ID) for one in lists for i in one):
-        size = len(set().union(*lists))
-        if found_claim["reach"] != size:
-            found.append(f"{where}: the reach of a claim is {found_claim['reach']}, and its lists name {size} items")
     return found
 
 
@@ -246,6 +311,10 @@ def _steps(data, found, states, indicators, tier) -> list[dict]:
         if not is_link(one["link"]):
             found.append(f"{where}: `link` is not an https address")
         if one["claim"] is not None:
+            shape = _claim_shape(one["claim"], where, indicators, tier)
+            if shape:  # nothing can be judged against a claim that cannot be read
+                found += shape
+                return []
             found += claim_errors(one["claim"], where, indicators, tier)
         said = one["tolerance"]
         if not (
@@ -297,6 +366,9 @@ def _rule(data, found, indicators, states, steps) -> dict | None:
         found.append("`rule`: the floors come from the first state")
     if said["beyond"] != rule.BEYOND_FACTOR:
         found.append(f"`rule.beyond` is {rule.BEYOND_FACTOR:g}: one rule for every file")
+    if not is_share(said["total_tolerance"]):
+        found.append("`rule.total_tolerance` is not a share")
+        return None
     if steps and said["total_tolerance"] != max(s["tolerance"]["value"] for s in steps):
         found.append("`rule.total_tolerance` is not the largest tolerance of the steps")
     floors = said["floors"]
@@ -430,19 +502,18 @@ def _attribution(data, found, indicators, steps, blocks):
         where = f"attribution in {indicator!r}"
         if not (
             isinstance(one, dict)
-            and set(one) == {"dominant", "not_attributable", "unexplained_moved"}
+            and set(one) == ATTRIBUTION_KEYS
             and isinstance(one["dominant"], dict)
             and set(one["dominant"]) == {s["id"] for s in steps}
             and all(map(is_count, one["dominant"].values()))
-            and is_count(one["not_attributable"])
-            and is_count(one["unexplained_moved"])
+            and all(is_count(one[k]) for k in ("not_attributable", "spread", "unexplained_moved"))
         ):
-            found.append(f"{where}: not {{dominant per step, not_attributable, unexplained_moved}}")
+            found.append(f"{where}: not {{dominant per step, not_attributable, spread, unexplained_moved}}")
             continue
         block = blocks.get((TOTAL, indicator))
         if block:
             moved = sum(block["classes"][k] for k in rule.MOVES)
-            if sum(one["dominant"].values()) + one["not_attributable"] != moved:
+            if sum(one["dominant"].values()) + one["not_attributable"] + one["spread"] != moved:
                 found.append(f"{where}: does not account for every item whose total moved")
 
 
@@ -455,7 +526,8 @@ def _items(data, found, indicators, states, steps, floors, tier, blocks):
     if said["qualifying"] != said["listed"] + said["not_listed"] or said["qualifying"] > said["all"]:
         found.append("`items_count`: the items listed and not listed are not those worth a look")
     if not isinstance(listed, list) or len(listed) > MAX_ITEMS or len(listed) != said["listed"]:
-        found.append(f"`items` is not a list of the {said['listed']} items said to be listed")
+        found.append(f"`items` is not a list of the {said['listed']} items said to be listed, "
+                     f"and of at most {MAX_ITEMS}")  # fmt: skip
         return []
     if tier == "counts" and listed:
         found.append("a file of counts holds no item")
@@ -469,9 +541,10 @@ def _items(data, found, indicators, states, steps, floors, tier, blocks):
     # only a pair worth a look can add to (`_LOUD`), and the attribution
     tally: dict[tuple[str, str], dict] = {}
     attributed = {
-        i: {"dominant": dict.fromkeys((s["id"] for s in steps), 0), "not_attributable": 0, "unexplained_moved": 0}
+        i: {"dominant": dict.fromkeys((s["id"] for s in steps), 0), "not_attributable": 0, "spread": 0,
+            "unexplained_moved": 0}
         for i in indicators
-    }
+    }  # fmt: skip
     for item in listed:
         if not isinstance(item, dict) or set(item) != ITEM_KEYS or not is_text(item["id"], MAX_ID):
             found.append(f"an item is not {{{', '.join(sorted(ITEM_KEYS))}}}")
@@ -485,12 +558,15 @@ def _items(data, found, indicators, states, steps, floors, tier, blocks):
         if not (is_optional(item["place"], 60) and is_optional(item["group"], MAX_LABEL)
                 and is_optional(item["unit"], MAX_WORD)):  # fmt: skip
             found.append(f"{where}: `place`, `group` or `unit` is not a short text")
+            return []
         tables = [item[k] for k in ("values", "classes", "directions", "bands")]
         if not all(isinstance(t, dict) and set(t) == set(indicators) for t in tables):
             found.append(f"{where}: results, classes, directions and bands are given for every indicator")
             return []
-        if any_claim != isinstance(item["verdicts"], dict):
-            found.append(f"{where}: verdicts are given where, and only where, a step has a claim")
+        if any_claim != isinstance(item["verdicts"], dict) or (
+            any_claim and set(item["verdicts"]) != set(indicators)
+        ):
+            found.append(f"{where}: verdicts are given for every indicator where, and only where, a step has a claim")
             return []
         breakdowns = item["breakdowns"]
         if breakdowns is not None and not (
@@ -562,7 +638,7 @@ def _items(data, found, indicators, states, steps, floors, tier, blocks):
                     if said_verdict is not None:
                         found.append(f"{where}, {indicator}, {name}: a verdict without a claim")
                     continue
-                if said_verdict not in ALLOWED_VERDICTS[kinds[at]]:
+                if not isinstance(said_verdict, str) or said_verdict not in ALLOWED_VERDICTS[kinds[at]]:
                     found.append(f"{where}, {indicator}, {name}: {kinds[at]!r} cannot be {said_verdict!r}")
                     return []
                 worth = worth or said_verdict == claims.NOT_MOVED
@@ -582,8 +658,11 @@ def _items(data, found, indicators, states, steps, floors, tier, blocks):
                 if any(v is None for v in values):
                     attributed[indicator]["not_attributable"] += 1
                 else:
-                    deltas = [abs(values[j + 1] - values[j]) for j in range(nsteps)]
-                    attributed[indicator]["dominant"][steps[deltas.index(max(deltas))]["id"]] += 1
+                    carrier = rule.largest_step(values, kinds[:nsteps])
+                    if carrier is None:
+                        attributed[indicator]["spread"] += 1
+                    else:
+                        attributed[indicator]["dominant"][steps[carrier]["id"]] += 1
             if any(not steps[j]["explained"] and kinds[j] in rule.MOVES for j in range(nsteps)):
                 attributed[indicator]["unexplained_moved"] += 1
         if not worth:
@@ -608,6 +687,8 @@ def _items(data, found, indicators, states, steps, floors, tier, blocks):
             parts += [("closer",), ("further",)]
         for part in parts:
             counted = block[part[0]] if len(part) == 1 else block[part[0]][part[1]]
+            if not is_count(counted):
+                continue  # `_counts` has said what is wrong with it
             n = one.get(part, 0)
             if n > counted or (exact and n != counted):
                 found.append(
@@ -621,7 +702,7 @@ def _items(data, found, indicators, states, steps, floors, tier, blocks):
             continue  # `_attribution` has said what is wrong with it
         mine = attributed[indicator]
         pairs = [(f"dominant {s}", mine["dominant"][s], one["dominant"].get(s)) for s in mine["dominant"]]
-        pairs += [(k, mine[k], one.get(k)) for k in ("not_attributable", "unexplained_moved")]
+        pairs += [(k, mine[k], one.get(k)) for k in ("not_attributable", "spread", "unexplained_moved")]
         for label, n, counted in pairs:
             if not is_count(counted):
                 continue
@@ -652,6 +733,9 @@ def _explanations(data, found, indicators, steps, items, tier):
         about = one["about"]
         if not (isinstance(about, dict) and set(about) == {"step", "indicator", "item"}):
             found.append(f"{where}: `about` is not {{step, indicator, item}}")
+            continue
+        if not all(is_optional(v, MAX_ID) for v in about.values()):
+            found.append(f"{where}: `about` names a step, an indicator and an item by their ids, or null")
             continue
         if all(v is None for v in about.values()):
             found.append(f"{where}: it is about something: a step, an indicator or an item")
@@ -687,8 +771,23 @@ def _explanations(data, found, indicators, steps, items, tier):
 # ------------------------------------------------------------------------ the whole file
 
 
+#: How a fault begins where the check met a value it could not read and had to stop. The
+#: check names the place of every wrong value it knows of; this is the backstop for the
+#: rest, so that `errors` never raises (a test feeds every node values of other types).
+STOPPED = "the check stopped at a value it cannot read"
+
+
 def errors(data) -> list[str]:
-    """Everything wrong with a diagnostics file; nothing when a page can show it."""
+    """Everything wrong with a diagnostics file; nothing when a page can show it. Never
+    raises: a value of the wrong type is a fault like any other."""
+    found: list[str] = []
+    try:
+        return _errors(data, found)
+    except Exception as error:  # noqa: BLE001 - the backstop of a check that must not raise
+        return [*found, f"{STOPPED} ({type(error).__name__}: {str(error)[:200]})"]
+
+
+def _errors(data, found: list[str]) -> list[str]:
     if not isinstance(data, Mapping):
         return ["not a diagnostics file: not an object"]
     said = data.get("format")
@@ -696,7 +795,7 @@ def errors(data) -> list[str]:
         if isinstance(said, str) and said.startswith(FAMILY):
             return [f"format {said!r}: this reader knows {FORMAT} only"]
         return [f"not a diagnostics file of format {FORMAT}"]
-    found = [f"a key this format does not know: {key}" for key in sorted(set(data) - KEYS)]
+    found += [f"a key this format does not know: {key}" for key in sorted(set(data) - KEYS)]
     found += [f"a key this format requires: {key}" for key in sorted(KEYS - set(data))]
     if found:
         return found

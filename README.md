@@ -10,8 +10,8 @@ sentier-agribalyse and others):
 - one rule for counting what moved, with named classes for zeros, sign changes, near-zero
   and missing results, so that nothing is blanked, zeroed or called agreement;
 - a chain of steps from the published results to the current build, each held against
-  what it claimed to move, with the whole difference split exactly between the steps and
-  what nothing explains named;
+  what it claimed to move, with the whole difference split between the steps (exactly, up
+  to the rounding the page shows) and what nothing explains named;
 - a static page that shows it, with no build step, no server and no network.
 
 The published results are checked once, at the start (step 0). Every later step is

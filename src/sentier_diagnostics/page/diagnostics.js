@@ -43,7 +43,8 @@
     if (v === null || v === undefined) return 'missing';
     if (v === 0) return '0';
     var a = Math.abs(v);
-    if (a >= 1e6 || a < 1e-3) {
+    // one style from 1e4 on: toPrecision(4) would write 12345 as "1.235e+4" itself
+    if (a >= 1e4 || a < 1e-3) {
       return v.toExponential(3).replace(/\.?0+e/, 'e').replace('e+', 'e').replace(/-/g, '\u2212');
     }
     var s = v.toPrecision(4);
@@ -68,6 +69,43 @@
     var v = part * 100, size = Math.abs(v);
     var text = size === 0 ? '0' : size < 0.1 ? size.toExponential(1) : size.toFixed(1);
     return (v > 0 ? '' : v < 0 ? '\u2212' : '') + text + ' %';
+  }
+
+  // Steps whose differences add up to more than this many times the whole difference
+  // cancel: their shares would be large and of both signs, and in floating point the
+  // whole may be mostly rounding. The page says so instead of printing them.
+  var CANCEL = 10;
+
+  // how an item's whole difference splits among the steps (SPEC 7): `values` are its
+  // results per state, `explained` says per step whether a cause explains it, `totalClass`
+  // is the class of the whole way. The split is exact up to rounding, so the page prints
+  // the sum of the shares it shows, never a fixed 100 %.
+  function splitOf(values, explained, totalClass) {
+    if (totalClass === 'missing') return { state: 'missing' };
+    if (MOVES.indexOf(totalClass) < 0) return { state: 'still' };
+    for (var i = 0; i < values.length; i++) if (values[i] === null) return { state: 'gap' };
+    var whole = values[values.length - 1] - values[0];
+    var diffs = [], gross = 0;
+    for (var k = 0; k + 1 < values.length; k++) {
+      diffs.push(values[k + 1] - values[k]);
+      gross += Math.abs(values[k + 1] - values[k]);
+    }
+    if (!whole || gross > CANCEL * Math.abs(whole)) return { state: 'cancel', factor: whole ? gross / Math.abs(whole) : Infinity };
+    var shares = diffs.map(function (d) { return d / whole; });
+    var sum = 0, unexplained = 0;
+    shares.forEach(function (part, j) { sum += part; if (!explained[j]) unexplained += part; });
+    return { state: 'split', shares: shares, sum: sum, unexplained: unexplained };
+  }
+
+  // what the whole way's row says of a split
+  function splitText(split) {
+    switch (split.state) {
+      case 'split': return shareText(split.sum) + (split.unexplained ? ', of which nothing explains ' + shareText(split.unexplained) : '');
+      case 'still': return 'not split: it did not move';
+      case 'gap': return 'not split: missing in a state between';
+      case 'missing': return 'not split: missing in the first or the last state';
+      default: return 'not split: the steps cancel, their differences add up to ' + formatNumber(split.factor) + ' times the whole difference';
+    }
   }
 
   // Noise above this is large: it puts every smaller difference of its indicator "within
@@ -139,8 +177,10 @@
         view.text = (before < 0 ? '−' : '+') + ' → ' + (after < 0 ? '−' : '+');
         view.tone = dir; view.strength = 1; view.noRatio = true; break;
       case 'beyond 10x':
-        var r = Math.abs(after) / Math.abs(before);
-        view.text = r >= 1 ? 'size ×' + formatNumber(r) : 'size ÷' + formatNumber(1 / r);
+        var up = Math.abs(after) >= Math.abs(before);
+        var r = up ? Math.abs(after) / Math.abs(before) : Math.abs(before) / Math.abs(after);
+        var orders = Math.abs(Math.log10(Math.abs(after)) - Math.log10(Math.abs(before)));
+        view.text = 'size ' + (up ? '×' : '÷') + (isFinite(r) ? formatNumber(r) : '1e' + Math.round(orders));
         view.tone = dir; view.strength = 1; view.mark = '»'; break;
       case 'differs':
         view.text = percentText(before, after); view.tone = dir;
@@ -151,13 +191,23 @@
     return view;
   }
 
+  // how far the sizes of two results of one sign lie apart, as rule.distance: the |log10|
+  // of their factor, or, where the factor is too large or too small for a float, the
+  // difference of their logarithms, which cannot overflow
+  var SMALLEST_NORMAL = 2.2250738585072014e-308;
+  function distance(before, after) {
+    var factor = Math.abs(after) / Math.abs(before);
+    if (isFinite(factor) && factor >= SMALLEST_NORMAL) return Math.abs(Math.log10(factor));
+    return Math.abs(Math.log10(Math.abs(after)) - Math.log10(Math.abs(before)));
+  }
+
   // the key that orders values from the worst: the same as the Python rule (rule.severity)
   function severityKey(before, after, cls) {
     var rank = RANK.hasOwnProperty(cls) ? RANK[cls] : 9;
     if (before === null || after === null) return [rank, 0];
     var magnitude;
     if (before !== 0 && after !== 0 && (before > 0) === (after > 0)) {
-      magnitude = Math.abs(Math.log10(Math.abs(after) / Math.abs(before)));
+      magnitude = distance(before, after);
     } else {
       var size = Math.max(Math.abs(before), Math.abs(after));
       magnitude = size ? Math.abs(after - before) / size : 0;
@@ -301,6 +351,8 @@
     q('audience').textContent = D.audience === 'local'
       ? 'Local file: its writer has not said that it may be published.' : '';
     q('audience').hidden = D.audience !== 'local';
+    // only a chain that starts from the published results has a step 0 that reproduces them
+    q('steps-zero').hidden = D.states[0].kind !== 'published';
     q('made-by').textContent = 'Written by ' + D.made_by + '. ' + FORMAT + '.';
     var select = clear(q('comparison'));
     select.appendChild(el('option', { value: 'total', text: 'The whole way' }));
@@ -355,7 +407,7 @@
     var total = clear(q('total-table'));
     q('total-heading').textContent = 'The whole way: ' + D.states[0].label + ' → ' + D.states[D.states.length - 1].label;
     var classes = Object.keys(D.counts.total[D.indicators[0].id].classes);
-    var cols = ['Indicator'].concat(classes, ['Up', 'Down', 'Largest step', 'Not attributable', 'Moved by what nothing explains']);
+    var cols = ['Indicator'].concat(classes, ['Up', 'Down', 'Largest step', 'Spread over steps', 'Not attributable', 'Moved by what nothing explains']);
     total.appendChild(el('thead', null, [el('tr', null, cols.map(function (h) { return el('th', { scope: 'col', text: h, title: SAID[h] || null }); }))]));
     var tbody = el('tbody');
     D.indicators.forEach(function (ind) {
@@ -371,6 +423,7 @@
       });
       row.push(el('td', { cls: 'num', text: n(block.directions.up) }), el('td', { cls: 'num', text: n(block.directions.down) }));
       row.push(el('td', { text: ranked.join(', ') || 'none' }));
+      row.push(el('td', { cls: 'num', text: n(att.spread), title: 'its total moved, and no single step moved it: small steps that add up' }));
       row.push(el('td', { cls: 'num', text: n(att.not_attributable), title: 'its total moved, and it has no result in a state between: its difference cannot be split' }));
       row.push(el('td', { cls: 'num', text: n(att.unexplained_moved), title: 'moved in a step that no cause explains' }));
       tbody.appendChild(el('tr', null, row));
@@ -555,7 +608,7 @@
 
   function renderRule() {
     var body = clear(q('rule-body'));
-    body.appendChild(el('p', null, ['Every value is put into one class by one rule, in this order: missing, near zero, zero reference, zero result, sign change, agrees, within noise, beyond 10x, differs. ' +
+    body.appendChild(el('p', null, ['Every value is put into one class by one rule, in this order: missing, near zero, agrees, within noise (both only where the two share a sign), zero reference, zero result, sign change, beyond 10x, differs. ' +
       'Direction is up where the result after is larger as a signed number, down otherwise; colour follows the direction only. ' +
       'Beyond 10x: one size more than ' + D.rule.beyond + ' times the other. The whole way is counted with a tolerance of ' + D.rule.total_tolerance + ', the largest of the steps.']));
     var stepsTable = el('table', null, [el('thead', null, [el('tr', null, ['Step', 'Tolerance', 'Basis', 'Note', 'Noise'].map(function (h) { return el('th', { scope: 'col', text: h }); }))])]);
@@ -596,22 +649,14 @@
     D.indicators.forEach(function (ind) {
       var values = item.values[ind.id];
       var first = values[0], last = values[values.length - 1];
-      var whole = first !== null && last !== null ? last - first : null;
       var totalCls = item.classes[ind.id][D.steps.length];
       body.appendChild(el('h3', { text: ind.name + (ind.unit ? ' (' + ind.unit + ' per ' + (item.unit || 'unit') + ')' : '') }));
       var table = el('table', null, [el('thead', null, [el('tr', null, ['Step', 'Before', 'After', 'Change', 'Verdict', 'Share of the whole difference'].map(function (h) { return el('th', { scope: 'col', text: h }); }))])]);
       var tb = el('tbody');
-      var unexplained = 0, splittable = whole !== null && MOVES.indexOf(totalCls) >= 0;
+      var split = splitOf(values, D.steps.map(function (s) { return s.explained; }), totalCls);
       D.steps.forEach(function (s, k) {
         var b = values[k], a = values[k + 1];
-        var share = '—';
-        if (splittable && b !== null && a !== null) {
-          var part = (a - b) / whole;
-          share = shareText(part);
-          if (!s.explained) unexplained += part;
-        } else if (splittable) {
-          splittable = false;
-        }
+        var share = split.state === 'split' ? shareText(split.shares[k]) : '—';
         tb.appendChild(el('tr', null, [
           el('td', null, ['Step ' + k + ': ' + s.label, s.explained ? null : el('div', { cls: 'error', text: 'nothing explains it' })]),
           el('td', { cls: 'num', text: formatNumber(b), title: String(b) }),
@@ -627,7 +672,7 @@
         el('td', { cls: 'num', text: formatNumber(last), title: String(last) }),
         cell(item, ind.id, D.steps.length),
         el('td', { text: '—' }),
-        el('td', { cls: 'num', text: MOVES.indexOf(totalCls) < 0 ? 'not split: it did not move' : splittable ? '100 %' + (unexplained ? ', of which nothing explains ' + shareText(unexplained) : '') : 'not split: missing in a state between' })
+        el('td', { cls: 'num', text: splitText(split) })
       ]));
       table.appendChild(tb);
       body.appendChild(el('div', { cls: 'table-wrap' }, [table]));
@@ -643,15 +688,28 @@
       body.appendChild(el('h3', { text: 'What it is made of: ' + compLabel(comp) }));
       body.appendChild(holder);
       var found = B[name];
-      if (found) { breakdownInto(holder, found); return; }
+      if (found) {
+        if (breakdownFits(found, item.id, comp)) breakdownInto(holder, found);
+        else holder.appendChild(el('p', { cls: 'error', text: 'The breakdown ' + name + ' is of another ' + D.item.one + ' or another step: not drawn.' }));
+        return;
+      }
       holder.appendChild(el('p', { cls: 'quiet', text: 'The breakdown ' + name + ' is not with this page.' }));
       if (location.protocol === 'http:' || location.protocol === 'https:') {
         fetch(name).then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
-          .then(function (data) { if (data.format !== 'sentier-diagnostics-breakdown/1' || data.item !== item.id) throw new Error(); clear(holder); breakdownInto(holder, data); })
+          .then(function (data) { if (!breakdownFits(data, item.id, comp)) throw new Error(); clear(holder); breakdownInto(holder, data); })
           .catch(function () { /* the sentence above stays */ });
       }
     });
     section.scrollIntoView({ block: 'start' });
+  }
+
+  // a breakdown is drawn only under the item and the step that it breaks down
+  function breakdownFits(data, itemId, comp) {
+    if (!data || data.format !== 'sentier-diagnostics-breakdown/1' || data.item !== itemId) return false;
+    var k = stepIndex(comp);
+    var from = comp === 'total' ? D.states[0].id : D.steps[k].from;
+    var to = comp === 'total' ? D.states[D.states.length - 1].id : D.steps[k].to;
+    return data.from === from && data.to === to && !!data.indicators && typeof data.indicators === 'object';
   }
 
   function breakdownInto(holder, data) {
@@ -784,7 +842,7 @@
   }
 
   var api = { formatNumber: formatNumber, percentText: percentText, shareText: shareText, noiseText: noiseText, sizeAtLeast: sizeAtLeast, cellView: cellView, severityKey: severityKey,
-    compareKeys: compareKeys, bandStep: bandStep, checkShape: checkShape, safeLink: safeLink, RANK: RANK };
+    compareKeys: compareKeys, bandStep: bandStep, checkShape: checkShape, safeLink: safeLink, splitOf: splitOf, splitText: splitText, distance: distance, RANK: RANK };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else if (typeof document !== 'undefined') {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);

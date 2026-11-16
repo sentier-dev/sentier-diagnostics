@@ -11,19 +11,25 @@ whether each must move or only may. A claim with no entry says that nothing move
                 "direction": "down", "largest": 0.3, "expect": "must"}]}
 
 `items` is `"*"` (every item), a list of ids, or null where the list stays with the
-project that made it (a list it may not publish) and only `reach`, the number of items,
-is written. `largest` is relative to the size of the result before; a pair whose result
-before is zero cannot be within it.
+project that made it (a list it may not publish). `reach` is the number of items the
+claim's lists name together, `"*"` entries aside; where a list stays private it is the
+only trace of it. `largest` is relative to the size of the result before; a pair whose
+result before lies within the floor (a zero reference) cannot be within it.
 
-Each pair of a step with a claim gets one verdict:
+Each pair of a step with a claim gets one verdict, tried in this order:
 
-    unchanged            it did not move, and no entry says it must
+    not judged           it is missing: nothing can be said of it
+    claimed, not moved   an entry says it must move, and it agrees, is within noise or is
+                         near zero: it did not move beyond the tolerance, the noise or the floor
+    unchanged            it agrees, and no entry says it must move
     within noise         it moved by no more than two builds of one state differ
+    not judged           it is near zero, and no entry says it must move
+    not claimed          it moved, and no entry covers it
     as claimed           it moved, an entry covers it, in that entry's direction and size
     off claim            it moved, entries cover it, and none in its direction and size
-    not claimed          it moved, and no entry covers it
-    claimed, not moved   an entry says it must move, and it did not
-    not judged           it is missing or near zero: nothing can be said of it
+
+Where `must` entries cover a moved pair, it is held against them only: a `may` entry
+beside them cannot excuse a move the `must` entries do not allow.
 
 A scope that a program worked out (every item whose supply chain reaches the change)
 says what *may* move: it can be exceeded, never unmet. Its entries carry `"may"`.
@@ -85,13 +91,27 @@ def claim(text: str, entries: Iterable[dict] = (), *, by: dict | None = None,
     return {"text": text, "by": by, "reach": reach, "scope": list(entries)}
 
 
+def reach_of(entries: Iterable[Mapping]) -> int | None:
+    """How many items the lists of a claim name together, `"*"` entries aside; None where a
+    list is not in hand or no entry lists items.
+
+    >>> reach_of([scope(["x"], {"a", "b"}), scope(["y"], {"b"}), scope(["z"])])
+    2
+    >>> reach_of([scope(["x"], None)]) is None, reach_of([scope()]) is None
+    (True, True)
+    """
+    entries = list(entries)
+    if any(e["items"] is None for e in entries):
+        return None
+    listed = [set(e["items"]) for e in entries if e["items"] != "*"]
+    return len(set().union(*listed)) if listed else None
+
+
 def published(found: dict, keep_items: bool = True) -> dict:
     """A claim as a file holds it: lists sorted, and with `keep_items` false every list of
     items left out (`items: null`), its size kept in `reach`."""
-    listed = [e["items"] for e in found["scope"] if e["items"] not in ("*", None)]
-    reach = found.get("reach")
-    if listed and len(listed) == len(found["scope"]):
-        size = len(set().union(*listed))
+    reach, size = found.get("reach"), reach_of(found["scope"])
+    if size is not None:
         if reach is not None and reach != size:
             raise ValueError(f"a claim's reach is {reach}, and its lists name {size} items")
         reach = size
@@ -113,14 +133,21 @@ def covers(entry: Mapping, item: str, indicator: str) -> bool:
     return items == "*" or (items is not None and item in items)
 
 
-def fits(entry: Mapping, before: float, after: float, way: str | None) -> bool:
-    """Whether a pair moved as an entry expects: its direction, and within its size."""
+def fits(entry: Mapping, before: float, after: float, way: str | None, kind: str | None = None) -> bool:
+    """Whether a pair moved as an entry expects: its direction, and within its size. A zero
+    reference has no size to be relative to, so it is never within a `largest`."""
     if entry["direction"] != "any" and entry["direction"] != way:
         return False
     if entry["largest"] is None:
         return True
+    if kind == rule.ZERO_REFERENCE:
+        return False
     moved_by = rule.change(before, after)
     return moved_by is not None and abs(moved_by) <= entry["largest"]
+
+
+#: The classes of a pair that did not move beyond the tolerance, the noise or the floor.
+STILL = frozenset({rule.AGREES, rule.WITHIN_NOISE, rule.NEAR_ZERO})
 
 
 def verdict(kind: str, before, after, way: str | None, covering: list[Mapping]) -> str:
@@ -132,17 +159,21 @@ def verdict(kind: str, before, after, way: str | None, covering: list[Mapping]) 
     >>> verdict("agrees", 4.0, 4.0, None, [down]), verdict("agrees", 4.0, 4.0, None, [down | {"expect": "may"}])
     ('claimed, not moved', 'unchanged')
     >>> verdict("differs", 1.0, 2.0, "up", []), verdict("near zero", 0.0, 0.0, None, [down])
-    ('not claimed', 'not judged')
+    ('not claimed', 'claimed, not moved')
+    >>> verdict("missing", None, 1.0, None, [down]), verdict("differs", 4.0, 5.0, "up", [down, scope(["x"], {"a"})])
+    ('not judged', 'off claim')
     """
-    if kind in (rule.MISSING, rule.NEAR_ZERO):
+    if kind == rule.MISSING:
         return NOT_JUDGED
-    if kind == rule.WITHIN_NOISE:
-        return NOISE
-    if kind == rule.AGREES:
-        return NOT_MOVED if any(e["expect"] == MUST for e in covering) else UNCHANGED
+    musts = [e for e in covering if e["expect"] == MUST]
+    if kind in STILL:
+        if musts:
+            return NOT_MOVED
+        return {rule.AGREES: UNCHANGED, rule.WITHIN_NOISE: NOISE}.get(kind, NOT_JUDGED)
     if not covering:
         return NOT_CLAIMED
-    return AS_CLAIMED if any(fits(e, before, after, way) for e in covering) else OFF_CLAIM
+    held_to = musts or covering
+    return AS_CLAIMED if any(fits(e, before, after, way, kind) for e in held_to) else OFF_CLAIM
 
 
 def entries_for(found: Mapping | None, indicator: str) -> list[Mapping]:

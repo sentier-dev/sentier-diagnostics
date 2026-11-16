@@ -121,9 +121,37 @@ def write(data: Mapping, path: Path) -> Path:
     return path
 
 
-def against(data: Mapping, diagnostics: Mapping) -> list[str]:
-    """Whether a breakdown agrees with the item's results in a diagnostics file: the totals
-    of both sides must be the item's results in the two states it names."""
+def compares(diagnostics: Mapping, key: str) -> tuple[str, str]:
+    """The two states a step of a diagnostics file compares, or the first and the last for
+    the whole way (`"total"`)."""
+    if key == "total":
+        return diagnostics["states"][0]["id"], diagnostics["states"][-1]["id"]
+    step = next(s for s in diagnostics["steps"] if s["id"] == key)
+    return step["from"], step["to"]
+
+
+def namings(diagnostics: Mapping) -> list[tuple[str, str, str]]:
+    """Every breakdown a diagnostics file names: `(file name, item, step or "total")`."""
+    return [
+        (name, item["id"], key)
+        for item in diagnostics["items"]
+        for key, name in sorted((item["breakdowns"] or {}).items())
+    ]
+
+
+def against(data: Mapping, diagnostics: Mapping, named_by: tuple[str, str] | None = None) -> list[str]:
+    """Whether a breakdown agrees with a diagnostics file: it is the breakdown of the item
+    and step that name it (`named_by`, `(item, step or "total")`), and the totals of both
+    sides are the item's results in the two states it compares."""
+    if named_by is not None:
+        item_id, key = named_by
+        want = compares(diagnostics, key)
+        if (data["item"], data["from"], data["to"]) != (item_id, *want):
+            said = (
+                f"named by {item_id!r} for {key!r}, which compares {want[0]!r} with {want[1]!r}, "
+                f"it is the breakdown of {data['item']!r} from {data['from']!r} to {data['to']!r}"
+            )
+            return [said]
     states = [s["id"] for s in diagnostics["states"]]
     if data["from"] not in states or data["to"] not in states:
         return [f"breakdown of {data['item']!r}: compares states the file does not hold"]

@@ -11,14 +11,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from sentier_diagnostics import breakdown, chain, claims, example, fileformat, rule, tables
+from sentier_diagnostics import breakdown, chain, claims, example, fileformat, rule, summary, tables
 
 from . import helpers
 from .helpers import A, B
 
 HERE = Path(__file__).parent
 CASES = json.loads((HERE / "acceptance" / "cases.json").read_text(encoding="utf-8"))["cases"]
-PAGE = HERE.parent / "src" / "sentier_diagnostics" / "page"
 
 
 class PairCases(unittest.TestCase):
@@ -63,8 +62,9 @@ class Acceptance(unittest.TestCase):
     def test_a03_solver_noise_agrees(self):
         """A3: 1e-6 is within the default tolerance; measured noise has a class of its own."""
         self.assertEqual(rule.classify(1.0, 1.000001), rule.AGREES)
+        self.assertEqual(rule.classify(1.0, 1.0 + 2.8e-7), rule.AGREES)  # two runners, measured
         self.assertEqual(rule.classify(1.0, 1.0002, noise=3e-4), rule.WITHIN_NOISE)
-        self.assertGreater(rule.DEFAULT_TOLERANCE, 1e-6)
+        self.assertEqual(rule.classify(1.0, 1.0002), rule.DIFFERS)  # without the noise, a change
 
     def test_a04_beyond_ten_is_never_blanked(self):
         """A4: a factor of 25 is a class and a band, and its item is listed."""
@@ -76,7 +76,6 @@ class Acceptance(unittest.TestCase):
     def test_a05_near_zero_is_not_agreement(self):
         """A5: two results below the floor are near zero, a class of their own."""
         self.assertEqual(rule.classify(1e-10, 3e-10, floor=1e-9), rule.NEAR_ZERO)
-        self.assertNotEqual(rule.NEAR_ZERO, rule.AGREES)
         data = helpers.two_states({A: {"p": 0.0, "q": 1.0}}, {A: {"p": 0.0, "q": 1.0}})
         classes = data["counts"]["total"][A]["classes"]
         self.assertEqual((classes["near zero"], classes["agrees"]), (1, 1))
@@ -117,10 +116,10 @@ class Acceptance(unittest.TestCase):
         self.assertEqual(fileformat.errors(data), [])
         unsigned = helpers.mutated(data, lambda d: d["explanations"][0].update(by=None))
         self.assertTrue(any("says who wrote it" in e for e in fileformat.errors(unsigned)))
-        half = helpers.mutated(data, lambda d: d["explanations"][2]["by"].update(run_by=None))
-        self.assertTrue(fileformat.errors(half))
-        script = (PAGE / "diagnostics.js").read_text(encoding="utf-8")
-        self.assertIn("A claim, not checked by a person", script)
+        model = next(k for k, e in enumerate(data["explanations"]) if e["by"]["kind"] == "model")
+        half = helpers.mutated(data, lambda d: d["explanations"][model]["by"].update(run_by=None))
+        self.assertTrue(any("who ran it" in e for e in fileformat.errors(half)))
+        # the page draws it as a claim nobody checked: node "a text by a model is drawn as a claim"
 
     def test_a10_zero_and_sign_change_are_apart(self):
         self.assertEqual(rule.classify(0.0, 1.0), rule.ZERO_REFERENCE)
@@ -196,25 +195,34 @@ class Acceptance(unittest.TestCase):
         for step in data["steps"]:
             for entry in (step["claim"] or {"scope": []})["scope"]:
                 self.assertIn(entry["items"], ("*", None))
+        # an item slipped into a file of counts, with every count made to agree with it:
+        # only the rule that a file of counts holds no item can refuse it
         listed = example.build()["items"][:1]
-        leaked = helpers.mutated(data, lambda d: d.update(items=listed))
-        self.assertTrue(fileformat.errors(leaked))
 
-    def test_a18_the_split_is_exact_and_says_what_it_cannot_split(self):
-        """A18: per item, the steps' differences add up to the whole difference exactly;
-        an item missing in a state between is counted as not attributable."""
+        def leak(d):
+            d["items"] = listed
+            d["items_count"].update(listed=1, not_listed=d["items_count"]["qualifying"] - 1)
+
+        found = fileformat.errors(helpers.mutated(data, leak))
+        self.assertEqual(found, ["a file of counts holds no item"])
+
+    def test_a18_attribution_and_what_it_cannot_split(self):
+        """A18: an item is attributed to the step that moved it most; an item missing in a
+        state between is counted as not attributable, never split. The page's split of one
+        item into shares, and the sum it prints, are tested under node (A18 there)."""
         data = helpers.three_states({A: {"p": 1.0, "q": 1.0}}, {A: {"p": 1.5, "q": None}},
                                     {A: {"p": 1.75, "q": 3.0}}, explained=(True, False))  # fmt: skip
         attribution = data["attribution"][A]
         self.assertEqual(attribution["dominant"], {"one": 1, "two": 0})
         self.assertEqual(attribution["not_attributable"], 1)
         self.assertEqual(attribution["unexplained_moved"], 1)  # p moved in the step nothing explains
-        for item in example.build()["items"]:
-            for values in item["values"].values():
-                if None in values:
-                    continue
-                steps = sum(values[k + 1] - values[k] for k in range(len(values) - 1))
-                self.assertAlmostEqual(steps, values[-1] - values[0], places=12)
+        self.assertEqual(attribution["spread"], 0)
+        # the validator holds the file to it: q said to be attributed to a step is refused
+        def claim_q(d):
+            d["attribution"][A].update(not_attributable=0, dominant={"one": 2, "two": 0})
+
+        found = fileformat.errors(helpers.mutated(data, claim_q))
+        self.assertTrue(any("2 dominant one, 1 in the listed items" in e for e in found), found)
 
     def test_a19_claims_must_and_may(self):
         """A19: only a `must` entry can be unmet; an empty scope says nothing moves; a
@@ -261,10 +269,11 @@ class Acceptance(unittest.TestCase):
         data = example.build()
         self.assertIsNone(data["counts"]["steps"]["step-0"]["x:climate"]["closer"])
         self.assertIsNone(data["counts"]["total"]["x:climate"]["closer"])
-        for name in ("diagnostics.js", "index.html"):
-            text = (PAGE / name).read_text(encoding="utf-8").lower()
-            for word in ("better", "worse", "improve", "closer"):
-                self.assertNotIn(word, text, f"{name} says {word!r}")
+        self.assertIsNotNone(data["counts"]["steps"]["fix-1"]["x:climate"]["closer"])
+        said = summary.text(data).lower()
+        for word in ("better", "worse", "improve", "closer"):
+            self.assertNotIn(word, said)
+        # what the page draws is read under node: "nothing drawn calls a move better or worse"
 
     def test_a23_indicators_are_matched_by_their_exact_id(self):
         """A23: a column `x:a:biogenic` is not the indicator `x:a`."""
