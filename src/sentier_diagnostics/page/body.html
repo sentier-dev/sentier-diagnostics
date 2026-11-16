@@ -1,0 +1,106 @@
+<div class="sentier-diagnostics" data-sentier-diagnostics>
+<header class="sd-head">
+  <p class="sd-eyebrow">Diagnostics</p>
+  <h2 class="sd-title" data-sd="title">Diagnostics</h2>
+  <p class="sd-lead" data-sd="about"></p>
+  <ol class="sd-states" data-sd="states" aria-label="The states, in order"></ol>
+  <p class="sd-banner" data-sd="audience" role="note" hidden></p>
+  <p class="sd-banner" data-sd="unchecked" role="note" hidden></p>
+  <p class="sd-quiet" data-sd="tier"></p>
+</header>
+
+<div class="sd-bar" role="group" aria-label="What the page shows">
+  <label class="sd-field"><span>Comparison</span>
+    <select data-sd="comparison"></select></label>
+  <label class="sd-field"><span>Size at least</span>
+    <select data-sd="size"><option value="0">any</option><option value="1.1">×1.1</option><option value="1.25">×1.25</option><option value="2">×2</option><option value="10">×10</option></select></label>
+  <p class="sd-quiet sd-bar-note">Matrix, distributions and worst show this comparison. The size hides smaller changes; it changes no count.</p>
+</div>
+
+<section class="sd-load" data-sd="load" hidden>
+  <h3>Open a file</h3>
+  <p>No file came with this page. Choose a diagnostics file (<code>sentier-diagnostics/1</code>).
+    It is read in this browser and sent nowhere.</p>
+  <input type="file" data-sd="file" accept=".json,application/json">
+  <p class="sd-error" data-sd="load-error" role="alert"></p>
+</section>
+
+<div data-sd="content" hidden>
+  <section class="sd-section" data-sd="overview">
+    <h3>Steps</h3>
+    <p class="sd-note">Each step is compared with the state before it, and held against its claim where it has one.
+      <span data-sd="steps-zero" hidden>Step 0 checks that the published results are reproduced; it is the start, not the goal.</span></p>
+    <div class="sd-wrap"><table class="sd-table" data-sd="steps-table"></table></div>
+    <h4 data-sd="total-heading">The whole way</h4>
+    <p class="sd-note">Every difference between the first state and the last is the sum of the steps' differences.
+      "Largest step" counts, per indicator, the items whose largest share comes from each step, of the steps that moved them;
+      "spread over steps" counts the items whose whole way moved while no single step did.
+      The split is exact up to rounding, and it depends on the order of the steps where two steps touch the same results.</p>
+    <div class="sd-wrap"><table class="sd-table" data-sd="total-table"></table></div>
+  </section>
+
+  <section class="sd-section" data-sd="grid">
+    <h3>Matrix</h3>
+    <p class="sd-note">Each cell is the result after divided by the result before, for one item and indicator, in the comparison chosen above.
+      A heading sorts by how far the two lie apart, the furthest first. Choose a row (click it, or press Enter on it) to open the item.</p>
+    <div class="sd-controls">
+      <label class="sd-field sd-grow"><span>Name</span><input type="search" data-sd="grid-find" placeholder="Filter by name, place or id" autocomplete="off" spellcheck="false"></label>
+      <label class="sd-field"><span>Group</span><select data-sd="grid-group"></select></label>
+      <label class="sd-field"><span>Class</span><select data-sd="grid-class"></select></label>
+      <label class="sd-field"><span>Verdict</span><select data-sd="grid-verdict"></select></label>
+    </div>
+    <div class="sd-status">
+      <p class="sd-count" data-sd="grid-said" role="status" aria-live="polite"></p>
+      <p class="sd-legend" data-sd="grid-legend" aria-hidden="true"></p>
+    </div>
+    <p class="sd-quiet" data-sd="matrix-said"></p>
+    <div class="sd-wrap sd-grid-wrap" role="region" aria-label="After divided by before, per item and indicator">
+      <table class="sd-grid" data-sd="grid-table"></table>
+      <p class="sd-more"><button type="button" class="sd-button" data-sd="grid-more" hidden>Show more</button></p>
+    </div>
+  </section>
+
+  <aside class="sd-drawer" data-sd="item" hidden>
+    <div class="sd-drawer-head">
+      <p class="sd-label" data-sd="item-meta"></p>
+      <h3 data-sd="item-title" tabindex="-1"></h3>
+      <button type="button" class="sd-button" data-sd="item-close" aria-label="Close the item">Close</button>
+    </div>
+    <div class="sd-drawer-body" data-sd="item-body"></div>
+  </aside>
+
+  <section class="sd-section" data-sd="distributions">
+    <h3>Distributions</h3>
+    <p class="sd-note">Values per class and band, as a share of all values of the indicator. Every indicator is drawn on the same scale.</p>
+    <p class="sd-legend" data-sd="dist-legend"></p>
+    <div class="sd-wrap"><table class="sd-table" data-sd="dist-table"></table></div>
+  </section>
+
+  <section class="sd-section" data-sd="worst">
+    <h3>Worst</h3>
+    <div class="sd-controls">
+      <label class="sd-field"><span>Show</span><select data-sd="worst-n"><option>10</option><option selected>20</option><option>50</option><option>100</option></select></label>
+      <label class="sd-field"><span>Indicator</span><select data-sd="worst-indicator"></select></label>
+    </div>
+    <p class="sd-note" data-sd="worst-said"></p>
+    <div class="sd-wrap"><table class="sd-table" data-sd="worst-table"></table></div>
+  </section>
+
+  <section class="sd-section" data-sd="explanations">
+    <h3>Explanations</h3>
+    <p class="sd-note">Who wrote each one is said beside it. An explanation is a claim: it changes no count, class or verdict.</p>
+    <ul class="sd-plain" data-sd="explanation-list"></ul>
+  </section>
+
+  <section class="sd-section" data-sd="rule">
+    <h3>Rule</h3>
+    <div data-sd="rule-body"></div>
+    <h4>Notes</h4>
+    <ul class="sd-plain" data-sd="notes"></ul>
+  </section>
+</div>
+<noscript><p class="sd-error">The diagnostics need JavaScript to show a file. The command
+  <code>sentier-diagnostics summary FILE</code> prints the same counts as text.</p></noscript>
+<p class="sd-quiet sd-made-by" data-sd="made-by"></p>
+<!--data-->
+</div>

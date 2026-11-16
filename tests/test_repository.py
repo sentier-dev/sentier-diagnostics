@@ -9,7 +9,7 @@ import subprocess
 import unittest
 from pathlib import Path
 
-from sentier_diagnostics import breakdown, chain, example, page, summary
+from sentier_diagnostics import breakdown, chain, example, matrix, page, summary
 
 ROOT = Path(__file__).resolve().parent.parent
 EXAMPLES = ROOT / "examples"
@@ -36,6 +36,14 @@ class Example(unittest.TestCase):
         self.assertEqual(found, [])
         committed = chain.read(EXAMPLES / "diagnostics.json")
         self.assertEqual(committed, example.build())
+
+    def test_the_committed_local_example_and_its_matrix_are_what_the_code_makes(self):
+        data, full = example.build_local()
+        self.assertEqual((EXAMPLES / "local" / "diagnostics.json").read_text(encoding="utf-8"), chain.dumps(data))
+        self.assertEqual((EXAMPLES / "local" / "matrix.json").read_text(encoding="utf-8"), matrix.dumps(full))
+        committed = chain.read(EXAMPLES / "local" / "diagnostics.json")
+        self.assertEqual(matrix.read(EXAMPLES / "local" / "matrix.json", committed), full)
+        self.assertLess(len(data["items"]), len(full["items"]), "the matrix holds items the file does not list")
 
     def test_the_example_holds_every_class_and_verdict(self):
         data = example.build()
@@ -65,7 +73,7 @@ class Data(unittest.TestCase):
 
 class Words(unittest.TestCase):
     def test_rendered_text_avoids_the_words_its_users_avoid(self):
-        texts = {name: p.read_text(encoding="utf-8") for name, p in page.assets().items()}
+        texts = {name: p.read_text(encoding="utf-8") for name, p in page.assets(standalone=True).items()}
         texts["summary"] = summary.text(example.build())
         for name, text in texts.items():
             for word in AVOIDED:

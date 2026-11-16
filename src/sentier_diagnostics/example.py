@@ -202,7 +202,17 @@ def explanations() -> list[dict]:
 
 def build(**more) -> dict:
     """The made-up chain, counted and checked."""
-    return chain.build(
+    return _made(chain.build, **more)
+
+
+def build_local() -> tuple[dict, dict]:
+    """The same chain as a local file that lists the six worst products, and its full matrix
+    of all ten: what a project keeps on its own machine."""
+    return _made(chain.build_with_matrix, audience="local", listed=6)
+
+
+def _made(builder, **more):
+    return builder(
         "A made-up chain: published results to the current build",
         about="Made-up results of ten items in three indicators. Nobody's data.",
         indicators=INDICATORS,

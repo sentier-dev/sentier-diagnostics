@@ -3,118 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Diagnostics</title>
+<title><!--title--></title>
+<link rel="stylesheet" href="standalone.css">
 <link rel="stylesheet" href="diagnostics.css">
-<!-- The file to show, written beside the page by `sentier-diagnostics page`. Either may be absent. -->
-<script src="data.js"></script>
-<script src="breakdowns.js"></script>
 <script src="diagnostics.js" defer></script>
 </head>
 <body>
-<header class="top">
-  <p class="eyebrow">sentier-diagnostics</p>
-  <h1 id="title">Diagnostics</h1>
-  <p id="about" class="lead"></p>
-  <ol id="states" class="states" aria-label="The states, in order"></ol>
-  <p id="audience" class="banner" role="note" hidden></p>
-  <p id="unchecked" class="banner" role="note" hidden></p>
-  <p id="tier" class="quiet"></p>
-</header>
-
-<nav class="toc" aria-label="Sections">
-  <a href="#overview">Steps</a>
-  <a href="#distributions">Distributions</a>
-  <a href="#worst">Worst</a>
-  <a href="#grid">Grid</a>
-  <a href="#explanations">Explanations</a>
-  <a href="#rule">Rule</a>
-  <label class="compare">Comparison
-    <select id="comparison" aria-describedby="comparison-help"></select>
-  </label>
-  <label class="compare-size">Size at least
-    <select id="size" aria-describedby="size-help"><option value="0">any</option><option value="1.1">×1.1</option><option value="1.25">×1.25</option><option value="2">×2</option><option value="10">×10</option></select>
-  </label>
-  <span id="size-help" class="visually-hidden">Hides smaller changes in worst and grid. It changes no count.</span>
-  <span id="comparison-help" class="visually-hidden">Distributions, worst and grid show this comparison.</span>
-</nav>
-
-<main>
-  <section id="load" hidden>
-    <h2>Open a file</h2>
-    <p>No file came with this page. Choose a diagnostics file (<code>sentier-diagnostics/1</code>).
-      It is read in this browser and sent nowhere.</p>
-    <input type="file" id="file" accept=".json,application/json">
-    <p id="load-error" class="error" role="alert"></p>
-  </section>
-
-  <div id="content" hidden>
-    <section id="overview">
-      <h2>Steps</h2>
-      <p class="quiet">Each step is compared with the state before it, and held against its claim where it has one.
-        <span id="steps-zero" hidden>Step 0 checks that the published results are reproduced; it is the start, not the goal.</span></p>
-      <div class="table-wrap"><table id="steps-table"></table></div>
-      <h3 id="total-heading">The whole way</h3>
-      <p class="quiet">Every difference between the first state and the last is the sum of the steps' differences.
-        "Largest step" counts, per indicator, the items whose largest share comes from each step, of the steps that moved them;
-        "spread over steps" counts the items whose whole way moved while no single step did.
-        The split is exact up to rounding, and it depends on the order of the steps where two steps touch the same results.</p>
-      <div class="table-wrap"><table id="total-table"></table></div>
-    </section>
-
-    <section id="distributions">
-      <h2>Distributions</h2>
-      <p class="quiet">Values per class and band, as a share of all values of the indicator. Every indicator is drawn on the same scale.</p>
-      <div id="dist-legend" class="legend"></div>
-      <div class="table-wrap"><table id="dist-table"></table></div>
-    </section>
-
-    <section id="worst">
-      <h2>Worst</h2>
-      <div class="controls">
-        <label>Show <select id="worst-n"><option>10</option><option selected>20</option><option>50</option><option>100</option></select></label>
-        <label>Indicator <select id="worst-indicator"></select></label>
-      </div>
-      <p id="worst-said" class="quiet"></p>
-      <div class="table-wrap"><table id="worst-table"></table></div>
-    </section>
-
-    <section id="grid">
-      <h2>Grid</h2>
-      <div class="controls">
-        <label>Find <input type="search" id="grid-find" placeholder="name, place or id"></label>
-        <label>Class <select id="grid-class"></select></label>
-        <label>Verdict <select id="grid-verdict"></select></label>
-        <label>Group <select id="grid-group"></select></label>
-      </div>
-      <div id="grid-legend" class="legend"></div>
-      <p id="grid-said" class="quiet" aria-live="polite"></p>
-      <div class="table-wrap"><table id="grid-table" class="grid"></table></div>
-      <button type="button" id="grid-more" hidden>Show more</button>
-    </section>
-
-    <section id="item" hidden aria-live="polite">
-      <h2 id="item-title"></h2>
-      <button type="button" id="item-close">Close</button>
-      <p id="item-meta" class="quiet"></p>
-      <div id="item-body"></div>
-    </section>
-
-    <section id="explanations">
-      <h2>Explanations</h2>
-      <p class="quiet">Who wrote each one is said beside it. An explanation is a claim: it changes no count, class or verdict.</p>
-      <ul id="explanation-list" class="plain"></ul>
-    </section>
-
-    <section id="rule">
-      <h2>Rule</h2>
-      <div id="rule-body"></div>
-      <h3>Notes</h3>
-      <ul id="notes" class="plain"></ul>
-    </section>
-  </div>
+<main class="sd-standalone">
+<!--body-->
 </main>
-<noscript><p class="error">This page needs JavaScript to show a file. The command
-  <code>sentier-diagnostics summary FILE</code> prints the same counts as text.</p></noscript>
-<footer class="quiet"><p id="made-by"></p></footer>
 </body>
 </html>

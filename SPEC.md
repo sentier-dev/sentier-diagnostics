@@ -130,6 +130,7 @@ control characters, bounded lengths.
 | `explanations` | Section 8 |
 | `notes` | Up to 20 texts |
 | `made_by` | `"sentier-diagnostics 0.1.0"` |
+| `matrix` | Optional. `{"file": name, "items": n}`: the full matrix of every item, a second file beside this one (section 4.5); null or absent for none. Only a local file of items names one, and `items` is `items_count.all` |
 
 A **block** counts one indicator in one step, or over the whole way:
 
@@ -188,6 +189,40 @@ items (`listed`, 200 by default). Up to 100 indicators, 30 states, 5,000 listed 
 many items as a file may (5,000); a state's identity has up to 12 entries. Ids are up to
 100 characters, labels 80, texts 600 and an explanation's text 2,000. The limits are in
 `fileformat.py`, and a refusal names the limit it met.
+
+### 4.5 The matrix of every item
+
+A file lists the items worth a look, up to `listed`. A project looking at its own build
+wants every item: `chain.build_with_matrix` writes them in a second file of format
+`sentier-diagnostics-matrix/1`, which the page loads after it has drawn. Only a local file
+of items has one; a public file keeps its listed items only.
+
+```json
+{"format": "sentier-diagnostics-matrix/1",
+ "of": {"title": "...", "states": ["a", "b", "c"], "indicators": ["x:climate", "x:water"], "steps": ["s0", "s1"]},
+ "items":    [["p01", "Wheat", "FR", "crops", "kg"], ...],
+ "values":   [[0.52, 0.53, 0.47, 1.2, 1.2, null], ...],
+ "classes":  ["=Dd===", ...],
+ "verdicts": ["a.==", ...]}
+```
+
+One row per item, in the order of the listed items (worst first): `[id, name, place,
+group, unit]`; the results per indicator and state, indicator after indicator; per
+indicator one code per step and one for the whole way; and, where a step has a claim, per
+indicator one verdict code per step (`.` for a step without a claim; `verdicts` is null when
+no step has one). The class codes are `=` agrees, `~` within noise, `0` near zero, `-`
+missing, and for a pair that moved its class in upper case up and lower case down: `D`
+differs, `B` beyond 10x, `R` zero reference, `T` zero result, `S` sign change. The verdict
+codes are `a` as claimed, `o` off claim, `n` not claimed, `c` claimed, not moved, `~` within
+noise, `=` unchanged, `?` not judged. A matrix holds no band: it follows from the results.
+
+`matrix.errors(m)` checks the shape and never raises. `matrix.against(m, data)` works every
+code out again with the file's floors, tolerances and noise (and every verdict where the
+claim's lists are in the file), and holds the file to it: with every item at hand, its
+counts, attribution, `items_count.all` and `qualifying` must be what the matrix holds,
+exactly, and every listed item must be in the matrix with the same name and results.
+`sentier-diagnostics check` does both when the matrix lies beside its file. A matrix holds
+up to 200,000 items and 64 MB.
 
 ## 5. The counting rule
 
@@ -405,17 +440,40 @@ sentier-agribalyse's sums over ecoinvent processes and may not be published.
 
 ## 10. Views
 
-A static page: `index.html`, `diagnostics.js`, `diagnostics.css`. No build step, no
-server, no network, no font or script from elsewhere. `sentier-diagnostics page FILE --out
-FOLDER` writes it with the file beside it as `data.js`, so it opens from disk; served over
-HTTP it can also read `?file=...`, and it opens a file a reader chooses (read in the
-browser, sent nowhere). **The page works out no class, no direction and no count of its
-own.** It reads them from the file, which the validator has checked, and only adds the
-file's counts up: the classes that moved into "moved", and a step's counts over its
-indicators. A file read by `?file=` or
-chosen by a reader has not passed through the validator: the page checks its shape only,
-says so above everything it draws, and refuses a file it cannot draw instead of drawing
-part of it. Whatever the file says, only an `https://` address becomes a link.
+**One body for a site and for a page of its own.** `page.body(data)` is the diagnostics as
+one element, `<div class="sentier-diagnostics" data-sentier-diagnostics>`, with the file
+(and its breakdowns) inside it as JSON: no `<html>`, `<head>` or `<body>`, and no id, so a
+site may hold it anywhere, even twice. The site loads `diagnostics.js` and
+`diagnostics.css` from `page.assets()`; the script mounts into every such element (a site
+that draws it later marks it `="manual"` and calls `SentierDiagnostics.mount(element,
+{data})`). `data-sd-base` names where the files it loads lie, and `title=False` leaves the
+heading to the site. The script sets the document's title only on a page of its own.
+
+**The style is scoped.** Every rule of `diagnostics.css` is under `.sentier-diagnostics`;
+it sets no font, nothing on `:root`, `html` or `body`, and resets inside its root what a
+site does to bare tables (borders, phone layouts that turn rows into blocks). Its colours
+are `--sd-*` properties that take the site's tokens where the site sets them
+(`--sd-ink: var(--ink, #1d232a)`, and so on for `--muted`, `--surface`, `--paper-deep`,
+`--line`, `--line-strong`, `--index`, `--fail`, `--radius`, `--t-*`, `--s*`); up, down and
+noise keep colours of their own, so that a direction never takes a site's accent. A test
+reads the sheet and holds this.
+
+`sentier-diagnostics page FILE --out FOLDER` writes a page of its own: `index.html` with
+the body in it, the two assets, and `standalone.css`, which sets the tokens and font a site
+would. It opens from disk; no build step, no server, no network, no font or script from
+elsewhere. Where the file names a matrix that lies beside it, the page writes it as
+`matrix.js`, which loads from disk too; a site serving `matrix.json` needs nothing else, as
+the page fetches it over HTTP. Served over HTTP the page can also read `?file=...`, and it
+opens a file a reader chooses (read in the browser, sent nowhere). **The page works out no
+class, no direction and no count of its own.** It reads them from the file, which the
+validator has checked, and only adds the file's counts up: the classes that moved into
+"moved", and a step's counts over its indicators. A file read by `?file=` or chosen by a
+reader has not passed through the validator: the page checks its shape only, says so above
+everything it draws, and refuses a file it cannot draw instead of drawing part of it. A
+matrix is held to the file it says it is of (title, states, indicators, steps, number of
+items, the length of every row) before a row of it is drawn; its codes are checked by
+`sentier-diagnostics check`, not again in the browser. Whatever the file says, only an
+`https://` address becomes a link.
 
 The text a page renders comes from the file or from words chosen to be neutral: it avoids
 stage, triage, ledger, layer, upstream, provider and candidate (a test holds this).
@@ -441,16 +499,31 @@ sizes lie apart (`|log10(after/before)|`, or the relative difference where there
 ratio). The page always says how many it shows of how many, and how many items worth a
 look the file does not hold.
 
-### 10.5 Grid
-Items by indicator for one comparison, filtered by text, class, verdict and group, paged by
-100 with "show more". The reader's **size filter** ("size at least ×1.1 ... ×10") hides
-smaller changes here and in the worst list; zeros, sign changes and missing values always
-show, and the page says the filter changes no count.
+### 10.5 Matrix
+Items by indicator for one comparison: each cell is the result after divided by the result
+before, where the two share a sign (`1 + 3e−7` rather than a `1` that is not one), and what
+the class says where they do not (from 0, to 0, + → −, missing, ≈ 0, =). The cell's colour
+is its direction's and its strength the band's; for a matrix row, which holds no band, the
+band is named from the results as the rule names it (a test holds the two equal). The ratio
+and the shading are a display: they change no class. The listed items, or every item once
+the matrix is loaded, a dot marking the listed ones; the page says which it holds and why
+(none named, loading, loaded, or the reason it was not loaded). A heading sorts by how far
+the two lie apart in that indicator, the furthest first (the order of 10.4), or by name;
+filters by text, group, class and verdict; 300 rows at a time with "show more". The
+reader's **size filter** ("size at least ×1.1 ... ×10") hides smaller changes here and in
+the worst list; zeros, sign changes and missing values always show, and the page says the
+filter changes no count.
 
 ### 10.6 Item
-Both sides in every state, the class, verdict and signed share of each step, the share
-nothing explains and the sum of the shares (or why there are none: section 7), its
-explanations, and its breakdowns where they are in the file and fit the item and step.
+A drawer at the right (the whole window on a phone), opened from a row of the matrix or the
+worst list, closed with Close or Escape. First **why it differs**: the explanations about
+the item, then those about a step or an indicator in which it moved (said to be so, as they
+may not be about it), or "none given" when the file holds neither; the file holds every
+explanation, so this "none" is never said over a part of a list. Then per indicator, the
+one whose whole way lies furthest apart first: both sides in every state, the class,
+verdict and signed share of each step, the share nothing explains and the sum of the shares
+(or why there are none: section 7). Then its breakdowns where they are in the file and fit
+the item and step.
 
 ### 10.7 Explanations and rule
 Every explanation with its origin badge; the rule with its tolerances, noise, floors and
@@ -508,7 +581,14 @@ line on ordinary mistakes, never a traceback; the summary escapes the file's tex
 Markdown; noise is taken beyond the floor, and a scope entry read from tables without
 `expect` may move; the page draws the example whole under Node with a small stand-in for
 the DOM (`tests/js/dom.js`), loads nothing from elsewhere and writes no markup from data;
-the committed example is what the code makes, holds every class and every verdict, and no
+the page takes the matrix the Python writes and refuses one of another file, loads it as a
+script or over HTTP after it has drawn, draws 300 rows at a time, sorts by a heading, and
+opens the drawer with "why it differs" first (node tests); `matrix.against` finds a changed
+code, direction, result, verdict or count (`tests/test_matrix_page.py`); `page.body` is one
+root with no frame and no id, and its data cannot end the element that holds it; every
+selector of the style is inside the root, with no font and nothing on `:root` or `body`;
+the committed examples (the public file, and the local file with its matrix in
+`examples/local/`) are what the code makes, the public one holds every class and every verdict, and no
 tracked file carries an identifier-shaped string (`tests/test_repository.py`).
 
 ## 12. Out of scope
@@ -568,7 +648,8 @@ sentier-bafu-agribalyse wrote their requirements. What became of each:
 | Closer and further not at the head of a later step | bafu, ADR 0009 | yes: counted, never shown as better |
 | A chain of more than two states, each step's share | all three | yes |
 | `listed` named and counted apart from what moved | bafu | yes: `items_count` |
-| The page fetches its data as a file | bafu | yes: `data.js` beside the page, or `?file=` |
+| The page fetches its data as a file | bafu | yes: the data inside the body, or `window.SENTIER_DIAGNOSTICS` from a site's own `data.js` (`page.as_script`), or `?file=` |
+| Every item, not only the listed ones, on a local page | bafu | yes: the matrix (section 4.5), loaded after the page is drawn |
 | Noise per item | bafu | no: later |
 | The number of digits written | bafu | values are written unrounded; a rounded source is a tolerance basis |
 | Symmetric bands, floor of 1 % of the median per indicator | bafu | yes, and per unit |
@@ -576,7 +657,8 @@ sentier-bafu-agribalyse wrote their requirements. What became of each:
 | A test that the script agrees with the Python rule | bafu | yes: shared cases |
 | A formatter target at the lowest Python | bafu | yes: `py310`, CI runs 3.10 to 3.14 |
 | Standard library only; assets as package data with their paths | bafu, bafu-agribalyse | yes: `page.assets()` |
-| A page without a frame, with a list of tokens for a site's frame | bafu, bafu-agribalyse | no: later (the page has its own tokens) |
+| A page without a frame, with a list of tokens for a site's frame | bafu, bafu-agribalyse | yes: `page.body`, a scoped style whose `--sd-*` take the site's tokens (section 10) |
+| The look of the trial dashboard: a sortable grid, a drawer for an item | bafu-agribalyse | yes: its look and structure; none of its values, and not its two definitions of agreement, its hand-written labels or a "none" over a top-N list (section 10) |
 | Reading version 1 and 2 files, or a converter | bafu | no: see section 13 and the migration plan |
 | A tier a site check can refuse on | bafu, bafu-agribalyse | yes: `tier` (items or counts) and `audience` (public or local) |
 | Join accounting per reference | bafu-agribalyse | yes: `join` per state |

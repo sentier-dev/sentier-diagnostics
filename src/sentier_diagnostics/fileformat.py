@@ -39,6 +39,8 @@ TOLERANCE_BASES = ("default", "declared", "measured", "published rounding")
 FLOOR_BASES = ("median", "declared", "none")
 ORIGIN_KINDS = ("person", "code", "model")
 TOTAL = "total"
+#: Keys a file may leave out; each is null where it says nothing.
+OPTIONAL_KEYS = {"matrix"}
 
 #: The largest file a page reads: it holds the whole file.
 MAX_BYTES = 12 * 1024 * 1024
@@ -795,7 +797,7 @@ def _errors(data, found: list[str]) -> list[str]:
         if isinstance(said, str) and said.startswith(FAMILY):
             return [f"format {said!r}: this reader knows {FORMAT} only"]
         return [f"not a diagnostics file of format {FORMAT}"]
-    found += [f"a key this format does not know: {key}" for key in sorted(set(data) - KEYS)]
+    found += [f"a key this format does not know: {key}" for key in sorted(set(data) - KEYS - OPTIONAL_KEYS)]
     found += [f"a key this format requires: {key}" for key in sorted(KEYS - set(data))]
     if found:
         return found
@@ -831,4 +833,21 @@ def _errors(data, found: list[str]) -> list[str]:
     _attribution(data, found, indicators, steps, blocks)
     items = _items(data, found, indicators, states, steps, floors, tier, blocks)
     _explanations(data, found, indicators, steps, set(items), tier)
+    _matrix(data, found)
     return found
+
+
+def _matrix(data, found) -> None:
+    """A matrix holds every item with its results: only a local file of items may name one."""
+    named = data.get("matrix")
+    if named is None:
+        return
+    if not (isinstance(named, dict) and set(named) == {"file", "items"} and isinstance(named["file"], str)
+            and FILE_NAME.fullmatch(named["file"]) and is_count(named["items"])):  # fmt: skip
+        found.append("`matrix` is not {file, items} with a file name, or null")
+        return
+    if data["tier"] != "items" or data["audience"] != "local":
+        found.append("only a local file of items names a matrix: a public file keeps the listed items only")
+    count = data["items_count"]
+    if isinstance(count, dict) and named["items"] != count.get("all"):
+        found.append(f"`matrix` says {named['items']} items, the file counts {count.get('all')}")

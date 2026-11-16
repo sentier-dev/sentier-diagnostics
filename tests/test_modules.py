@@ -20,7 +20,7 @@ from .helpers import A, B
 
 HERE = Path(__file__).parent
 FIXTURES = HERE / "fixtures" / "tables"
-MODULES = ["rule", "claims", "chain", "fileformat", "breakdown", "tables", "summary", "page", "from_tables"]
+MODULES = ["rule", "claims", "chain", "fileformat", "breakdown", "tables", "summary", "page", "from_tables", "matrix"]
 
 
 def load_tests(loader, tests, pattern):
@@ -495,7 +495,7 @@ class FromTables(unittest.TestCase):
 
 class Page(unittest.TestCase):
     def test_the_assets_load_nothing_from_elsewhere(self):
-        for name, path in page.assets().items():
+        for name, path in page.assets(standalone=True).items():
             text = path.read_text(encoding="utf-8")
             with self.subTest(name):
                 for said in ("http://", "https://", "//cdn", "@import", "fonts.g", "<iframe"):
@@ -520,7 +520,7 @@ class Page(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             where = page.write(example.build(), Path(folder), {"p01-fix-1.json": example.wheat_breakdown()})
             names = sorted(p.name for p in where.parent.iterdir())
-            self.assertEqual(names, ["breakdowns.js", "data.js", "diagnostics.css", "diagnostics.js", "index.html"])
+            self.assertEqual(names, ["diagnostics.css", "diagnostics.js", "index.html", "standalone.css"])
 
 
 class Command(unittest.TestCase):

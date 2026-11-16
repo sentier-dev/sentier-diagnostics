@@ -25,3 +25,7 @@ The words this repository uses, each in one line. [SPEC.md](SPEC.md) says the re
 - **Breakdown**: what one item's result is made of, before and after one step.
 - **Tier**: whether a file lists items (`items`) or holds counts only (`counts`).
 - **Audience**: whether a file's writer says it may be published (`public`) or not (`local`).
+- **Listed items**: the items a file holds, the worst first, up to `listed`.
+- **Matrix**: every item of a local file, listed or not, in a second file the page loads after it has drawn.
+- **Body**: the page as one element a site holds in its own page; its style stays inside it.
+- **Drawer**: the panel of one item, at the right of the page, opened from a row.

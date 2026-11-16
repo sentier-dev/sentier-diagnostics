@@ -1,5 +1,5 @@
 // The page script against the acceptance cases the Python rule is tested on.
-// Run with `node --test tests/js/`. Node's own test runner: no package, no install.
+// Run with `node --test tests/js/page.test.js`. Node's own test runner: no package, no install.
 'use strict';
 
 const test = require('node:test');
@@ -140,7 +140,7 @@ const example = () => JSON.parse(fs.readFileSync(path.join(EXAMPLE, 'diagnostics
 const wheat = () => JSON.parse(fs.readFileSync(path.join(EXAMPLE, 'p01-fix-1.json'), 'utf8'));
 
 test('the example page is drawn whole', () => {
-  const drawn = dom.page(example(), { 'p01-fix-1.json': wheat() });
+  const drawn = dom.page(example(), { 'p01-fix-1.json': wheat() }, { standalone: true });
   assert.equal(drawn.byId.load.hidden, true, drawn.byId['load-error'].textContent);
   assert.equal(drawn.byId.content.hidden, false);
   assert.equal(drawn.byId.unchecked.hidden, true);
@@ -202,7 +202,7 @@ test('a text by a model is drawn as a claim nobody checked (A9)', () => {
 test('nothing drawn calls a move better or worse (A22)', () => {
   const drawn = dom.page(example(), { 'p01-fix-1.json': wheat() });
   drawn.open('item=p01');
-  const html = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'sentier_diagnostics', 'page', 'index.html'), 'utf8')
+  const html = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'sentier_diagnostics', 'page', 'body.html'), 'utf8')
     .replace(/<[^>]*>/g, ' ');
   const text = (drawn.text() + '\n' + html).toLowerCase();
   for (const word of ['better', 'worse', 'improve', 'closer']) assert.ok(!text.includes(word), word);
@@ -217,7 +217,7 @@ test('the item view splits only what can be split and draws the breakdown of its
   assert.ok(/100\.0 %/.test(body), 'the sum of the shares');
   drawn.open('item=p03'); // barley: no water use in the rebuilt state
   const barley = drawn.byId['item-body'];
-  const water = barley.all().filter((n) => n.tagName === 'TABLE')[1];
+  const water = barley.querySelector('table[data-indicator="x:water"]');
   const shares = water.all().filter((n) => n.tagName === 'TR').slice(1, -1).map((tr) => tr.childNodes[5].textContent);
   assert.deepEqual(shares, shares.map(() => '—'));
   assert.ok(water.seen().join(' ').includes('not split: missing in a state between'));
@@ -240,4 +240,170 @@ test('a file the page cannot draw draws nothing', () => {
   assert.equal(drawn.byId.content.hidden, true);
   assert.equal(drawn.byId.load.hidden, false);
   assert.equal(drawn.byId.title.textContent, '');
+});
+
+// ------------------------------------------------------------------ the matrix and the drawer
+
+const local = () => JSON.parse(fs.readFileSync(path.join(EXAMPLE, 'local', 'diagnostics.json'), 'utf8'));
+const full = () => JSON.parse(fs.readFileSync(path.join(EXAMPLE, 'local', 'matrix.json'), 'utf8'));
+const gridRows = (drawn) => drawn.byId['grid-table'].querySelectorAll('tr[data-item]');
+
+test('the band the page names for a matrix row is the band of the Python rule', () => {
+  for (const c of cases) {
+    if (c.class !== 'differs' && c.class !== 'beyond 10x') continue;
+    assert.equal(page.bandOf(c.before, c.after, c.class, c.direction), c.band, c.id);
+  }
+});
+
+test('a ratio never reads 1 when it is not, nor Infinity', () => {
+  assert.equal(page.ratioText(2, 3), '1.5');
+  assert.equal(page.ratioText(-2, -4), '2');
+  assert.equal(page.ratioText(1, 1.0000003), '1 + 3e−7');
+  assert.equal(page.ratioText(1, 0.9999), '1 − 1e−4');
+  assert.equal(page.ratioText(1e-300, 1e300), '1e600');
+  assert.equal(page.ratioText(1e300, 1e-300), '1e−600');
+});
+
+test('the matrix the Python writes is one the page takes, and the rows are the file\'s', () => {
+  const data = local();
+  assert.equal(page.checkMatrix(full(), data), null);
+  const rows = page.matrixRows(full(), data);
+  assert.equal(rows.length, data.items_count.all);
+  for (const item of data.items) {
+    const row = rows.find((r) => r.id === item.id);
+    assert.deepEqual(row.values, item.values, item.id);
+    assert.deepEqual(row.classes, item.classes, item.id);
+    assert.deepEqual(row.directions, item.directions, item.id);
+    assert.deepEqual(row.verdicts, item.verdicts, item.id);
+  }
+});
+
+test('a matrix of another file, or of another shape, is refused', () => {
+  const data = local();
+  const other = full(); other.of.title = 'Another';
+  assert.match(page.checkMatrix(other, data), /another file/);
+  const short = full(); short.classes[0] = short.classes[0].slice(1);
+  assert.match(page.checkMatrix(short, data), /class code/);
+  const wrong = full(); wrong.values[2][0] = 'x';
+  assert.match(page.checkMatrix(wrong, data), /not a number/);
+  const fewer = full(); fewer.items.pop(); fewer.values.pop(); fewer.classes.pop(); fewer.verdicts.pop();
+  assert.match(page.checkMatrix(fewer, data), /says 10 items/);
+});
+
+test('the grid shows the listed items, says so, and every item once the matrix is here', () => {
+  const data = local();
+  const before = dom.page(data); // over file: the matrix.json the file names cannot be read
+  assert.equal(gridRows(before).length, data.items.length);
+  assert.match(before.byId['matrix-said'].textContent, /not loaded: matrix\.json is read over http only/);
+  assert.match(before.byId['grid-said'].textContent, new RegExp('of ' + data.items.length + ' products, among the ' + data.items.length + ' products in this file; ' + data.items_count.not_listed + ' more'));
+  const after = dom.page(data, undefined, { globals: { SENTIER_DIAGNOSTICS_MATRIX: full() } });
+  assert.equal(gridRows(after).length, data.items_count.all);
+  assert.match(after.byId['matrix-said'].textContent, /matrix of all 10 products is loaded/);
+  assert.equal(after.byId['grid-table'].all().filter((n) => n.className === 'sd-listed').length, data.items.length);
+});
+
+test('a matrix beside the page is loaded as a script after the page is drawn', () => {
+  const drawn = dom.page(local(), undefined, { attributes: { 'data-sd-matrix': 'matrix.js', 'data-sd-base': 'runs/1/' } });
+  const script = drawn.head.querySelector('script[src]');
+  assert.equal(script.getAttribute('src'), 'runs/1/matrix.js');
+  assert.match(drawn.byId['matrix-said'].textContent, /^Loading/);
+  drawn.context.SENTIER_DIAGNOSTICS_MATRIX = full();
+  script.onload();
+  assert.equal(gridRows(drawn).length, 10);
+});
+
+test('a matrix is fetched as JSON over http, and one of another file is not drawn', async () => {
+  const served = (m) => () => Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify(m)) });
+  const drawn = dom.page(local(), undefined, { protocol: 'https:', fetch: served(full()) });
+  await new Promise((done) => setImmediate(done));
+  assert.equal(gridRows(drawn).length, 10);
+  const other = full(); other.of.steps = other.of.steps.slice().reverse();
+  const refused = dom.page(local(), undefined, { protocol: 'https:', fetch: served(other) });
+  await new Promise((done) => setImmediate(done));
+  assert.equal(gridRows(refused).length, 6);
+  assert.match(refused.byId['matrix-said'].textContent, /not loaded: it is the matrix of another file/);
+});
+
+test('a grid cell is the ratio after ÷ before, coloured by its direction', () => {
+  const drawn = dom.page(example());
+  const wheat = gridRows(drawn).find((tr) => tr.getAttribute('data-item') === 'p01');
+  const item = example().items.find((i) => i.id === 'p01');
+  const values = item.values['x:climate'];
+  const cell = wheat.childNodes[3];
+  assert.equal(item.classes['x:climate'][4], 'differs');
+  assert.equal(cell.textContent, page.ratioText(values[0], values[values.length - 1]));
+  assert.match(cell.className, new RegExp('tone-' + item.directions['x:climate'][4]));
+});
+
+test('a heading sorts the grid by how far the two lie apart, the furthest first, and says so', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  const head = drawn.byId['grid-table'].querySelectorAll('th[scope="col"]');
+  const water = head.find((th) => th.getAttribute('title') && th.getAttribute('title').indexOf('Water') === 0);
+  water.querySelector('button[type="button"]').dispatch('click', {});
+  const after = drawn.byId['grid-table'].querySelectorAll('th[scope="col"]').find((th) => th.getAttribute('aria-sort'));
+  assert.equal(after.getAttribute('aria-sort'), 'descending');
+  const order = gridRows(drawn).map((tr) => tr.getAttribute('data-item'));
+  const key = (id) => { const i = data.items.find((x) => x.id === id); const v = i.values['x:water']; return page.severityKey(v[0], v[v.length - 1], i.classes['x:water'][4]); };
+  for (let k = 1; k < order.length; k++) assert.ok(page.compareKeys(key(order[k - 1]), key(order[k])) <= 0, order.join());
+});
+
+test('the grid draws 300 rows at a time', () => {
+  const data = local();
+  const m = full();
+  const n = 650;
+  const grown = { ...m, items: [], values: [], classes: [], verdicts: [] };
+  for (let i = 0; i < n; i++) {
+    const at = i % m.items.length;
+    grown.items.push(i < m.items.length ? m.items[at] : [m.items[at][0] + '-' + i].concat(m.items[at].slice(1)));
+    grown.values.push(m.values[at]); grown.classes.push(m.classes[at]); grown.verdicts.push(m.verdicts[at]);
+  }
+  data.matrix.items = n;
+  const drawn = dom.page(data, undefined, { globals: { SENTIER_DIAGNOSTICS_MATRIX: grown } });
+  assert.equal(gridRows(drawn).length, 300);
+  assert.equal(drawn.byId['grid-more'].textContent, 'Show 300 more');
+  drawn.byId['grid-more'].dispatch('click', {});
+  drawn.byId['grid-more'].dispatch('click', {});
+  assert.equal(gridRows(drawn).length, n);
+  assert.equal(drawn.byId['grid-more'].hidden, true);
+});
+
+test('the drawer opens on an item of the matrix, says why first, and closes with Escape', () => {
+  const data = local();
+  const drawn = dom.page(data, undefined, { globals: { SENTIER_DIAGNOSTICS_MATRIX: full() } });
+  const unlisted = full().items.map((r) => r[0]).find((id) => !data.items.some((i) => i.id === id));
+  gridRows(drawn).find((tr) => tr.getAttribute('data-item') === unlisted).childNodes[0].dispatch('click', {});
+  assert.equal(drawn.context.location.hash, 'item=' + unlisted);
+  drawn.open('item=' + unlisted);
+  assert.equal(drawn.byId.item.hidden, false);
+  assert.match(drawn.byId['item-meta'].textContent, /from the matrix: not listed in this file/);
+  assert.equal(drawn.byId['item-body'].childNodes[0].textContent, 'Why it differs');
+  assert.equal(drawn.byId['item-title'].focused, true);
+  drawn.root.dispatch('keydown', { key: 'Escape' });
+  assert.equal(drawn.byId.item.hidden, true);
+});
+
+test('why it differs: the item\'s own explanations, then those of a step or indicator it moved in, never a "none" over a part', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  for (const item of data.items) {
+    drawn.open('item=' + item.id);
+    const why = drawn.byId['item-body'].childNodes[1];
+    const own = data.explanations.filter((e) => e.about.item === item.id).length;
+    const scopes = why.childNodes.map((li) => (li.childNodes[0].className === 'sd-scope' ? li.childNodes[0].textContent : 'none'));
+    assert.equal(scopes.filter((s) => s === 'This product').length, own, item.id);
+    assert.ok(scopes.indexOf('This product') <= 0 || scopes.slice(0, own).every((s) => s === 'This product'), item.id + ': its own first');
+    if (scopes.includes('none')) assert.equal(why.childNodes.length, 1, item.id + ': "none" only where nothing is given');
+  }
+});
+
+test('the page sets the title of a page of its own only, never a host\'s', () => {
+  assert.equal(dom.page(example()).document.title, '');
+  assert.equal(dom.page(example(), undefined, { standalone: true }).document.title, example().title);
+});
+
+test('the data can come from a global, as a site\'s own data.js sets it', () => {
+  const drawn = dom.page(example(), { 'p01-fix-1.json': wheat() }, { globals: {} });
+  assert.equal(drawn.byId.content.hidden, false);
+  assert.equal(drawn.byId.unchecked.hidden, true);
 });
