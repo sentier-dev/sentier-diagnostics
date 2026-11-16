@@ -518,11 +518,7 @@
         states.appendChild(el('li', { title: (s.about || '') + (identity ? ' (' + identity + ')' : '') + (s.join && s.join.note ? ' ' + s.join.note : '') },
           [s.label + (s.kind === 'published' ? ' (published)' : ''), join ? el('span', { cls: 'sd-quiet', text: ' · ' + join }) : null]));
       });
-      var c = D.items_count;
-      q('tier').textContent = groupThousands(c.all) + ' ' + D.item.many + ', ' + D.indicators.length + ' indicators. ' +
-        (D.tier === 'counts' ? 'This file holds counts only: no single ' + D.item.one + ' is shown.'
-          : groupThousands(c.listed) + ' of the ' + groupThousands(c.qualifying) + ' ' + D.item.many + ' worth a look are in this file' +
-            (c.not_listed ? '; ' + groupThousands(c.not_listed) + ' are not.' : '.'));
+      tierSaid();
       q('audience').textContent = D.audience === 'local'
         ? 'Local file: its writer has not said that it may be published.' : '';
       q('audience').hidden = D.audience !== 'local';
@@ -533,6 +529,19 @@
       select.appendChild(el('option', { value: 'total', text: 'The whole way' }));
       D.steps.forEach(function (s, k) { select.appendChild(el('option', { value: s.id, text: 'Step ' + k + ': ' + s.label })); });
       select.value = view.comp;
+    }
+
+    // what the page holds of the items: the listed ones, or every one once the matrix is here
+    function tierSaid() {
+      var c = D.items_count;
+      var head = groupThousands(c.all) + ' ' + D.item.many + ', ' + D.indicators.length + ' indicators. ';
+      var said;
+      if (D.tier === 'counts') said = 'This file holds counts only: no single ' + D.item.one + ' is shown.';
+      else if (M) said = 'All ' + groupThousands(M.length) + ' are loaded from the matrix; ' + groupThousands(c.listed) + ' of the ' +
+        groupThousands(c.qualifying) + ' worth a look are listed in this file.';
+      else said = groupThousands(c.listed) + ' of the ' + groupThousands(c.qualifying) + ' ' + D.item.many + ' worth a look are in this file' +
+        (c.not_listed ? '; ' + groupThousands(c.not_listed) + ' are not.' : '.');
+      q('tier').textContent = head + said;
     }
 
     function sumOver(comp, fn) {
@@ -1031,6 +1040,7 @@
       matrix.state = 'loaded';
       matrix.said = '';
       view.limit = PAGE;
+      tierSaid();
       renderComparison();
       matrixSaid();
       if (view.open) renderItem(view.open);

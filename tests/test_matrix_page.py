@@ -11,7 +11,7 @@ import unittest
 from html.parser import HTMLParser
 from pathlib import Path
 
-from sentier_diagnostics import chain, cli, example, fileformat, matrix, page
+from sentier_diagnostics import chain, cli, example, fileformat, from_tables, matrix, page
 
 from . import helpers
 
@@ -309,6 +309,48 @@ class Command(unittest.TestCase):
                 "local/page/matrix.js",
             ):
                 self.assertTrue((folder / name).is_file(), name)
+
+
+class FromTables(unittest.TestCase):
+    """A table reader names a matrix in its description (asked for by sentier-agribalyse)."""
+
+    TABLES = Path(__file__).resolve().parent / "fixtures" / "tables"
+
+    def described(self, folder: Path, **more) -> Path:
+        for one in self.TABLES.iterdir():
+            (folder / one.name).write_bytes(one.read_bytes())
+        spec = json.loads((folder / "description.json").read_text(encoding="utf-8"))
+        spec.update(more)
+        (folder / "description.json").write_text(json.dumps(spec), encoding="utf-8")
+        return folder / "description.json"
+
+    def test_a_description_names_the_matrix_and_build_writes_it(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            path = self.described(folder, matrix="matrix.json", audience="local")
+            data, full = from_tables.build_with_matrix(path)
+            self.assertEqual(data["matrix"], {"file": "matrix.json", "items": data["items_count"]["all"]})
+            self.assertEqual(matrix.against(full, data), [])
+            self.assertEqual(from_tables.build(path), data)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(cli.main(["build", str(path), "--out", str(folder / "out" / "d.json")]), 0)
+            self.assertEqual(
+                matrix.read(folder / "out" / "matrix.json", chain.read(folder / "out" / "d.json")), full
+            )
+
+    def test_without_the_key_there_is_no_matrix(self):
+        with tempfile.TemporaryDirectory() as folder:
+            data, full = from_tables.build_with_matrix(self.described(Path(folder)))
+            self.assertIsNone(full)
+            self.assertNotIn("matrix", data)
+
+    def test_a_public_file_or_a_bad_name_is_refused(self):
+        for more in ({"matrix": "matrix.json", "audience": "public"}, {"matrix": "../m.json", "audience": "local"},
+                     {"matrix": 3}):  # fmt: skip
+            with self.subTest(more), tempfile.TemporaryDirectory() as folder:
+                with self.assertRaises(ValueError):
+                    from_tables.build_with_matrix(self.described(Path(folder), **more))
 
 
 if __name__ == "__main__":

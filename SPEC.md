@@ -195,7 +195,9 @@ many items as a file may (5,000); a state's identity has up to 12 entries. Ids a
 A file lists the items worth a look, up to `listed`. A project looking at its own build
 wants every item: `chain.build_with_matrix` writes them in a second file of format
 `sentier-diagnostics-matrix/1`, which the page loads after it has drawn. Only a local file
-of items has one; a public file keeps its listed items only.
+of items has one; a public file keeps its listed items only. A reader that writes CSV tables
+names it in its description (`"matrix": "matrix.json"`), and `sentier-diagnostics build`
+writes it beside the file.
 
 ```json
 {"format": "sentier-diagnostics-matrix/1",

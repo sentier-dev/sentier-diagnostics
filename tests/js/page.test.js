@@ -233,6 +233,17 @@ test('a breakdown named by another item is not drawn under it (issue 5)', () => 
   assert.ok(body.includes('is of another product or another step: not drawn'), body.slice(-300));
 });
 
+test('a breakdown of the right step and another item is not drawn under it (issue 5)', () => {
+  const data = example();
+  const step = Object.keys(data.items.find((i) => i.id === 'p01').breakdowns)[0];
+  const rice = data.items.find((i) => i.id === 'p05');
+  rice.breakdowns = { [step]: 'p01-fix-1.json' };
+  const drawn = dom.page(data, { 'p01-fix-1.json': wheat() });
+  drawn.open('item=p05');
+  const body = drawn.byId['item-body'].seen().join(' ');
+  assert.ok(body.includes('is of another product or another step: not drawn'), body.slice(-300));
+});
+
 test('a file the page cannot draw draws nothing', () => {
   const data = example();
   data.counts.total = null;
@@ -299,6 +310,8 @@ test('the grid shows the listed items, says so, and every item once the matrix i
   const after = dom.page(data, undefined, { globals: { SENTIER_DIAGNOSTICS_MATRIX: full() } });
   assert.equal(gridRows(after).length, data.items_count.all);
   assert.match(after.byId['matrix-said'].textContent, /matrix of all 10 products is loaded/);
+  assert.match(before.byId.tier.textContent, /6 of the \d+ products worth a look are in this file; \d+ are not\./);
+  assert.match(after.byId.tier.textContent, /All 10 are loaded from the matrix; 6 of the \d+ worth a look are listed in this file\./);
   assert.equal(after.byId['grid-table'].all().filter((n) => n.className === 'sd-listed').length, data.items.length);
 });
 

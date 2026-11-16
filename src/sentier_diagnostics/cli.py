@@ -86,8 +86,13 @@ def main(argv=None) -> int:
         if args.command == "check":
             return check(args.files)
         if args.command == "build":
-            chain.write(from_tables.build(args.description), args.out)
-            print(f"wrote {args.out}")
+            data, full = from_tables.build_with_matrix(args.description)
+            chain.write(data, args.out)
+            if full is None:
+                print(f"wrote {args.out}")
+                return 0
+            beside = matrix.write(full, Path(args.out).parent / data["matrix"]["file"])
+            print(f"wrote {args.out} and its matrix {beside}")
             return 0
         if args.command == "summary":
             print(summary.text(chain.read(args.file)), end="")
