@@ -4,13 +4,35 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from . import claims, rule
+from . import chain, claims, rule
 
 MOVES_ORDER = [k for k in rule.CLASSES if k in rule.MOVES]
 
 
 def _n(value) -> str:
     return f"{value:,}".replace(",", " ")
+
+
+def noise_text(noise: Mapping, names: Mapping[str, str]) -> str:
+    """What a step's noise says, with its size per indicator. An indicator the noise holds no
+    size for was not measured; a size above `chain.LARGE_NOISE` is called large.
+
+    >>> noise_text({"measured": True, "between": ["a", "b"], "by": {"w": 0.0244, "c": 0.0}}, {"w": "Water", "c": "Climate", "t": "Tox"})
+    'noise measured between a and b: Water 2.4 % (large), Climate identical; Tox not measured'
+    """
+    if not noise["measured"]:
+        return "noise not measured"
+    said = []
+    for key, name in names.items():
+        if key in noise["by"]:
+            size = noise["by"][key]
+            said.append(f"{name} identical" if size == 0 else
+                        f"{name} {size * 100:.2g} %" + (" (large)" if size > chain.LARGE_NOISE else ""))  # fmt: skip
+    absent = [name for key, name in names.items() if key not in noise["by"]]
+    between = f"noise measured between {noise['between'][0]} and {noise['between'][1]}"
+    return between + ": " + (", ".join(said) or "no result beyond the floor in both builds") + (
+        "; " + ", ".join(absent) + " not measured" if absent else ""
+    )
 
 
 def text(data: Mapping) -> str:
@@ -49,8 +71,9 @@ def text(data: Mapping) -> str:
     for number, step in enumerate(data["steps"]):
         blocks = data["counts"]["steps"][step["id"]].values()
         moved = sum(b["classes"][k] for b in blocks for k in rule.MOVES)
+        # a result missing on both sides is missing before and missing after
         gone_before = sum(b["missing"]["before"] + b["missing"]["both"] for b in blocks)
-        gone_after = sum(b["missing"]["after"] for b in blocks)
+        gone_after = sum(b["missing"]["after"] + b["missing"]["both"] for b in blocks)
         if step["claim"]:
             verdicts = [sum(b["verdicts"][v] for b in blocks) for v in
                         (claims.AS_CLAIMED, claims.OFF_CLAIM, claims.NOT_CLAIMED, claims.NOT_MOVED)]  # fmt: skip
@@ -86,11 +109,7 @@ def text(data: Mapping) -> str:
     out += ["", "## Rule", ""]
     for step in data["steps"]:
         tol = step["tolerance"]
-        noise = step["noise"]
-        out.append(
-            f"- {step['label']}: tolerance {tol['value']:g} ({tol['basis']})"
-            + (f"; noise measured between {noise['between'][0]} and {noise['between'][1]}" if noise["measured"] else "; noise not measured")
-        )
+        out.append(f"- {step['label']}: tolerance {tol['value']:g} ({tol['basis']}); {noise_text(step['noise'], names)}")
     floors = data["rule"]["floors"]
     out.append(
         f"- Floors: {len(floors)}, one per indicator and reference unit, "

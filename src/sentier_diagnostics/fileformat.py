@@ -216,6 +216,11 @@ def claim_errors(found_claim, where, indicators, tier) -> list[str]:
             found.append(f"{where}: a scope's largest move is not a share")
         if entry["expect"] not in claims.EXPECTS:
             found.append(f"{where}: a scope says whether its values must or may move")
+    lists = [e["items"] for e in entries if isinstance(e["items"], list)]
+    if entries and len(lists) == len(entries) and all(is_text(i, MAX_ID) for one in lists for i in one):
+        size = len(set().union(*lists))
+        if found_claim["reach"] != size:
+            found.append(f"{where}: the reach of a claim is {found_claim['reach']}, and its lists name {size} items")
     return found
 
 
@@ -286,8 +291,10 @@ def _rule(data, found, indicators, states, steps) -> dict | None:
     if not isinstance(said, dict) or set(said) != RULE_KEYS:
         found.append(f"`rule` is not {{{', '.join(sorted(RULE_KEYS))}}}")
         return None
-    if not is_share(said["floor_factor"]) or said["floors_from"] not in states:
-        found.append("`rule`: the floor factor is not a share, or the floors come from no state")
+    if not is_share(said["floor_factor"]):
+        found.append("`rule`: the floor factor is not a share")
+    if said["floors_from"] != states[0]:
+        found.append("`rule`: the floors come from the first state")
     if said["beyond"] != rule.BEYOND_FACTOR:
         found.append(f"`rule.beyond` is {rule.BEYOND_FACTOR:g}: one rule for every file")
     if steps and said["total_tolerance"] != max(s["tolerance"]["value"] for s in steps):
@@ -312,7 +319,14 @@ def _rule(data, found, indicators, states, steps) -> dict | None:
         key = (one["indicator"], one["unit"])
         if key in table:
             found.append(f"two floors for {one['indicator']!r} in unit {one['unit']!r}")
-        table[key] = one["value"]
+        basis, n, value = one["basis"], one["n"], one["value"]
+        if (basis == "none" and (n or value)) or (basis == "median" and not n) or (basis == "declared" and n):
+            found.append(
+                f"the floor of {one['indicator']!r} in unit {one['unit']!r}: basis {basis!r} with "
+                f"{n} results and the value {value!r} (a median is taken from results, none is 0 from "
+                "none, a declared floor from none)"
+            )
+        table[key] = value
     return table
 
 
@@ -377,18 +391,31 @@ def _counts(data, found, indicators, steps, total_pairs):
     if not isinstance(by_step, dict) or set(by_step) != {s["id"] for s in steps}:
         found.append("`counts.steps` does not hold every step")
         return {}
+    published_first = data["states"][0]["kind"] == "published"
     blocks = {}
-    for one in [*steps, None]:
+    for k, one in enumerate([*steps, None]):
         key = one["id"] if one else TOTAL
         table = by_step[key] if one else counts[TOTAL]
         if not isinstance(table, dict) or set(table) != set(indicators):
             found.append(f"counts of {key!r} do not hold every indicator")
             return {}
+        # closer and further: only for a step after step 0, and only from published results
+        counted_closer = published_first and one is not None and k > 0
         for indicator in indicators:
-            errors = _block(table[indicator], f"counts of {key!r} in {indicator!r}", one)
+            where = f"counts of {key!r} in {indicator!r}"
+            errors = _block(table[indicator], where, one)
             found += errors
-            if not errors and table[indicator]["pairs"] != total_pairs:
-                found.append(f"counts of {key!r} in {indicator!r}: not every item is counted")
+            if errors:
+                continue
+            if table[indicator]["pairs"] != total_pairs:
+                found.append(f"{where}: not every item is counted")
+            if counted_closer != (table[indicator]["closer"] is not None) or counted_closer != (
+                table[indicator]["further"] is not None
+            ):
+                found.append(
+                    f"{where}: `closer` and `further` are counted for a step after step 0 from "
+                    "published results, and are null everywhere else"
+                )
             blocks[(key, indicator)] = table[indicator]
     return blocks
 
@@ -436,7 +463,15 @@ def _items(data, found, indicators, states, steps, floors, tier, blocks):
     nsteps = len(steps)
     claims_by_step = [s["claim"] for s in steps]
     any_claim = any(claims_by_step)
-    seen, previous_key, occurrences = set(), None, {}
+    published_first = data["states"][0]["kind"] == "published"
+    seen, previous_key = set(), None
+    # what the listed items hold, counted as the blocks count it: every part of a block that
+    # only a pair worth a look can add to (`_LOUD`), and the attribution
+    tally: dict[tuple[str, str], dict] = {}
+    attributed = {
+        i: {"dominant": dict.fromkeys((s["id"] for s in steps), 0), "not_attributable": 0, "unexplained_moved": 0}
+        for i in indicators
+    }
     for item in listed:
         if not isinstance(item, dict) or set(item) != ITEM_KEYS or not is_text(item["id"], MAX_ID):
             found.append(f"an item is not {{{', '.join(sorted(ITEM_KEYS))}}}")
@@ -500,9 +535,25 @@ def _items(data, found, indicators, states, steps, floors, tier, blocks):
                         f"{bands[at]!r}, the rule gives {expected[0]!r}/{expected[1]!r}/{expected[2]!r}"
                     )
                     return []
-                occurrences[(name, indicator, kinds[at])] = occurrences.get((name, indicator, kinds[at]), 0) + 1
-                keys.append(rule.severity(before, after, kinds[at]))
-                worth = worth or kinds[at] not in rule.QUIET
+                one = tally.setdefault((name, indicator), {})
+                kind = kinds[at]
+                if kind not in rule.QUIET:
+                    _add(one, ("classes", kind))
+                if kind == rule.MISSING:
+                    _add(one, ("missing", "both" if before is None and after is None
+                               else "before" if before is None else "after"))  # fmt: skip
+                if ways[at]:
+                    _add(one, ("directions", ways[at]))
+                if bands[at]:
+                    _add(one, ("bands", bands[at]))
+                if published_first and k not in (None, 0) and kind in rule.MOVES and values[0] is not None:
+                    was, now = abs(before - values[0]), abs(after - values[0])
+                    one.setdefault(("closer",), 0)
+                    one.setdefault(("further",), 0)
+                    one[("closer",)] += now < was
+                    one[("further",)] += now > was
+                keys.append(rule.severity(before, after, kind))
+                worth = worth or kind not in rule.QUIET
                 if k is None or not any_claim:
                     continue
                 said_verdict = verdicts[k]
@@ -524,32 +575,67 @@ def _items(data, found, indicators, states, steps, floors, tier, blocks):
                     if again != said_verdict:
                         found.append(f"{where}, {indicator}, {name}: written {said_verdict!r}, the claim gives {again!r}")
                         return []
+                if said_verdict in _LOUD_VERDICTS:
+                    _add(one, ("verdicts", said_verdict))
+            # attribution of this item in this indicator, as `chain.build` makes it
+            if kinds[nsteps] in rule.MOVES:
+                if any(v is None for v in values):
+                    attributed[indicator]["not_attributable"] += 1
+                else:
+                    deltas = [abs(values[j + 1] - values[j]) for j in range(nsteps)]
+                    attributed[indicator]["dominant"][steps[deltas.index(max(deltas))]["id"]] += 1
+            if any(not steps[j]["explained"] and kinds[j] in rule.MOVES for j in range(nsteps)):
+                attributed[indicator]["unexplained_moved"] += 1
         if not worth:
             found.append(f"{where}: listed, though nothing in it is worth a look")
         key = (min(keys), item["id"])
         if previous_key is not None and key < previous_key:
             found.append(f"{where}: the items are not listed the worst first")
         previous_key = key
-    # nothing listed can be more than was counted; with nothing left out, exactly as much
-    for (name, indicator, kind), n in occurrences.items():
-        block = blocks.get((name, indicator))
-        if kind in rule.QUIET or not block:
-            continue
-        counted = block["classes"][kind]
-        if n > counted or (said["not_listed"] == 0 and n != counted):
-            found.append(
-                f"counts of {name!r} in {indicator!r}: {counted} {kind!r}, {n} listed, "
-                f"{said['not_listed']} said not to be listed"
-            )
-    if said["not_listed"] == 0:
-        for (name, indicator), block in blocks.items():
-            for kind in rule.MOVES | {rule.MISSING}:
-                if block["classes"][kind] and not occurrences.get((name, indicator, kind)):
-                    found.append(
-                        f"counts of {name!r} in {indicator!r}: {block['classes'][kind]} "
-                        f"{kind!r}, none listed and none said not to be listed"
-                    )
+    # Only a pair worth a look adds to these parts of a block, and every item with such a pair
+    # is worth a look. So nothing listed can be more than was counted, and with nothing left
+    # out (`not_listed` 0) the listed items hold exactly what was counted.
+    exact = said["not_listed"] == 0
+    left_out = f"{said['not_listed']} said not to be listed"
+    for (name, indicator), block in blocks.items():
+        one = tally.get((name, indicator), {})
+        parts = [("classes", k) for k in rule.CLASSES if k not in rule.QUIET]
+        parts += [("missing", k) for k in MISSING_SIDES] + [("directions", k) for k in rule.DIRECTIONS]
+        parts += [("bands", k) for k in rule.BANDS]
+        if block["verdicts"] is not None:
+            parts += [("verdicts", k) for k in claims.VERDICTS if k in _LOUD_VERDICTS]
+        if block["closer"] is not None:
+            parts += [("closer",), ("further",)]
+        for part in parts:
+            counted = block[part[0]] if len(part) == 1 else block[part[0]][part[1]]
+            n = one.get(part, 0)
+            if n > counted or (exact and n != counted):
+                found.append(
+                    f"counts of {name!r} in {indicator!r}: {counted} {' '.join(map(str, part))!r}, "
+                    f"{n} in the listed items, {left_out}"
+                )
+    said_attribution = data.get("attribution")
+    for indicator in indicators:
+        one = said_attribution.get(indicator) if isinstance(said_attribution, dict) else None
+        if not (isinstance(one, dict) and isinstance(one.get("dominant"), dict)):
+            continue  # `_attribution` has said what is wrong with it
+        mine = attributed[indicator]
+        pairs = [(f"dominant {s}", mine["dominant"][s], one["dominant"].get(s)) for s in mine["dominant"]]
+        pairs += [(k, mine[k], one.get(k)) for k in ("not_attributable", "unexplained_moved")]
+        for label, n, counted in pairs:
+            if not is_count(counted):
+                continue
+            if n > counted or (exact and n != counted):
+                found.append(f"attribution in {indicator!r}: {counted} {label}, {n} in the listed items, {left_out}")
     return [i["id"] for i in listed]
+
+
+#: The verdicts only a pair worth a look can have.
+_LOUD_VERDICTS = frozenset({claims.AS_CLAIMED, claims.OFF_CLAIM, claims.NOT_CLAIMED, claims.NOT_MOVED})
+
+
+def _add(tally: dict, key: tuple) -> None:
+    tally[key] = tally.get(key, 0) + 1
 
 
 def _explanations(data, found, indicators, steps, items, tier):

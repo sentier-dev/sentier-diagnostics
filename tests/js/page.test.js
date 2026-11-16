@@ -79,3 +79,27 @@ test('two identical builds are a finding, not "not measured"', () => {
   assert.equal(page.noiseText({ measured: true, between: ['a', 'b'], by: { 'x:a': 0, 'x:b': 0 } }), 'identical between a and b');
   assert.equal(page.noiseText({ measured: true, between: ['a', 'b'], by: { 'x:a': 0, 'x:b': 2e-7 } }), 'measured between a and b');
 });
+
+test('noise that was not measured for an indicator is never "identical"', () => {
+  const ids = ['x:a', 'x:b', 'x:c'];
+  assert.equal(page.noiseText({ measured: true, between: ['a', 'b'], by: {} }, ids),
+    'not measured: no result beyond the floor in both builds between a and b');
+  assert.equal(page.noiseText({ measured: true, between: ['a', 'b'], by: { 'x:a': 0 } }, ids),
+    'identical between a and b, for 1 of 3 indicators');
+  assert.equal(page.noiseText({ measured: true, between: ['a', 'b'], by: { 'x:a': 0, 'x:b': 0, 'x:c': 0.21 } }, ids),
+    'measured between a and b; large: up to 21 %');
+});
+
+test('only an https address becomes a link', () => {
+  assert.equal(page.safeLink('https://example.org/a'), 'https://example.org/a');
+  for (const bad of ['javascript:alert(1)', 'JAVASCRIPT:x', 'http://example.org', 'data:text/html,x', ' https://x', 'https://a b', null, 7]) {
+    assert.equal(page.safeLink(bad), null, String(bad));
+  }
+});
+
+test('a file with a part of the wrong shape is refused before anything is drawn', () => {
+  const example = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'examples', 'diagnostics.json'), 'utf8'));
+  for (const [key, value] of [['items', {}], ['counts', []], ['steps', null], ['indicators', []], ['counts', { steps: {} }]]) {
+    assert.notEqual(page.checkShape({ ...example, [key]: value }), null, key + ': ' + JSON.stringify(value));
+  }
+});

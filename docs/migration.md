@@ -77,11 +77,14 @@ diagnostics page, not inside it.
 `review.py` and `site/assets/before-after.js` on the release site.
 
 **The first step it shows** is the located factors (a flow that names a country takes that
-country's factor; mostly water use), compared before and after with the claim "water use
-moves; nothing else moves". `tests/fixtures/located-factors/description.json` is its shape
-with made-up values: two states, one step of kind `method`, one scope entry
-`{"indicators": [water], "items": "*", "direction": "any", "expect": "may"}`. A value of
-another indicator that moves is "not claimed", which is the finding to look at.
+country's factor; mostly water use), compared before and after. It was first written with
+the claim "water use moves; nothing else moves".
+`tests/fixtures/located-factors/description.json` is its shape with made-up values: two
+states, one step of kind `method`, one scope entry `{"indicators": [water], "items": "*",
+"direction": "any", "expect": "may"}`. A value of another indicator that moves is "not
+claimed", which is the finding to look at. sentier-bafu's first run on its own results
+(16 November 2026) found exactly that: land use moves for 5 datasets. Before the step is
+published, its claim names land use, or those 5 carry an explanation.
 
 **Steps.**
 

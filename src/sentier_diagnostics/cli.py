@@ -37,6 +37,9 @@ def check(paths) -> int:
             errors = breakdown.errors(data)
         else:
             errors = fileformat.errors(data)
+            size = Path(path).stat().st_size
+            if size > fileformat.MAX_BYTES:
+                errors.append(f"{size} bytes, and a page holds {fileformat.MAX_BYTES} at most: list fewer items")
             if not errors:
                 found, absent = page.named_breakdowns(data, Path(path).parent)
                 for name, one in found.items():

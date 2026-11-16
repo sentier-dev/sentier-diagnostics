@@ -73,9 +73,13 @@ moves" is allowed, but it adds nothing: every value of the residual then reads "
 
 A plain before/after comparison is a chain of two states and one step. The first real one
 will be sentier-bafu's **located factors** (a flow that names a country takes that
-country's factor), with the claim "water use moves; nothing else moves": one scope entry,
-water use, every item, `may`. Any other indicator that moves is "not claimed".
-`tests/fixtures/located-factors/` is that step, made up, and a test holds what it shows.
+country's factor). It was first written with the claim "water use moves; nothing else
+moves": one scope entry, water use, every item, `may`. sentier-bafu's first run of this
+tool on its own results (16 November 2026) showed land use moving too, for 5 datasets,
+read as "not claimed". So the claim was incomplete: land use belongs in its scope, or
+those 5 need an explanation. That is sentier-bafu's to settle; the tool found it, which is
+its job. `tests/fixtures/located-factors/` is that step, made up, with the first claim, and
+a test holds what it shows: a value outside the claim is "not claimed".
 
 **Order matters.** Where two steps touch the same results, each one's share depends on the
 order they were applied in. The file keeps the order; the page says so.
@@ -157,6 +161,20 @@ pairs, bands to what differs, up and down to what moved, missing by side to miss
 verdicts to pairs), that the items are listed worst first and that `items_count` says how
 many were left out. A file that disagrees with its own rule is refused, not shown.
 
+It also **works the counts out again from the listed items.** Only a pair worth a look
+adds to the classes that moved, to missing (by side), to directions, bands, the verdicts
+"as claimed", "off claim", "not claimed" and "claimed, not moved", to `closer` and
+`further`, and to the attribution; and every item with such a pair is worth a look. So
+where nothing worth a look is left out (`not_listed` 0), these counts must equal what the
+listed items hold, and where some are left out, no count may be smaller than what the
+listed items hold. What only quiet pairs add to (agrees, within noise, near zero, and the
+verdicts of those) is held by the sums alone: a file that invents agreeing items it does
+not list cannot be caught from the file. Further: a claim whose entries all list their
+items has the size of their union as its `reach`; the floors come from the first state,
+and a floor's basis agrees with its count (`median` from results, `none` is 0 from none,
+`declared` from none); `closer` and `further` are counted for a step after step 0 from
+published results and are null everywhere else.
+
 ### 4.4 Limits
 
 A page holds the whole file: 12 MB at most, which the writer reaches by listing fewer
@@ -208,8 +226,15 @@ the rounding of what was published (`basis: "published rounding"`, e.g. 5e-4 for
 significant digits). The whole way is counted with the largest tolerance of its steps.
 
 The **noise** is measured, never assumed: the largest relative difference between two
-builds of one state, per indicator, over the items both hold. A step with measured noise
-has a class "within noise" for differences no larger than it. Two words, two jobs:
+builds of one state, per indicator, over the items whose results lie beyond the floor in
+both builds (the floors of the chain's first state). A pair within the floor is left out:
+a residue of 4e-16 in one build and 0 in the other would otherwise make the noise 1.0 and
+put every move below a factor of 2 "within noise" (found by sentier-bafu: it hid a
+correction by a factor of 580). An indicator with no such pair has no noise in the file,
+and the page and the summary say "not measured" for it, never "identical". A noise above
+1 % (`chain.LARGE_NOISE`) is called large on the page and in the summary, which give its
+size. A step with measured noise has a class "within noise" for differences no larger than
+it. Two words, two jobs:
 tolerance (agreement by rule) and noise (measured instability). A third, the reader's
 **size filter**, hides small changes on the page and changes no count (section 10.5).
 
@@ -335,7 +360,10 @@ server, no network, no font or script from elsewhere. `sentier-diagnostics page 
 FOLDER` writes it with the file beside it as `data.js`, so it opens from disk; served over
 HTTP it can also read `?file=...`, and it opens a file a reader chooses (read in the
 browser, sent nowhere). **The page works out no class, no direction and no count.** It
-reads them from the file, which the validator has checked.
+reads them from the file, which the validator has checked. A file read by `?file=` or
+chosen by a reader has not passed through the validator: the page checks its shape only,
+says so above everything it draws, and refuses a file it cannot draw instead of drawing
+part of it. Whatever the file says, only an `https://` address becomes a link.
 
 The text a page renders comes from the file or from words chosen to be neutral: it avoids
 stage, triage, ledger, layer, upstream, provider and candidate (a test holds this).
@@ -414,7 +442,10 @@ the page script (`tests/js/page.test.js`), so the two cannot drift apart unnotic
 
 Also tested: the validator refuses a class, direction or verdict that contradicts the
 values, items out of order, counts that do not add up, unknown keys and other formats
-(`tests/test_modules.py`); the page loads nothing from elsewhere and writes no markup
+(`tests/test_modules.py`); it refuses counts, attribution, `reach` and floors that
+disagree with the listed items (`CountsAgainstItems`, one test per edit sentier-bafu's
+review made by hand); noise is taken beyond the floor, and a scope entry read from tables
+without `expect` may move; the page loads nothing from elsewhere and writes no markup
 from data; the committed example is what the code makes, holds every class and every
 verdict, and no tracked file carries an identifier-shaped string
 (`tests/test_repository.py`).

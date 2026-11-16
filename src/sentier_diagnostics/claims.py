@@ -64,7 +64,12 @@ def origin(kind: str, name: str | None = None, *, model: str | None = None,
 
 def scope(indicators="*", items="*", direction="any", largest=None, expect=MAY) -> dict:
     """One entry of a claim. `items` may be a set the project keeps to itself: it is used to
-    judge, and `published` leaves it out of a file."""
+    judge, and `published` leaves it out of a file. A single text other than "*" is refused:
+    it would be read as a set of its characters."""
+    if isinstance(items, str) and items != "*":
+        raise TypeError(f"the items of a scope are '*', a list of ids or None, not the text {items!r}")
+    if isinstance(indicators, str) and indicators != "*":
+        raise TypeError(f"the indicators of a scope are '*' or a list of ids, not the text {indicators!r}")
     return {
         "indicators": indicators if indicators == "*" else sorted(indicators),
         "items": items if items == "*" or items is None else set(items),
@@ -85,8 +90,11 @@ def published(found: dict, keep_items: bool = True) -> dict:
     items left out (`items: null`), its size kept in `reach`."""
     listed = [e["items"] for e in found["scope"] if e["items"] not in ("*", None)]
     reach = found.get("reach")
-    if reach is None and listed and len(listed) == len(found["scope"]):
-        reach = len(set().union(*listed))
+    if listed and len(listed) == len(found["scope"]):
+        size = len(set().union(*listed))
+        if reach is not None and reach != size:
+            raise ValueError(f"a claim's reach is {reach}, and its lists name {size} items")
+        reach = size
     entries = []
     for entry in found["scope"]:
         items = entry["items"]

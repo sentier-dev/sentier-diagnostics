@@ -43,21 +43,46 @@ def tolerance(value=None, basis=None, note=None) -> dict:
 
 
 def noise(between=None, by=None, note=None) -> dict:
-    """What two builds of one state differ by, per indicator; not measured without `between`."""
+    """What two builds of one state differ by, per indicator; not measured without `between`.
+    An indicator whose noise is None (`noise_of` found no pair to take it from) is left out:
+    its noise was not measured, which is not the same as two identical builds."""
     if not between:
         return {"measured": False, "between": None, "by": None, "note": note}
-    return {"measured": True, "between": list(between), "by": dict(by or {}), "note": note}
+    found = {k: v for k, v in (by or {}).items() if v is not None}
+    return {"measured": True, "between": list(between), "by": found, "note": note}
 
 
-def noise_of(first: Mapping[str, float | None], second: Mapping[str, float | None]) -> float:
+#: Noise above this is large: it puts every smaller difference of its indicator "within
+#: noise". The page and the summary say so; it is a defect to fix, not a width to absorb.
+LARGE_NOISE = 1e-2
+
+
+def noise_of(first: Mapping[str, float | None], second: Mapping[str, float | None], *,
+             floor: float | Mapping[str, float]) -> float | None:  # fmt: skip
     """The noise of one indicator: the largest relative difference between two builds of one
-    state, over the items both hold. `first` and `second` are `{item: result}`.
+    state, over the items whose results lie beyond the floor in both. `first` and `second`
+    are `{item: result}`; `floor` is the floor of the indicator, or `{item: floor}` where
+    items of several units have floors of their own (`rule.floors_of`). None where no pair
+    lies beyond the floor: nothing was measured.
 
-    >>> noise_of({"a": 1.0, "b": 2.0, "c": 5.0}, {"a": 1.0, "b": 2.5})
+    A pair within the floor is left out because its relative difference says nothing: a
+    residue of 4e-16 in one build and 0 in the other would make the noise 1.0.
+
+    >>> noise_of({"a": 1.0, "b": 2.0, "c": 5.0}, {"a": 1.0, "b": 2.5}, floor=0.0)
     0.2
+    >>> noise_of({"a": 1.0, "z": 4e-16}, {"a": 1.0, "z": 0.0}, floor=0.01)
+    0.0
+    >>> noise_of({"z": 4e-16}, {"z": 0.0}, floor=0.01) is None
+    True
     """
-    shared = [k for k in first if rule.is_value(first[k]) and rule.is_value(second.get(k))]
-    return max((rule.relative_difference(first[k], second[k]) for k in shared), default=0.0)
+    def beyond(item, value):
+        level = floor.get(item, 0.0) if isinstance(floor, Mapping) else floor
+        return rule.is_value(value) and abs(value) > level
+
+    shared = [k for k in first if beyond(k, first[k]) and beyond(k, second.get(k))]
+    if not shared:
+        return None
+    return max(rule.relative_difference(first[k], second[k]) for k in shared)
 
 
 def step(id: str, label: str, *, kind: str, explained: bool = True, about: str | None = None,
@@ -401,14 +426,25 @@ def build(
     return data
 
 
+#: Stands in for the list of items while the rest of a file is written. A file's texts hold
+#: no control character, so no text can be written as this.
+_ITEMS_HERE = "\x00items\x00"
+
+
 def dumps(data: Mapping) -> str:
-    """The text of a file: one line per listed item, so that a diff names the items."""
+    """The text of a file: one line per listed item, so that a diff names the items. The keys
+    keep their order, whatever it is.
+
+    >>> dumps({"items": [{"id": "p"}], "steps": [{"items": []}]}).splitlines()[:3]
+    ['{', ' "items": [', '  {"id": "p"}']
+    """
     listed = data.get("items") or []
-    head = json.dumps(dict(data) | {"items": []}, indent=1, ensure_ascii=False, allow_nan=False)
-    if listed:
-        rows = ",\n".join("  " + json.dumps(i, ensure_ascii=False, allow_nan=False) for i in listed)
-        opening, closing = head.rsplit('"items": []', 1)
-        head = f'{opening}"items": [\n{rows}\n ]{closing}'
+    head = json.dumps(dict(data) | {"items": _ITEMS_HERE}, indent=1, ensure_ascii=False, allow_nan=False)
+    marker = json.dumps(_ITEMS_HERE)
+    if head.count(marker) != 1:
+        raise ValueError("a file holds the list of items once, at its top level")
+    rows = ",\n".join("  " + json.dumps(i, ensure_ascii=False, allow_nan=False) for i in listed)
+    head = head.replace(marker, f"[\n{rows}\n ]" if listed else "[]")
     return head + "\n"
 
 

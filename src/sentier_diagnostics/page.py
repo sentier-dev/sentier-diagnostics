@@ -48,13 +48,18 @@ def write(data: Mapping, folder: Path, breakdowns: Mapping[str, Mapping] | None 
         errors = breakdown.errors(one) + breakdown.against(one, data)
         if errors:
             raise ValueError(f"{name}: " + "; ".join(errors))
+    script = as_script("SENTIER_DIAGNOSTICS", data)
+    if len(script) > fileformat.MAX_BYTES:  # ASCII: one byte per character
+        raise ValueError(
+            f"data.js would be {len(script)} bytes, and a page holds {fileformat.MAX_BYTES} at most: list fewer items"
+        )
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True)
     source = resources.files(__package__) / "page"
     for name in ASSETS:
         with resources.as_file(source / name) as path:
             shutil.copyfile(path, folder / name)
-    (folder / "data.js").write_text(as_script("SENTIER_DIAGNOSTICS", data), encoding="utf-8")
+    (folder / "data.js").write_text(script, encoding="utf-8")
     (folder / "breakdowns.js").write_text(
         as_script("SENTIER_DIAGNOSTICS_BREAKDOWNS", dict(breakdowns or {})), encoding="utf-8"
     )

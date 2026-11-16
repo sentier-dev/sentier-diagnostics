@@ -35,7 +35,7 @@ down: the page colours them as down.
 
 from __future__ import annotations
 
-from . import breakdown, chain, claims
+from . import breakdown, chain, claims, rule
 
 CLIMATE, WATER, TOX = "x:climate", "x:water", "x:tox"
 INDICATORS = [
@@ -104,7 +104,14 @@ VALUES = {
 
 
 def steps() -> list[dict]:
-    noise = {key: chain.noise_of(FIX_1[key], REBUILT[key]) for key in FIX_1}
+    # noise beyond the floors the chain counts with: those of its first state
+    units = {item: about[1] for item, about in ITEMS.items()}
+    floors = rule.floors_of(PUBLISHED, units)
+    noise = {
+        key: chain.noise_of(FIX_1[key], REBUILT[key],
+                            floor={item: floors[(key, unit)][0] for item, unit in units.items()})  # fmt: skip
+        for key in FIX_1
+    }
     return [
         chain.step(
             "step-0",

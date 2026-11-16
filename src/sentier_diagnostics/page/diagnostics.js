@@ -70,14 +70,32 @@
     return (v > 0 ? '' : v < 0 ? '\u2212' : '') + text + ' %';
   }
 
+  // Noise above this is large: it puts every smaller difference of its indicator "within
+  // noise". Same bound as chain.LARGE_NOISE.
+  var LARGE_NOISE = 1e-2;
+
   // what a step's noise says: measured and identical, measured, or not measured. Two
-  // identical builds are a finding, and never read as "not measured".
-  function noiseText(noise) {
+  // identical builds are a finding, and never read as "not measured"; an indicator the noise
+  // holds no size for was not measured, and is never read as identical. `ids` are the
+  // file's indicators.
+  function noiseText(noise, ids) {
     if (!noise || !noise.measured) return 'not measured';
+    var by = noise.by || {};
     var between = ' between ' + noise.between.join(' and ');
-    var keys = Object.keys(noise.by || {});
-    if (keys.every(function (k) { return noise.by[k] === 0; })) return 'identical' + between;
-    return 'measured' + between;
+    var keys = Object.keys(by);
+    var all = ids || keys;
+    var absent = all.filter(function (k) { return !(k in by); }).length;
+    if (!keys.length) return 'not measured: no result beyond the floor in both builds' + between;
+    var part = absent ? ', for ' + keys.length + ' of ' + all.length + ' indicators' : '';
+    var largest = Math.max.apply(null, keys.map(function (k) { return by[k]; }));
+    if (largest === 0) return 'identical' + between + part;
+    return 'measured' + between + part + (largest > LARGE_NOISE ? '; large: up to ' + formatNumber(largest * 100) + ' %' : '');
+  }
+
+  // a link a file may hold: an https address, or nothing. A page never makes any other
+  // text a link, whatever the file says.
+  function safeLink(value) {
+    return typeof value === 'string' && /^https:\/\/[^\s]+$/.test(value) ? value : null;
   }
 
   function bandStep(band) {
@@ -168,7 +186,17 @@
     for (var i = 0; i < needed.length; i++) {
       if (!(needed[i] in d)) return 'the file has no ' + needed[i];
     }
+    var lists = ['indicators', 'states', 'steps', 'items', 'explanations', 'notes'];
+    for (var j = 0; j < lists.length; j++) {
+      if (!Array.isArray(d[lists[j]])) return 'the ' + lists[j] + ' of the file are not a list';
+    }
+    var tables = ['item', 'rule', 'counts', 'attribution', 'items_count'];
+    for (var k = 0; k < tables.length; k++) {
+      if (!d[tables[k]] || typeof d[tables[k]] !== 'object' || Array.isArray(d[tables[k]])) return 'the ' + tables[k] + ' of the file is not a table';
+    }
+    if (!d.indicators.length) return 'the file has no indicator';
     if (d.steps.length !== d.states.length - 1) return 'the file has not one step fewer than states';
+    if (!d.counts.steps || !d.counts.total) return 'the counts of the file are not {steps, total}';
     return null;
   }
 
@@ -293,7 +321,7 @@
     var body = el('tbody');
     D.steps.forEach(function (s, k) {
       var verdict = function (name) { return s.claim ? n(sumOver(s.id, function (b) { return b.verdicts[name]; })) : '—'; };
-      var noise = noiseText(s.noise);
+      var noise = noiseText(s.noise, D.indicators.map(function (i) { return i.id; }));
       // the step from the published results: what moved there is the residual the chain
       // starts from, not a regression, whatever its claim says
       var unrepro = sumOver(s.id, moved);
@@ -301,7 +329,7 @@
         ? (unrepro === 1 ? '1 value' : n(unrepro) + ' values') + ' not reproduced within the tolerance: the residual the chain starts from, not a regression.' : null;
       body.appendChild(el('tr', null, [
         el('td', { cls: 'num', text: String(k) }),
-        el('td', null, [s.link ? el('a', { href: s.link, text: s.label }) : s.label, s.about ? el('div', { cls: 'quiet', text: s.about }) : null,
+        el('td', null, [safeLink(s.link) ? el('a', { href: safeLink(s.link), text: s.label }) : s.label, s.about ? el('div', { cls: 'quiet', text: s.about }) : null,
           residual ? el('div', { cls: 'quiet', text: residual }) : null]),
         el('td', { text: s.kind }),
         el('td', { text: s.explained ? 'yes' : 'no: nothing explains it', cls: s.explained ? null : 'error' }),
@@ -317,7 +345,7 @@
         el('td', { cls: 'num', text: verdict('claimed, not moved') }),
         el('td', { cls: 'num', text: verdict('within noise') }),
         el('td', { cls: 'num', text: n(sumOver(s.id, function (b) { return b.missing.before + b.missing.both; })) }),
-        el('td', { cls: 'num', text: n(sumOver(s.id, function (b) { return b.missing.after; })) }),
+        el('td', { cls: 'num', text: n(sumOver(s.id, function (b) { return b.missing.after + b.missing.both; })) }),
         el('td', { cls: 'num', text: String(s.tolerance.value), title: s.tolerance.basis + (s.tolerance.note ? ': ' + s.tolerance.note : '') }),
         el('td', { text: noise })
       ]));
@@ -515,7 +543,7 @@
       badge(one.by), el('span', { cls: 'quiet', text: 'About ' + about.join(', ') + '. ' }),
       one.finding === 'none found' ? el('strong', { text: 'Looked, found no reason: ' }) : null, one.text,
       one.not_checked ? el('div', { cls: 'quiet', text: 'Not checked: ' + one.not_checked }) : null,
-      one.source ? el('div', { cls: 'quiet' }, [one.source.link ? el('a', { href: one.source.link, text: one.source.link }) : null, one.source.doc ? ' ' + one.source.doc : null]) : null
+      one.source ? el('div', { cls: 'quiet' }, [safeLink(one.source.link) ? el('a', { href: safeLink(one.source.link), text: one.source.link }) : null, one.source.doc ? ' ' + one.source.doc : null]) : null
     ]);
   }
 
@@ -533,7 +561,7 @@
     var stepsTable = el('table', null, [el('thead', null, [el('tr', null, ['Step', 'Tolerance', 'Basis', 'Note', 'Noise'].map(function (h) { return el('th', { scope: 'col', text: h }); }))])]);
     var tb = el('tbody');
     D.steps.forEach(function (s) {
-      var noise = noiseText(s.noise) + (s.noise.measured ? ': ' + Object.keys(s.noise.by).map(function (k) { return indicatorName(k) + ' ' + formatNumber(s.noise.by[k]); }).join(', ') : '');
+      var noise = noiseText(s.noise, D.indicators.map(function (i) { return i.id; })) + (s.noise.measured ? ': ' + Object.keys(s.noise.by).map(function (k) { return indicatorName(k) + ' ' + formatNumber(s.noise.by[k]); }).join(', ') : '');
       tb.appendChild(el('tr', null, [el('td', { text: s.label }), el('td', { cls: 'num', text: String(s.tolerance.value) }), el('td', { text: s.tolerance.basis }), el('td', { text: s.tolerance.note || '' }), el('td', { text: noise })]));
     });
     stepsTable.appendChild(tb);
@@ -662,26 +690,49 @@
     renderGrid();
   }
 
-  function show(data) {
+  // a file the page cannot draw draws nothing: not even the part it drew before it failed
+  function refuse(problem) {
+    D = null;
+    document.title = 'Diagnostics';
+    ['title', 'about', 'tier', 'audience', 'unchecked'].forEach(function (id) {
+      var node = q(id);
+      if (node) node.textContent = '';
+    });
+    ['audience', 'unchecked'].forEach(function (id) { if (q(id)) q(id).hidden = true; });
+    if (q('states')) clear(q('states'));
+    q('load').hidden = false;
+    q('content').hidden = true;
+    q('load-error').textContent = problem;
+  }
+
+  // `checked`: the file came as data.js, which `sentier-diagnostics page` writes only after
+  // the validator passed it. A file chosen here or named in the address was not checked: the
+  // page checks its shape only, and says so above everything it draws.
+  function show(data, checked) {
     var problem = checkShape(data);
-    if (problem) {
-      q('load').hidden = false;
-      q('content').hidden = true;
-      q('load-error').textContent = problem;
-      return;
-    }
+    if (problem) { refuse(problem); return; }
     D = data;
     view.comp = 'total';
     q('load').hidden = true;
     q('content').hidden = false;
-    renderHeader();
-    renderSteps();
-    renderExplanations();
-    renderRule();
-    legend(q('grid-legend'));
-    legend(q('dist-legend'));
-    renderComparison();
-    route();
+    var unchecked = q('unchecked');  // a site's own frame may not have it; its data.js was checked
+    if (unchecked) {
+      unchecked.hidden = !!checked;
+      unchecked.textContent = checked ? '' : 'Opened in the browser: this page checked the shape of the file, not its counts. ' +
+        'Run sentier-diagnostics check on it before relying on what it shows.';
+    }
+    try {
+      renderHeader();
+      renderSteps();
+      renderExplanations();
+      renderRule();
+      legend(q('grid-legend'));
+      legend(q('dist-legend'));
+      renderComparison();
+      route();
+    } catch (error) {
+      refuse('The file is JSON of the right format, but a part of it is missing or not what the format says (' + error.message + '). Run sentier-diagnostics check on it.');
+    }
   }
 
   function route() {
@@ -715,15 +766,17 @@
       if (!file) return;
       var reader = new FileReader();
       reader.onload = function () {
-        try { show(JSON.parse(reader.result)); } catch (error) { q('load-error').textContent = 'The file is not JSON: ' + error.message; }
+        var data;
+        try { data = JSON.parse(reader.result); } catch (error) { refuse('The file is not JSON: ' + error.message); return; }
+        show(data, false);
       };
       reader.readAsText(file);
     });
-    if (root.SENTIER_DIAGNOSTICS) { show(root.SENTIER_DIAGNOSTICS); return; }
+    if (root.SENTIER_DIAGNOSTICS) { show(root.SENTIER_DIAGNOSTICS, true); return; }
     var wanted = new URLSearchParams(location.search).get('file');
     if (wanted && /^[A-Za-z0-9][A-Za-z0-9._\/-]*\.json$/.test(wanted) && wanted.indexOf('..') < 0 && location.protocol.indexOf('http') === 0) {
-      fetch(wanted).then(function (r) { return r.json(); }).then(show).catch(function () {
-        q('load').hidden = false; q('load-error').textContent = 'Could not read ' + wanted + '.';
+      fetch(wanted).then(function (r) { return r.json(); }).then(function (data) { show(data, false); }, function () {
+        refuse('Could not read ' + wanted + ' as JSON.');
       });
       return;
     }
@@ -731,7 +784,7 @@
   }
 
   var api = { formatNumber: formatNumber, percentText: percentText, shareText: shareText, noiseText: noiseText, sizeAtLeast: sizeAtLeast, cellView: cellView, severityKey: severityKey,
-    compareKeys: compareKeys, bandStep: bandStep, checkShape: checkShape, RANK: RANK };
+    compareKeys: compareKeys, bandStep: bandStep, checkShape: checkShape, safeLink: safeLink, RANK: RANK };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else if (typeof document !== 'undefined') {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);

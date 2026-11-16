@@ -22,6 +22,8 @@
 Paths are relative to the description. A step's `noise` is
 `{"states": ["a", "b"]}` (two states of this chain that are builds of one state) or
 `{"tables": [{"label": "...", "results": "a.csv"}, {"label": "...", "results": "b.csv"}]}`.
+It is taken over the results beyond the floors of the chain's first state. A scope entry
+without `expect` says what may move (`"may"`), as SPEC section 6 says.
 """
 
 from __future__ import annotations
@@ -61,6 +63,14 @@ def build(path: Path) -> dict:
                 f"state {state_id!r}: items without a row in {spec['items']} (and so without "
                 f"a reference unit): {', '.join(sorted(unknown)[:10])}"
             )
+    # noise is taken beyond the floors the chain counts with: those of its first state
+    floor_factor = spec.get("floor_factor", chain.rule.FLOOR_FACTOR)
+    units = {k: v["unit"] for k, v in items.items()}
+    floors = chain.rule.floors_of(values[spec["states"][0]["id"]], units, floor_factor)
+
+    def floor_by_item(indicator):
+        return {item: floors.get((indicator, unit), (0.0, 0))[0] for item, unit in units.items()}
+
     steps = []
     for one in spec["steps"]:
         said_claim = one.get("claim")
@@ -70,7 +80,7 @@ def build(path: Path) -> dict:
                 said_claim["text"],
                 [
                     claims.scope(e.get("indicators", "*"), e.get("items", "*"), e.get("direction", "any"),
-                                 e.get("largest"), e.get("expect", claims.MUST))
+                                 e.get("largest"), e.get("expect", claims.MAY))
                     for e in said_claim.get("scope", [])
                 ],  # fmt: skip
                 by=_origin(said_claim.get("by")),
@@ -88,7 +98,9 @@ def build(path: Path) -> dict:
                         tables.read_results(here / second["results"], ids))  # fmt: skip
                 labels = (first["label"], second["label"])
             found_noise = chain.noise(
-                labels, {i: chain.noise_of(pair[0][i], pair[1][i]) for i in ids}, said_noise.get("note")
+                labels,
+                {i: chain.noise_of(pair[0][i], pair[1][i], floor=floor_by_item(i)) for i in ids},
+                said_noise.get("note"),
             )
         said_tol = one.get("tolerance")
         steps.append(
@@ -120,14 +132,14 @@ def build(path: Path) -> dict:
         ],
         steps=steps,
         values=values,
-        units={k: v["unit"] for k, v in items.items()},
+        units=units,
         names=items,
         item_word=(word["one"], word["many"]),
         listed=spec.get("listed", 200),
         tier=spec.get("tier", "items"),
         audience=spec.get("audience", "local"),
         claim_lists=spec.get("claim_lists", True),
-        floor_factor=spec.get("floor_factor", chain.rule.FLOOR_FACTOR),
+        floor_factor=floor_factor,
         explanations=explanations,
         notes=spec.get("notes", []),
     )

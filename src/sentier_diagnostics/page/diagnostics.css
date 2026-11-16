@@ -39,6 +39,8 @@ h3 { font-size: 1.05rem; margin: 1.25rem 0 0.4rem; }
 .error { color: var(--error); }
 .plain { list-style: none; padding: 0; }
 .plain li { margin: 0.5rem 0; }
+/* a class that sets `display` would otherwise show an element marked hidden */
+[hidden] { display: none !important; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 code { font-size: 0.9em; }
 
