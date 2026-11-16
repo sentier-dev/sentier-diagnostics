@@ -66,6 +66,11 @@ chooses (`reproduction`, `fix`, `mapping`, `contribution`, `rebuild`, ...). A st
 - `explained`: `false` for a step that no cause explains (a rebuild on another machine,
   a change nobody can name). Its moves are counted as what nothing explains.
 
+**Step 0 needs no claim.** Its tolerance (the published rounding, or a declared one) does
+the judging, and what moves beyond it is the residual of the reproduction: the distance the
+chain starts from, not a regression. The page and the summary say so. A claim "nothing
+moves" is allowed, but it adds nothing: every value of the residual then reads "not claimed".
+
 A plain before/after comparison is a chain of two states and one step. The first real one
 will be sentier-bafu's **located factors** (a flow that names a country takes that
 country's factor), with the claim "water use moves; nothing else moves": one scope entry,
@@ -506,7 +511,11 @@ For Manuel, unless he names someone else:
 3. **A per-value floor from the gross sum of terms** (section 5.2), for projects that have
    breakdowns. It would be a declared floor per pair, which the format cannot hold yet.
 4. **Noise per item**, and an absolute cap for `largest` beside the relative one (useful
-   for climate change from land use, where results are often near zero).
+   for climate change from land use, where results are often near zero). The case for noise
+   per item, from sentier-agribalyse's first use on 16 November 2026: two builds of
+   upstream main differ in 228 of 2,451 products, by up to 21 % in water use. One noise
+   number per indicator then puts 1,507 values of step 0 and 152 of step 1 "within noise"
+   because of those 228.
 5. **A joint view of two references.**
 6. **Laurenz's backtest.** Its scorer and join accounting are the stronger half of what it
    did, and the migration of the ADEME dashboard goes with him. sentier-agribalyse relays

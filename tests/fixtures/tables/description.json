@@ -25,7 +25,11 @@
  ],
  "explanations": [
   {"text": "Compost's water use was not computed in the reproduction.", "by": {"kind": "person", "name": "B. Reviewer"},
-   "step": "step-0", "indicator": "x:water", "item": "c1", "finding": "none found"}
+   "step": "step-0", "indicator": "x:water", "item": "c1", "finding": "none found"},
+  {"text": "Oats moved in the reproduction because a parameter rounds differently.",
+   "by": {"kind": "model", "model": "example-model-1", "run_by": "example maintainers (agent-run)"},
+   "step": "step-0", "indicator": "x:climate", "item": "w2",
+   "not_checked": "Nobody compared the parameter with its source."}
  ],
  "notes": ["Made-up tables for the tests."]
 }

@@ -61,6 +61,12 @@ def text(data: Mapping) -> str:
             f"| {number}. {step['label']} | {step['kind']} | {'yes' if step['explained'] else '**no: nothing explains it**'} "
             f"| {_n(moved)} | {_n(gone_before)} | {_n(gone_after)} | " + " | ".join(said) + " |"
         )
+    if data["states"][0]["kind"] == "published":
+        blocks = data["counts"]["steps"][data["steps"][0]["id"]].values()
+        residual = sum(b["classes"][k] for b in blocks for k in rule.MOVES)
+        said = "1 value is" if residual == 1 else f"{_n(residual)} values are"
+        out += ["", f"Step 0: {said} not reproduced within its tolerance. That is the "
+                "residual the chain starts from, not a regression."]
     first, last = data["states"][0]["label"], data["states"][-1]["label"]
     out += ["", f"## The whole way: {first} → {last}", ""]
     header = ["Indicator", *[k for k in rule.CLASSES], "Largest step", "Not attributable", "Moved by what nothing explains"]

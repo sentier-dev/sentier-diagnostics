@@ -294,9 +294,15 @@
     D.steps.forEach(function (s, k) {
       var verdict = function (name) { return s.claim ? n(sumOver(s.id, function (b) { return b.verdicts[name]; })) : '—'; };
       var noise = noiseText(s.noise);
+      // the step from the published results: what moved there is the residual the chain
+      // starts from, not a regression, whatever its claim says
+      var unrepro = sumOver(s.id, moved);
+      var residual = k === 0 && D.states[0].kind === 'published'
+        ? (unrepro === 1 ? '1 value' : n(unrepro) + ' values') + ' not reproduced within the tolerance: the residual the chain starts from, not a regression.' : null;
       body.appendChild(el('tr', null, [
         el('td', { cls: 'num', text: String(k) }),
-        el('td', null, [s.link ? el('a', { href: s.link, text: s.label }) : s.label, s.about ? el('div', { cls: 'quiet', text: s.about }) : null]),
+        el('td', null, [s.link ? el('a', { href: s.link, text: s.label }) : s.label, s.about ? el('div', { cls: 'quiet', text: s.about }) : null,
+          residual ? el('div', { cls: 'quiet', text: residual }) : null]),
         el('td', { text: s.kind }),
         el('td', { text: s.explained ? 'yes' : 'no: nothing explains it', cls: s.explained ? null : 'error' }),
         el('td', null, [s.claim ? s.claim.text : 'no claim', s.claim && s.claim.by ? el('div', null, [badge(s.claim.by)]) : null,
