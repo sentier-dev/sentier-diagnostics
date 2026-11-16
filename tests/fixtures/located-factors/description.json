@@ -1,12 +1,13 @@
 {
  "title": "Made-up: located factors, before and after",
- "about": "The shape of the first step sentier-bafu will show: a flow that names a country takes that country's factor. Six made-up datasets, three indicators.",
+ "about": "The shape of the first step sentier-bafu will show: a flow that names a country takes that country's factor. Six made-up datasets, four indicators. The claim names the indicators whose factors are taken by country; sentier-bafu builds that list from its build.",
  "item": {"one": "dataset", "many": "datasets"},
  "audience": "public",
  "indicators": [
   {"id": "x:water", "name": "Water use", "short": "Water", "unit": "m3 world eq"},
   {"id": "x:climate", "name": "Climate change", "short": "Climate", "unit": "kg CO2 eq"},
-  {"id": "x:ecotox", "name": "Ecotoxicity, freshwater", "short": "Ecotox", "unit": "CTUe"}
+  {"id": "x:ecotox", "name": "Ecotoxicity, freshwater", "short": "Ecotox", "unit": "CTUe"},
+  {"id": "x:land", "name": "Land use", "short": "Land", "unit": "Pt"}
  ],
  "items": "items.csv",
  "states": [
@@ -16,9 +17,9 @@
  "steps": [
   {"id": "located-factors", "label": "Located factors", "kind": "method",
    "about": "A flow that names a country takes that country's factor instead of the world's.",
-   "claim": {"text": "Water use moves; nothing else moves.",
+   "claim": {"text": "Water use and land use may move; nothing else moves.",
              "by": {"kind": "person", "name": "A. Author"},
-             "scope": [{"indicators": ["x:water"], "items": "*", "direction": "any", "expect": "may"}]}}
+             "scope": [{"indicators": ["x:water", "x:land"], "items": "*", "direction": "any", "expect": "may"}]}}
  ],
  "notes": ["Made-up results: nobody's data."]
 }

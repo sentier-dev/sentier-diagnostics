@@ -77,14 +77,19 @@ diagnostics page, not inside it.
 `review.py` and `site/assets/before-after.js` on the release site.
 
 **The first step it shows** is the located factors (a flow that names a country takes that
-country's factor; mostly water use), compared before and after. It was first written with
-the claim "water use moves; nothing else moves".
-`tests/fixtures/located-factors/description.json` is its shape with made-up values: two
-states, one step of kind `method`, one scope entry `{"indicators": [water], "items": "*",
-"direction": "any", "expect": "may"}`. A value of another indicator that moves is "not
-claimed", which is the finding to look at. sentier-bafu's first run on its own results
-(16 November 2026) found exactly that: land use moves for 5 datasets. Before the step is
-published, its claim names land use, or those 5 carry an explanation.
+country's factor), compared before and after with the claim "water use and land use may
+move; nothing else moves". `tests/fixtures/located-factors/description.json` is its shape
+with made-up values: two states, one step of kind `method`, one scope entry
+`{"indicators": [water use, land use], "items": "*", "direction": "any", "expect": "may"}`.
+A value of another indicator that moves is "not claimed", which is the finding to look at.
+
+The claim was first "water use moves; nothing else moves". sentier-bafu's first run on its
+own results (16 November 2026) found land use moving for 5 datasets, read as "not claimed".
+The scope is now built from the build: the install report's
+`coverage.located_by_method` names the methods that actually take a country's own factor
+(on BAFU:2026 v1, water use with 181 flows of a country and land use with 2), and
+`before_after_account.py` writes the scope from it, so it follows the factors when they
+change.
 
 **Steps.**
 

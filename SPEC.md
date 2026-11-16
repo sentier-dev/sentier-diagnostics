@@ -73,13 +73,16 @@ moves" is allowed, but it adds nothing: every value of the residual then reads "
 
 A plain before/after comparison is a chain of two states and one step. The first real one
 will be sentier-bafu's **located factors** (a flow that names a country takes that
-country's factor). It was first written with the claim "water use moves; nothing else
-moves": one scope entry, water use, every item, `may`. sentier-bafu's first run of this
-tool on its own results (16 November 2026) showed land use moving too, for 5 datasets,
-read as "not claimed". So the claim was incomplete: land use belongs in its scope, or
-those 5 need an explanation. That is sentier-bafu's to settle; the tool found it, which is
-its job. `tests/fixtures/located-factors/` is that step, made up, with the first claim, and
-a test holds what it shows: a value outside the claim is "not claimed".
+country's factor), with the claim "water use and land use may move; nothing else moves":
+one scope entry, water use and land use, every item, `may`. Any other indicator that moves
+is "not claimed". The claim was first written for water use alone; sentier-bafu's first
+run of this tool on its own results (16 November 2026) showed land use moving too, for 5
+datasets, read as "not claimed". The tool found what the claim left out, which is its job.
+sentier-bafu then took the list from its build, not by hand: its install report names the
+methods that actually take a country's own factor (`coverage.located_by_method`), and on
+BAFU:2026 v1 those are water use and land use. Its file builds the scope from that list,
+so the claim stays right when the factors change. `tests/fixtures/located-factors/` is
+that step, made up, and a test holds what it shows.
 
 **Order matters.** Where two steps touch the same results, each one's share depends on the
 order they were applied in. The file keeps the order; the page says so.

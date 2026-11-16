@@ -252,15 +252,17 @@ class FromTables(unittest.TestCase):
         self.assertEqual(data["explanations"][0]["finding"], "none found")
 
     def test_the_located_factors_step(self):
-        """The first real step sentier-bafu will show, made up: water use may move, nothing
-        else does. Water moves as claimed; the steel's climate change is not claimed."""
+        """The first real step sentier-bafu will show, made up: water use and land use may
+        move, nothing else does. Both move as claimed; the steel's climate change is not
+        claimed."""
         data = from_tables.build(HERE / "fixtures" / "located-factors" / "description.json")
         self.assertEqual(fileformat.errors(data), [])
         counts = data["counts"]["steps"]["located-factors"]
         said = {i: {k: n for k, n in b["verdicts"].items() if n} for i, b in counts.items()}
         self.assertEqual(said, {"x:water": {"as claimed": 3, "unchanged": 3},
                                 "x:climate": {"not claimed": 1, "unchanged": 5},
-                                "x:ecotox": {"unchanged": 6}})  # fmt: skip
+                                "x:ecotox": {"unchanged": 6},
+                                "x:land": {"as claimed": 1, "unchanged": 5}})  # fmt: skip
         steel = next(i for i in data["items"] if i["id"] == "d5")
         self.assertEqual(steel["verdicts"]["x:climate"], ["not claimed"])
         self.assertIsNone(counts["x:water"]["closer"])  # no published state: nothing to come closer to
