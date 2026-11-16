@@ -70,6 +70,16 @@
     return (v > 0 ? '' : v < 0 ? '\u2212' : '') + text + ' %';
   }
 
+  // what a step's noise says: measured and identical, measured, or not measured. Two
+  // identical builds are a finding, and never read as "not measured".
+  function noiseText(noise) {
+    if (!noise || !noise.measured) return 'not measured';
+    var between = ' between ' + noise.between.join(' and ');
+    var keys = Object.keys(noise.by || {});
+    if (keys.every(function (k) { return noise.by[k] === 0; })) return 'identical' + between;
+    return 'measured' + between;
+  }
+
   function bandStep(band) {
     if (!band) return null;
     var at = band.indexOf('factor ');
@@ -283,7 +293,7 @@
     var body = el('tbody');
     D.steps.forEach(function (s, k) {
       var verdict = function (name) { return s.claim ? n(sumOver(s.id, function (b) { return b.verdicts[name]; })) : '—'; };
-      var noise = s.noise.measured ? 'between ' + s.noise.between.join(' and ') : 'not measured';
+      var noise = noiseText(s.noise);
       body.appendChild(el('tr', null, [
         el('td', { cls: 'num', text: String(k) }),
         el('td', null, [s.link ? el('a', { href: s.link, text: s.label }) : s.label, s.about ? el('div', { cls: 'quiet', text: s.about }) : null]),
@@ -517,7 +527,7 @@
     var stepsTable = el('table', null, [el('thead', null, [el('tr', null, ['Step', 'Tolerance', 'Basis', 'Note', 'Noise'].map(function (h) { return el('th', { scope: 'col', text: h }); }))])]);
     var tb = el('tbody');
     D.steps.forEach(function (s) {
-      var noise = s.noise.measured ? Object.keys(s.noise.by).map(function (k) { return indicatorName(k) + ' ' + formatNumber(s.noise.by[k]); }).join(', ') + ' (between ' + s.noise.between.join(' and ') + ')' : 'not measured';
+      var noise = noiseText(s.noise) + (s.noise.measured ? ': ' + Object.keys(s.noise.by).map(function (k) { return indicatorName(k) + ' ' + formatNumber(s.noise.by[k]); }).join(', ') : '');
       tb.appendChild(el('tr', null, [el('td', { text: s.label }), el('td', { cls: 'num', text: String(s.tolerance.value) }), el('td', { text: s.tolerance.basis }), el('td', { text: s.tolerance.note || '' }), el('td', { text: noise })]));
     });
     stepsTable.appendChild(tb);
@@ -714,7 +724,7 @@
     q('load').hidden = false;
   }
 
-  var api = { formatNumber: formatNumber, percentText: percentText, shareText: shareText, sizeAtLeast: sizeAtLeast, cellView: cellView, severityKey: severityKey,
+  var api = { formatNumber: formatNumber, percentText: percentText, shareText: shareText, noiseText: noiseText, sizeAtLeast: sizeAtLeast, cellView: cellView, severityKey: severityKey,
     compareKeys: compareKeys, bandStep: bandStep, checkShape: checkShape, RANK: RANK };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else if (typeof document !== 'undefined') {

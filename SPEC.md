@@ -54,6 +54,8 @@ step 0 is counted as movement, never as better (see [A22](#11-acceptance-cases))
 
 A **state** is one set of results: an item's result per indicator. The first state may be
 the published results (`kind: "published"`); every other state is a build (`kind: "build"`).
+A state's `identity` names what makes it: commit, release, machine, and the solver, since
+two solvers on one package differ by about 3e-7.
 
 A **step** goes from one state to the next. Its kind is free text that the writer
 chooses (`reproduction`, `fix`, `mapping`, `contribution`, `rebuild`, ...). A step has:
@@ -64,7 +66,11 @@ chooses (`reproduction`, `fix`, `mapping`, `contribution`, `rebuild`, ...). A st
 - `explained`: `false` for a step that no cause explains (a rebuild on another machine,
   a change nobody can name). Its moves are counted as what nothing explains.
 
-A plain before/after comparison is a chain of two states and one step.
+A plain before/after comparison is a chain of two states and one step. The first real one
+will be sentier-bafu's **located factors** (a flow that names a country takes that
+country's factor), with the claim "water use moves; nothing else moves": one scope entry,
+water use, every item, `may`. Any other indicator that moves is "not claimed".
+`tests/fixtures/located-factors/` is that step, made up, and a test holds what it shows.
 
 **Order matters.** Where two steps touch the same results, each one's share depends on the
 order they were applied in. The file keeps the order; the page says so.
@@ -203,7 +209,8 @@ tolerance (agreement by rule) and noise (measured instability). A third, the rea
 **size filter**, hides small changes on the page and changes no count (section 10.5).
 
 One number per indicator is coarse: a few unstable items make every smaller difference
-of that indicator "within noise". Large noise is a defect to fix (sentier-agribalyse's
+of that indicator "within noise". Two builds that are identical are a finding, shown as
+"identical", and never as "not measured". Large noise is a defect to fix (sentier-agribalyse's
 random identifiers made water use differ by up to 21 % between two builds), not a width
 to absorb. Noise per item is in section 15.
 
@@ -491,7 +498,8 @@ sentier-bafu-agribalyse wrote their requirements. What became of each:
 
 For Manuel, unless he names someone else:
 
-1. **Who is the second maintainer?** Rule 3 needs one. `MAINTAINERS.md` has the place.
+1. **The second maintainer.** Answered by Manuel on 16 November 2026: Laurenz Bougan.
+   Rule 3 still holds: the runbook is written so that either can work alone.
 2. **What may be public.** Per-item results against ADEME (the ADEME dashboard holds
    exactly these behind a login), the cap of 200 listed items in sentier-bafu, and
    breakdowns. The tool does not decide; each project's site check does.
@@ -500,5 +508,7 @@ For Manuel, unless he names someone else:
 4. **Noise per item**, and an absolute cap for `largest` beside the relative one (useful
    for climate change from land use, where results are often near zero).
 5. **A joint view of two references.**
-6. **Laurenz's place in it.** His backtest's scorer and join accounting are the stronger
-   half of what it did; the migration of the ADEME dashboard goes with him.
+6. **Laurenz's backtest.** Its scorer and join accounting are the stronger half of what it
+   did, and the migration of the ADEME dashboard goes with him. sentier-agribalyse relays
+   that Manuel wants his dashboard built on, not replaced; this plan retires its page and
+   keeps his scorer. Which of the two Manuel means is for him and Laurenz to settle.

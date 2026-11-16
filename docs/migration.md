@@ -76,6 +76,13 @@ diagnostics page, not inside it.
 `scripts/release_build/before_after_account.py`, shown by `scripts/sitebuild/beforeafter.py`,
 `review.py` and `site/assets/before-after.js` on the release site.
 
+**The first step it shows** is the located factors (a flow that names a country takes that
+country's factor; mostly water use), compared before and after with the claim "water use
+moves; nothing else moves". `tests/fixtures/located-factors/description.json` is its shape
+with made-up values: two states, one step of kind `method`, one scope entry
+`{"indicators": [water], "items": "*", "direction": "any", "expect": "may"}`. A value of
+another indicator that moves is "not claimed", which is the finding to look at.
+
 **Steps.**
 
 1. Pin a commit of this repository in `pins.toml`.

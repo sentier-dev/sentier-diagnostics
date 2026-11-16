@@ -73,3 +73,9 @@ test('the page refuses a file of another format, and an older one', () => {
   const example = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'examples', 'diagnostics.json'), 'utf8'));
   assert.equal(page.checkShape(example), null);
 });
+
+test('two identical builds are a finding, not "not measured"', () => {
+  assert.equal(page.noiseText({ measured: false, between: null, by: null }), 'not measured');
+  assert.equal(page.noiseText({ measured: true, between: ['a', 'b'], by: { 'x:a': 0, 'x:b': 0 } }), 'identical between a and b');
+  assert.equal(page.noiseText({ measured: true, between: ['a', 'b'], by: { 'x:a': 0, 'x:b': 2e-7 } }), 'measured between a and b');
+});

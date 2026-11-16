@@ -1,0 +1,7 @@
+item,unit,name,place,group
+d1,kg,Wheat grain,CH,Crops
+d2,kg,Tomato,ES,Crops
+d3,MJ,Heat from wood,CH,Energy
+d4,kg,Rice,IN,Crops
+d5,kg,Steel,RER,Materials
+d6,kWh,Electricity,CH,Energy
