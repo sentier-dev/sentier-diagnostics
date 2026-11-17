@@ -125,7 +125,8 @@ def make(data: Mapping, rows: list[dict]) -> dict:
             "states": [s["id"] for s in data["states"]],
             "indicators": ids,
             "steps": [s["id"] for s in steps],
-            "ranges": [r["id"] for r in data.get("ranges") or []],
+            # as the file: [] where none was asked for, left out where it was made before ranges
+            **({"ranges": [r["id"] for r in data["ranges"]]} if "ranges" in data else {}),
         },
         "items": [],
         "values": [],
@@ -231,14 +232,14 @@ def _errors(m) -> list[str]:
     of = m["of"]
     if not (
         isinstance(of, dict)
-        and set(of) == OF_KEYS
+        and set(of) in (OF_KEYS, OF_KEYS - {"ranges"})
         and fileformat.is_text(of["title"], 120)
         and all(isinstance(of[k], list) and all(fileformat.is_text(x, 2 * fileformat.MAX_ID + 2) for x in of[k])
-                for k in ("states", "indicators", "steps", "ranges"))
+                for k in ("states", "indicators", "steps", "ranges") if k in of)
     ):  # fmt: skip
-        return ["`of` is not {title, states, indicators, steps, ranges}"]
+        return ["`of` is not {title, states, indicators, steps, ranges} (ranges left out only before ranges)"]
     nstates, nind, nsteps = len(of["states"]), len(of["indicators"]), len(of["steps"])
-    ncodes = nsteps + 1 + len(of["ranges"])
+    ncodes = nsteps + 1 + len(of.get("ranges", []))
     if nsteps != nstates - 1 or not nind:
         return ["`of`: one step fewer than states, and at least one indicator"]
     items = m["items"]
@@ -300,7 +301,7 @@ def _against(m: Mapping, data: Mapping) -> list[str]:
     steps = data["steps"]
     ranges = data.get("ranges") or []
     of = {"title": data["title"], "states": order, "indicators": ids, "steps": [s["id"] for s in steps],
-          "ranges": [r["id"] for r in ranges]}  # fmt: skip
+          **({"ranges": [r["id"] for r in ranges]} if "ranges" in data else {})}  # fmt: skip
     if m["of"] != of:
         return ["it is the matrix of another file: its title, states, indicators, steps or ranges differ"]
     n = len(m["items"])

@@ -406,7 +406,8 @@
     var ids = d.indicators.map(function (i) { return i.id; });
     if (of.title !== d.title || !sameList(of.states, d.states.map(function (s) { return s.id; })) ||
         !sameList(of.indicators, ids) || !sameList(of.steps, d.steps.map(function (s) { return s.id; })) ||
-        !sameList(of.ranges, (d.ranges || []).map(function (r) { return r.id; }))) {
+        ('ranges' in of) !== ('ranges' in d) ||
+        ('ranges' in d && !sameList(of.ranges, d.ranges.map(function (r) { return r.id; })))) {
       return 'it is the matrix of another file: its title, states, indicators, steps or ranges differ';
     }
     if (!Array.isArray(m.items) || m.items.length > MATRIX_MAX_ITEMS) return 'its items are not a list of at most ' + groupThousands(MATRIX_MAX_ITEMS);

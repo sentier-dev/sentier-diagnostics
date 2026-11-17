@@ -335,6 +335,11 @@ test('a matrix of another file, or of another shape, is refused', () => {
   assert.match(page.checkMatrix(wrong, data), /not a number/);
   const fewer = full(); fewer.items.pop(); fewer.values.pop(); fewer.classes.pop(); fewer.verdicts.pop();
   assert.match(page.checkMatrix(fewer, data), /says 10 items/);
+  // a matrix made before ranges belongs to a file made before ranges, and only to one
+  const before = full(); delete before.of.ranges;
+  assert.match(page.checkMatrix(before, data), /another file/);
+  const older = local(); delete older.ranges; delete older.counts.ranges;
+  assert.match(page.checkMatrix(full(), older), /another file/);
 });
 
 test('the grid shows the listed items, says so, and every item once the matrix is here', () => {

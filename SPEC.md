@@ -239,6 +239,9 @@ writes it beside the file.
  "verdicts": ["a.==", ...]}
 ```
 
+`of.ranges` is as the file's `ranges`: `[]` where none was asked for, left out in a matrix
+made before ranges, as its file was. A matrix and its file always agree on which.
+
 One row per item, in the order of the listed items (worst first): `[id, name, place,
 group, unit]`; the results per indicator and state, indicator after indicator, a result
 that is the same number as the state before it (bit for bit) written `"="`; per indicator

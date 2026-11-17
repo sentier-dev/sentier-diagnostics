@@ -282,6 +282,21 @@ class Matrix(unittest.TestCase):
                       matrix.against(self.full, changed))  # fmt: skip
 
 
+class BeforeRanges(unittest.TestCase):
+    def test_a_file_and_its_matrix_made_before_ranges_still_read_together(self):
+        data, m = five_states(ranges=None, matrix_file="matrix.json")
+        self.assertEqual(m["of"]["ranges"], [])  # none asked for: said, as the file says it
+        self.assertEqual(matrix.errors(m) + matrix.against(m, data), [])
+        before = json.loads(json.dumps(data))
+        del before["ranges"], before["counts"]["ranges"]
+        old = json.loads(json.dumps(m))
+        del old["of"]["ranges"]
+        self.assertEqual(matrix.errors(old) + matrix.against(old, before), [])
+        # one made before ranges and one made after are not each other's
+        self.assertTrue(any("another file" in e for e in matrix.against(old, data)))
+        self.assertTrue(any("another file" in e for e in matrix.against(m, before)))
+
+
 class Description(unittest.TestCase):
     def write(self, tmp, ranges):
         here = Path(tmp)
