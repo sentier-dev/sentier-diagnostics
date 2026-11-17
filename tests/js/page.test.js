@@ -557,6 +557,9 @@ test('the page refuses a breakdown for each reason the check has, and says which
     ['is not of the shape of a breakdown in', (b) => { b.indicators[indicator] = null; }],
     ['does not add up', (b) => { b.indicators[indicator].rest[0] += 1; }],
     ['is not of this file', (b) => { const e = b.indicators[indicator]; e.total[1] += 1; e.rest[1] += 1; }],
+    // off by a millionth: the check holds parts and totals to 1e-9, as the Python does (review of #34)
+    ['does not add up', (b) => { const e = b.indicators[indicator]; e.rest[0] += 1e-6 * Math.abs(e.total[0]); }],
+    ['is not of this file', (b) => { const e = b.indicators[indicator]; const off = 1e-6 * Math.abs(e.total[1]); e.total[1] += off; e.rest[1] += off; }],
   ];
   assert.ok(shown(wheat()).includes('What it is made of') && !/not drawn/.test(shown(wheat())), 'the breakdown itself is drawn');
   for (const [said, change, comp] of cases) {
@@ -566,6 +569,10 @@ test('the page refuses a breakdown for each reason the check has, and says which
     assert.ok(body.includes('The breakdown b.json ' + said), said + ' | ' + body.slice(-240));
     assert.ok(body.includes(': not drawn.'), said);
   }
+  // and off by less than 1e-9 of the size, it is drawn
+  const close = wheat();
+  close.indicators[indicator].rest[0] += 1e-11 * Math.abs(close.indicators[indicator].total[0]);
+  assert.ok(!/not drawn/.test(shown(close)), 'within 1e-9');
 });
 
 test('a breakdown the page fetches is checked as one that came with it (issue 5)', async () => {
@@ -595,6 +602,27 @@ test('a file the page cannot draw draws nothing', () => {
   assert.equal(drawn.byId.content.hidden, true);
   assert.equal(drawn.byId.load.hidden, false);
   assert.equal(drawn.byId.title.textContent, '');
+});
+
+// a file of counts made from one of items, as `build(tier="counts")` writes it: no item, no
+// explanation of one, and claims without their lists
+const countsOf = (d) => {
+  d.tier = 'counts';
+  d.items = [];
+  d.items_count.not_listed += d.items_count.listed;
+  d.items_count.listed = 0;
+  d.explanations = d.explanations.filter((e) => !e.about.item);
+  d.steps.forEach((s) => { if (s.claim) s.claim.scope.forEach((e) => { e.items = null; }); });
+  return d;
+};
+
+test('a file of counts beside a host\'s matrix says nothing of a matrix (review of #34)', () => {
+  const counts = dom.page(countsOf(local()), undefined, { globals: { SENTIER_DIAGNOSTICS_MATRIX: full() } });
+  assert.equal(counts.byId.load.hidden, true, counts.byId['load-error'].textContent);
+  assert.equal(counts.byId['matrix-said'].textContent, '');
+  // the same file with its items takes the host's matrix
+  const items = dom.page(local(), undefined, { globals: { SENTIER_DIAGNOSTICS_MATRIX: full() } });
+  assert.match(items.byId['matrix-said'].textContent, /matrix of all 10 products is loaded/);
 });
 
 test('a host page never offers to open a file; a page of its own does', () => {
@@ -899,6 +927,16 @@ test('sorting from the keyboard keeps the focus on the heading it sorted by (iss
   drawn.document.activeElement = again;
   again.dispatch('click', {}); // back to the furthest apart first: still this heading
   assert.equal(climate().focused, true);
+  // every heading of its kind, not only the first: the focus goes to the one sorted by
+  // (review of #34)
+  for (const name of ['Climate', 'Water', 'Human']) {
+    const each = dom.page(example());
+    const heading = () => each.byId['grid-table'].querySelectorAll('th[scope="col"]').find((th) => (th.getAttribute('title') || '').indexOf(name) === 0).querySelector('button[type="button"]');
+    each.document.activeElement = heading();
+    heading().dispatch('click', {});
+    assert.equal(heading().focused, true, name);
+    assert.deepEqual(each.byId['grid-table'].querySelectorAll('button[type="button"]').filter((b) => b.focused), [heading()], name);
+  }
   const unfocused = dom.page(example());
   const other = unfocused.byId['grid-table'].querySelectorAll('th[scope="col"]').find((th) => (th.getAttribute('title') || '').indexOf('Climate') === 0).querySelector('button[type="button"]');
   other.dispatch('click', {}); // a click with the focus elsewhere moves no focus
@@ -1714,6 +1752,10 @@ test('where the drawer fills the window, or no popover is known, it opens modal;
   const css = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'sentier_diagnostics', 'page', 'diagnostics.css'), 'utf8');
   const drawerRule = css.slice(css.indexOf(' .sd-drawer {'), css.indexOf('}', css.indexOf(' .sd-drawer {')));
   for (const said of ['position: fixed', 'z-index: 2147483000', 'max-height: none', 'margin: 0', 'border: 0']) assert.ok(drawerRule.includes(said), said);
+  // a dialog and a popover take the browser's own place and size (inset 0, margin auto, fit
+  // to their content), which centres them: the drawer sets its own, at the right edge and
+  // the window's height (review of #34)
+  for (const said of ['inset: 0 0 0 auto', 'width: var(--sd-drawer)', 'height: auto', 'padding: 0']) assert.ok(drawerRule.includes(said), said);
   // a drawer that leaves the grid in use does not darken it: only the modal one
   assert.match(css, /\.sd-drawer:modal::backdrop \{/);
   assert.doesNotMatch(css, /\.sd-drawer::backdrop/);
@@ -2080,7 +2122,9 @@ const inHost = (vars, grounds, options = {}) => {
     getComputedStyle: (node) => {
       const color = node.style ? node.style.getPropertyValue('color') : '';
       if (color.startsWith('var(')) {
-        const said = vars[color.slice(4, -1)];
+        let said = vars[color.slice(4, -1)];
+        const both = /^light-dark\(([^,]+), ([^)]+)\)$/.exec(said || ''); // as the reader's scheme resolves it
+        if (both) said = both[reader.matches ? 2 : 1];
         return { color: SEEN[said] || RESOLVED[said] || node.parentNode.style.getPropertyValue('color') };
       }
       return { getPropertyValue: (name) => (name === 'background-color' ? node.bg || '' : name === 'color-scheme' ? (node.isRoot ? scheme.value : '') : vars[name] || '') };
@@ -2187,6 +2231,36 @@ test('a host that switches what is behind a translucent ground is followed, its 
   bare.scheme.value = 'dark';
   bare.look();
   assert.equal(bare.dark(), true);
+});
+
+test('the reader\'s scheme alone is followed: a token in light-dark() resolves anew, its text unchanged (review of #34)', () => {
+  // the host's ink is light-dark(#1d232a, #eee) and its root takes both schemes: the text the
+  // page reads of the token stays the same, and only the reader's switch says it changed
+  const host = inHost({ '--ink': 'light-dark(#1d232a, #eee)' }, { body: 'rgb(255, 255, 255)' });
+  assert.equal(host.dark(), false);
+  host.reader.matches = true;
+  host.reader.heard.forEach((react) => react({ matches: true }));
+  assert.equal(host.dark(), true);
+  host.vars['--ink'] = 'light-dark(#1d232a, #eee)'; // a change elsewhere in the document: still dark
+  host.look();
+  assert.equal(host.dark(), true);
+  host.reader.matches = false;
+  host.reader.heard.forEach((react) => react({ matches: false }));
+  assert.equal(host.dark(), false);
+});
+
+test('a page reads only the parts of the address under its own key, whatever the length of another key (review of #34)', () => {
+  // `sd.` and `ab.` are as long: the page `sd` does not read `ab.item` as its own `item`
+  const sd = dom.page(example(), undefined, { hash: 'ab.item=p01' });
+  const ab = dom.body({ data: example() });
+  ab.setAttribute('data-sd-key', 'ab');
+  ab.ownerDocument = sd.document;
+  sd.context.SentierDiagnostics.mount(ab);
+  sd.open('ab.item=p01');
+  assert.equal(ab.querySelector('[data-sd="item"]').hidden, false, 'ab opens its item');
+  assert.equal(sd.byId.item.hidden, true, 'sd opens nothing');
+  sd.open('sd.item=p01');
+  assert.equal(sd.byId.item.hidden, false);
 });
 
 test('a key the host names is a plain word, neither the page\'s own nor another page\'s (review of issue 27)', () => {
