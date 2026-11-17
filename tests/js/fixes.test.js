@@ -494,6 +494,52 @@ test('after unmount, the fixes panel draws nothing and throws nothing, and a lat
   assert.equal(late.querySelector('[data-sd="content"]').hidden, true);
 });
 
+test('an element mounted again holds one page\'s listeners in the fixes panel, one click ticks once, and a late file of fixes speaks for no page (review of c15db4a)', () => {
+  // React's StrictMode in development: mount, unmount and mount again, on one element
+  const p = pageOf('fixes that need others');
+  const drawn = dom.page(undefined, undefined, { attributes: { 'data-sentier-diagnostics': 'manual' }, globals: { SENTIER_DIAGNOSTICS_MATRIX: p.matrix } });
+  const root = dom.body({});
+  root.setAttribute('data-sd-fixes', 'fixes.js');
+  root.ownerDocument = drawn.document;
+  const { mount } = drawn.context.SentierDiagnostics;
+  const part = (name) => root.querySelector('[data-sd="' + name + '"]');
+  const scripts = () => drawn.head.all().filter((n) => n.tagName === 'SCRIPT' && n.getAttribute('src') === 'fixes.js');
+  const held = () => [root].concat(root.querySelectorAll('[data-sd]')).map((node) => Object.values(node.listeners).reduce((n, list) => n + list.length, 0));
+  const panel = ['mode', 'fix-list', 'fix-find', 'fix-kind', 'fix-moved', 'fix-none', 'fix-every', 'fix-built'];
+  const first = mount(root);
+  first.show(p.data, true);
+  const heldByOne = held();
+  for (const name of panel) assert.equal(Object.values(part(name).listeners).flat().length, 1, name + ' answers once');
+  const lateOfFirst = scripts()[0];
+  assert.ok(lateOfFirst, 'the first page asks for its file of fixes');
+  first.unmount();
+  const second = mount(root);
+  second.show(p.data, true);
+  assert.deepEqual(held(), heldByOne, 'every element holds the listeners of one page, not of two');
+  assert.equal(scripts().length, 2, 'the second page asks for its own');
+  assert.match(part('fixes-said').textContent, /^Loading the file of fixes/);
+  // the first page's file arrives, or fails, after it was unmounted: it speaks for no page
+  drawn.context.SENTIER_DIAGNOSTICS_FIXES_FILES = [{ src: 'fixes.js', fixes: p.fixes }];
+  lateOfFirst.onload();
+  lateOfFirst.onerror();
+  assert.match(part('fixes-said').textContent, /^Loading the file of fixes/, 'neither taken nor refused for the second page');
+  // the second page's own file is taken when it comes
+  scripts()[1].onload();
+  assert.match(part('fixes-said').textContent, /^5 fixes/);
+  // one click on a box ticks it, with what it requires, once, and writes set= once
+  drawn.open('sd.set=a');
+  let writes = 0, hash = drawn.context.location.hash;
+  Object.defineProperty(drawn.context.location, 'hash', { configurable: true, get: () => hash,
+    set: (value) => { writes += 1; hash = value.startsWith('#') ? value : '#' + value; } });
+  const boxes = () => part('fix-list').all().filter((n) => n.getAttribute('data-fix') !== null);
+  const box = boxes().find((n) => n.getAttribute('data-fix') === 'e');
+  box.checked = true;
+  box.dispatch('change', {});
+  assert.deepEqual(boxes().filter((n) => n.checked).map((n) => n.getAttribute('data-fix')), ['a', 'd', 'e']);
+  assert.equal(writes, 1);
+  assert.equal(hash, '#sd.set=a,d,e');
+});
+
 // ------------------------------------------------------------------ review of 57ceb6a
 
 test('the drawer judges a fix as the file counts it: with its noise and that of what it was measured against', () => {
