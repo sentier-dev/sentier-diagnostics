@@ -170,6 +170,7 @@ function page(data, breakdowns, options) {
       replaceState: (state, title, url) => { context.history.replaced.push({ state, url }); context.history.state = state; context.location.hash = ''; },
     },
     addEventListener: (type, listener) => { (listeners[type] = listeners[type] || []).push(listener); },
+    removeEventListener: (type, listener) => { const held = listeners[type] || []; if (held.indexOf(listener) >= 0) held.splice(held.indexOf(listener), 1); },
     URLSearchParams,
     FileReader: class {},
     fetch: options.fetch || (() => Promise.reject(new Error('no network'))),
@@ -192,10 +193,11 @@ function page(data, breakdowns, options) {
     text: () => root.childNodes.filter((n) => !n.hidden && n.tagName !== 'SCRIPT').map((n) => n.seen().join(' ')).join('\n'),
     open: (hash) => {
       context.location.hash = '#' + hash;
-      (listeners.hashchange || []).forEach((listener) => listener({}));
+      (listeners.hashchange || []).slice().forEach((listener) => listener({}));
     },
     // the hashchange a browser fires after the page itself wrote the hash
-    changed: () => (listeners.hashchange || []).forEach((listener) => listener({})),
+    changed: () => (listeners.hashchange || []).slice().forEach((listener) => listener({})),
+    listeners,
   };
 }
 

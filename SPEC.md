@@ -517,7 +517,17 @@ are `--sd-*` properties that take the site's tokens where the site sets them
 (`--sd-ink: var(--ink, #1d232a)`, and so on for `--muted`, `--surface`, `--paper-deep`,
 `--line`, `--line-strong`, `--index`, `--fail`, `--radius`, `--t-*`, `--s*`); up, down and
 noise keep colours of their own (amber up, teal down), so that a direction never takes a
-site's accent. A test reads the sheet and holds this.
+site's accent. A test reads the sheet and holds this. Where the site's ink is light (or,
+with no ink, its ground dark), the script marks the root `data-sd-scheme="dark"` and every
+token the site did not set falls back to a dark colour, so that a light ink never stands
+on the page's white. It reads the tokens as the browser resolves them (`light-dark()`,
+another `var()`), and a token it cannot read as a colour is unknown, never black. It looks
+again when the reader's colour scheme changes, when anything changes in the document or in
+a shadow root the page sits in, and when a stylesheet loads: once a frame at most, and it
+reads the tokens again only where they, the computed `color-scheme` or the reader's
+scheme changed, so that a host's observer that answers the page's reading sets off no
+other. A rule a site changes through the CSS object model alone changes nothing the page
+can see.
 
 **A host lets the body be wide.** The matrix needs the page's width, and a site that caps
 the children of an article at a reading measure (`.prose > * { max-width: 44rem }`) caps
@@ -533,7 +543,9 @@ elsewhere. Where the file names a matrix that lies beside it, the page writes it
 `matrix.js`, which loads from disk too: it adds the matrix to a list,
 `SENTIER_DIAGNOSTICS_MATRICES`, with the address it was loaded from, and a page takes the
 entry of the script it names and no other, so that several pages in one document each take
-their own. A site serving `matrix.json` needs nothing else, as
+their own. An entry of that script under another query (a host's `matrix.js?v=3`) is taken
+where it is this file's matrix: the check against the file, not the address, keeps a stale
+one out. A site serving `matrix.json` needs nothing else, as
 the page fetches it over HTTP. Served over HTTP the page can also read `?file=...`, and it
 opens a file a reader chooses (read in the browser, sent nowhere). **For one step and the whole way, the page works out no class, no direction and no count
 of its own.** It reads them from the file, which the validator has checked, and only adds
@@ -570,10 +582,14 @@ host's page each part carries the page's key, so that the page never reads the h
 parts and two pages never take each other's: the host's name for it (`data-sd-key`), else
 `sd.` for the first page mounted and `sd2.`, `sd3.` … for the next (`#sd.step=<id>`). A
 host's name is a plain word (a letter, then up to 39 letters, digits, `-` or `_`), not `sd`
-or `sdN`, and not the key of another page in the document; the page refuses any other and
-says why. A page mounted in place of one that was removed takes the key it left, so an
-address made before the host drew the page again still opens it; a host that draws pages
-again while the old ones are still in the document names them. Every part the page does not
+or `sdN`, and not the key of another page mounted in the document that has not left it; the
+page refuses any other and says why. A page built and mounted before the host puts it in
+holds its key from then on, so two pages mounted before either is put in take two keys. A
+page mounted in place of one that was in the document and left it takes the key it left,
+so an address made before the host drew the page again still opens it, and releases the
+page it replaces (its listeners on the window and the document). A host that draws pages
+again while the old ones are still in the document, or takes a page out and puts it back
+later, names them. Every part the page does not
 own is kept as it was. An
 address naming a step the file does not have, steps apart, or a run the page cannot judge
 (no matrix), says so and shows the whole way. Below

@@ -638,7 +638,9 @@
     if (!root || root.getAttribute('data-sd-mounted') !== null) return null;
     root.setAttribute('data-sd-mounted', '');
     given = given || {};
-    var doc = root.ownerDocument || global.document;
+    // the document the page lives in: its root's, but for a root a host built from a
+    // <template>, whose document is inert (no window) until the host puts it in the page's
+    var doc = root.ownerDocument && root.ownerDocument.defaultView ? root.ownerDocument : global.document;
     var win = global;
     var standalone = root.getAttribute('data-sd-standalone') !== null;
     var base = root.getAttribute('data-sd-base') || '';
@@ -1998,6 +2000,20 @@
       for (var i = list.length - 1; i >= 0; i--) if (list[i] && list[i].src && list[i].src === address) return list[i].matrix;
       return null;
     }
+    // Before loading: this file's matrix among the entries of the script named, at its
+    // address or at it with another query or fragment (a host that put `matrix.js?v=3` in
+    // its page to pass a cache). The check against the file keeps a stale matrix out, not
+    // the address, which is as likely the stale copy. Where none is this file's, the entry at
+    // the very address is taken (and refused, and said why); with none, the script is loaded.
+    function handedFor(address) {
+      var list = Array.isArray(win.SENTIER_DIAGNOSTICS_MATRICES) ? win.SENTIER_DIAGNOSTICS_MATRICES : [];
+      var file = address.split(/[?#]/)[0];
+      for (var i = list.length - 1; i >= 0; i--) {
+        var entry = list[i];
+        if (entry && typeof entry.src === 'string' && entry.src.split(/[?#]/)[0] === file && !checkMatrix(entry.matrix, D)) return entry.matrix;
+      }
+      return handedAt(address);
+    }
     // the address a name beside the page is loaded from, as a script's `src` reads it
     function addressOf(name) {
       var a = doc.createElement('a');
@@ -2022,7 +2038,7 @@
       }
       if (!safeName(name)) { refuseMatrix('its name is not a plain file name beside the page'); return; }
       if (/\.js$/.test(name)) {
-        var there = handedAt(addressOf(name)); // a host that put the script in its page itself
+        var there = handedFor(addressOf(name)); // a host that put the script in its page itself
         if (there) { takeMatrix(there); return; }
       }
       matrix.state = 'loading';
@@ -2144,27 +2160,46 @@
     // two pages on one item. The page refuses it and says why. A page put in place of one
     // that was removed takes the key that page left, so that an address made before a host
     // drew it again still opens it; a host that draws two pages at once names them.
+    //
+    // A key is left only by a page that was in the document and is no longer: a page a host
+    // builds before it puts it in keeps its key, so two pages built and mounted before
+    // either is put in take two keys. The page that takes a left key releases the page that
+    // left it (its listeners on the window and the document), so a host that draws its page
+    // again and again does not keep every page it drew.
     var OWN_PARTS = ['step', 'steps', 'item'];
     var keyProblem = null;
+    var keyHeld = null; // this page's entry in the list of keys: its root, whether it was seen in the document, how to release it
+    var teardown = [];
+    var released = false;
+    function release() { released = true; while (teardown.length) teardown.pop()(); }
+    // the page is in the document: from now on, a page that finds it gone may take its key
+    function present() { if (keyHeld && root.isConnected !== false) keyHeld.seen = true; }
     var KEY = (function () {
       var keys = win.SENTIER_DIAGNOSTICS_KEYS = win.SENTIER_DIAGNOSTICS_KEYS || {};
       function free(key) {
-        var holder = keys[key];
-        return !holder || holder === root || holder.isConnected === false;
+        var held = keys[key];
+        if (!held || held.root === root) return true;
+        if (held.root.isConnected !== false) { held.seen = true; return false; }
+        return !!held.seen;
+      }
+      function take(key) {
+        var left = keys[key];
+        if (left && left.root !== root && left.release) left.release();
+        keys[key] = keyHeld = { root: root, seen: root.isConnected !== false, release: release };
+        return key + '.';
       }
       var named = root.getAttribute('data-sd-key');
       if (named !== null) {
         if (!KEY_WORD.test(named)) keyProblem = 'The page\'s key, data-sd-key="' + named + '", is not a plain word: a letter, then up to ' + (KEY_LONGEST - 1) + ' letters, digits, - or _. An address could not hold it.';
         else if (OWN_KEY.test(named)) keyProblem = 'The page\'s key, data-sd-key="' + named + '", is one the page gives a page the host names none for (sd, sd2 ...): name it otherwise.';
-        else if (!free(named)) keyProblem = 'Another page in this document has the key data-sd-key="' + named + '": two pages with one key open on each other\'s items. Give each its own.';
+        else if (!free(named)) keyProblem = 'Another page mounted here has the key data-sd-key="' + named + '" and has not left the document: two pages with one key open on each other\'s items. Give each its own.';
         if (keyProblem) return null;
-        keys[named] = root;
-        return named + '.';
+        return take(named);
       }
       if (standalone) return '';
       for (var n = 1; ; n++) {
         var key = 'sd' + (n > 1 ? n : '');
-        if (free(key)) { keys[key] = root; return key + '.'; }
+        if (free(key)) return take(key);
       }
     })();
     function hashList() {
@@ -2205,6 +2240,7 @@
       return { set: set.sort(function (a, b) { return a - b; }), unknown: unknown };
     }
     function setHash(item) {
+      present();
       var said = [], k = kNow();
       if (isSet(k)) said.push(KEY + 'steps=' + setText(view.set));
       else if (k < D.steps.length) said.push(KEY + 'step=' + encodeURIComponent(D.steps[k].id));
@@ -2280,6 +2316,7 @@
     // the address, read: what it names is chosen; what it names that the file does not have,
     // or that cannot be judged now, is said, and the whole way shown
     function route() {
+      present();
       if (!D) return;
       var parts = hashParts();
       var wanted = allSteps(), said = '';
@@ -2345,14 +2382,33 @@
     // dark ground and no ink gets the light ink. A host that sets neither keeps the light
     // colours, the ground set with the ink. Read again when the reader's colour scheme
     // changes, as a host's tokens may follow it.
+    // The page's own mark sets only its own tokens (`--sd-*`), never `--ink`, `--surface` or
+    // `color-scheme`, so the host's are read with the mark in place, and the mark is changed
+    // only where the answer changed: a host that watches the page sees nothing for a reading
+    // that found what it found before.
     function matchScheme() {
       var style = win.getComputedStyle ? win.getComputedStyle(root) : null;
       if (!style || !style.getPropertyValue) return;
-      root.removeAttribute('data-sd-scheme');
       var dark = schemeIsDark(tokenColour(style, '--ink'), tokenColour(style, '--surface'), function (text) {
         return luminance(text, doc);
       });
+      if (dark === (root.getAttribute('data-sd-scheme') === 'dark')) return;
       if (dark) root.setAttribute('data-sd-scheme', 'dark');
+      else root.removeAttribute('data-sd-scheme');
+    }
+
+    // What the scheme is read from, read without changing anything: the host's two tokens as
+    // the browser computes them (another var() in them already put in), the colour scheme
+    // they may resolve by (light-dark(), a system colour), and the reader's. Null for a page
+    // out of the document, which has no host to read.
+    var DARK_READER = '(prefers-color-scheme: dark)';
+    function schemeSign() {
+      if (root.isConnected === false || !win.getComputedStyle) return null;
+      var style = win.getComputedStyle(root);
+      if (!style || !style.getPropertyValue) return null;
+      var reader = win.matchMedia ? win.matchMedia(DARK_READER) : null;
+      return [style.getPropertyValue('--ink'), style.getPropertyValue('--surface'),
+        style.getPropertyValue('color-scheme'), reader && reader.matches ? 'dark' : 'light'].join('\n');
     }
 
     // A host's colour token as the browser resolves it, set on a probe in the page, so that
@@ -2379,20 +2435,54 @@
       return got[0] === got[1] ? got[0] : null;
     }
 
-    // Read the scheme again when the reader's colour scheme changes, and when the host
-    // switches its theme by a class or an attribute of the page or of anything around it.
+    // A listener on the window or the document, taken off when the page is released.
+    function listen(target, type, react, capture) {
+      if (!target || !target.addEventListener) return;
+      target.addEventListener(type, react, capture);
+      teardown.push(function () { if (target.removeEventListener) target.removeEventListener(type, react, capture); });
+    }
+
+    // Look again whenever the host may have switched its theme: the reader's colour scheme
+    // changed, the document changed (a class or an attribute anywhere, an element put in or
+    // taken out, the page itself put in after it was built), or a stylesheet finished
+    // loading. Watched: the document and every shadow root the page sits in. A look reads
+    // only what the scheme is read from (schemeSign), once a frame however much changed,
+    // and reads the scheme itself only where that changed. So the page's own probes, and a
+    // host's observer that answers them, end after one look. Not seen: a rule a host adds
+    // or edits through the CSS object model alone, which changes nothing in the document.
+    var WATCHED = { attributes: true, childList: true, subtree: true };
     function followScheme() {
-      if (win.matchMedia) {
-        var scheme = win.matchMedia('(prefers-color-scheme: dark)');
-        if (scheme && scheme.addEventListener) scheme.addEventListener('change', matchScheme);
+      var last = schemeSign(), queued = false, watch = null;
+      var frame = win.requestAnimationFrame ? function (f) { win.requestAnimationFrame(f); } : function (f) { f(); };
+      function tops() { // the document, and each shadow root from the page's out to it
+        var out = [doc];
+        for (var node = root; node && node.getRootNode; ) {
+          var top = node.getRootNode();
+          if (!top || top === doc || !top.host) break;
+          out.push(top);
+          node = top.host;
+        }
+        return out;
       }
-      if (!win.MutationObserver) return;
-      var watch = new win.MutationObserver(function () {
-        if (root.isConnected === false) { watch.disconnect(); return; }
+      function observe() { if (watch) tops().forEach(function (top) { watch.observe(top, WATCHED); }); }
+      function look() {
+        queued = false;
+        if (released) return;
+        var sign = schemeSign();
+        if (sign === null) return;
+        present();
+        if (sign === last) return;
+        last = sign;
+        observe(); // put in, or moved: the shadow roots it now sits in
         matchScheme();
-      });
-      watch.observe(root, { attributes: true, attributeFilter: ['class', 'style'] });
-      for (var up = root.parentNode; up && up.nodeType === 1; up = up.parentNode) watch.observe(up, { attributes: true });
+      }
+      function later() { if (!queued && !released) { queued = true; frame(look); } }
+      if (win.matchMedia) listen(win.matchMedia(DARK_READER), 'change', later);
+      listen(doc, 'load', later, true);
+      if (!win.MutationObserver) return;
+      watch = new win.MutationObserver(later);
+      observe();
+      teardown.push(function () { watch.disconnect(); });
     }
 
     function start() {
@@ -2466,7 +2556,7 @@
         q(name).addEventListener('click', openFrom);
         q(name).addEventListener('keydown', function (e) { if (e.key === 'Enter') openFrom(e); else moveRow(e); });
       });
-      win.addEventListener('hashchange', route);
+      listen(win, 'hashchange', route);
       q('file').addEventListener('change', function (e) {
         var file = e.target.files[0];
         if (!file) return;
