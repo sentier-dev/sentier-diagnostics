@@ -751,6 +751,60 @@ class Summary(unittest.TestCase):
         unescaped = lambda line: len(re.findall(r"(?<!\\)\|", line))  # noqa: E731
         self.assertEqual(unescaped(row), unescaped(header))
 
+    def test_every_text_is_escaped_in_every_place_the_summary_writes_it(self):
+        """Each text of the file gets its own mark, `*tN*`; written without `md` at any one
+        place, the mark shows raw there (issue 17: removing `md` from 9 of its 14 places
+        failed no test)."""
+        data = example.build()
+        marks = iter(range(100))
+        mark = lambda: f"- *t{next(marks)}* @x"  # noqa: E731
+        data["title"], data["about"], data["notes"] = mark(), mark(), [mark(), mark()]
+        data["indicator"] = {"one": mark(), "many": mark()}
+        data["item"]["many"] = mark()
+        data["indicators"][0]["short"] = mark()
+        data["indicators"][1]["short"], data["indicators"][1]["name"] = None, mark()
+        for state in data["states"]:
+            state["label"] = mark()
+        data["states"][0]["join"]["note"] = mark()
+        noisy = next(s for s in data["states"] if (s.get("noise") or {}).get("between"))
+        noisy["noise"]["between"] = [mark(), mark()]
+        for step in data["steps"]:
+            step["label"], step["kind"] = mark(), f"*k{next(marks)}*"
+        self.assertEqual(fileformat.errors(data), [])
+        said = summary.text(data)
+        for n in range(next(marks)):
+            with self.subTest(n):
+                raw = next(f"*{p}{n}*" for p in "tk" if f"*{p}{n}*" in json.dumps(data))
+                self.assertNotIn(raw, said)
+                self.assertIn(summary.md(raw), said)
+        # each place: a state's label in the states, the join, both ends, the rule and the floors
+        published = summary.md(data["states"][0]["label"])
+        for place in ("States: " + published, "Read into " + published, f"The whole way: {published} → ",
+                      f"- {published}: exact", "median size in " + published):  # fmt: skip
+            self.assertIn(place, said)
+
+    def test_a_text_shows_as_written_and_makes_nothing_of_its_own(self):
+        """What GitHub makes of a text pasted into a pull request: a list, a rule, code, a
+        link, an emoji, an issue, a mention, maths. Each case below was rendered by GitHub's
+        Markdown API (`gh api markdown`, mode gfm) on 17 November 2026, at the start of a
+        line, after `- `, after `# ` and in a table cell: each showed as written and made
+        nothing, a commit's hash aside, which GitHub links to that commit."""
+        j, s = "⁠", " "
+        cases = {
+            "---": "\\---", "===": "\\===", "- a": "\\- a", "+ a": "\\+ a", "* a": "\\* a",
+            "1. a": "1\\. a", "12) a": "12\\) a", "2026 was": "2026 was", "    code": s * 4 + "code",
+            "https://a.org": f"https:{j}//a.org", "www.a.org": f"www{j}.a.org", "WWW.A.org": f"WWW{j}.A.org",
+            "mailto:a@b.org": f"mailto:{j}a@{j}b.org", ":warning:": f":{j}warning:{j}",
+            "#1": f"\\#{j}1", "GH-1": f"GH{j}-1", "o/r/issues/1": f"o/r/issues/{j}1", "@team": f"@{j}team",
+            "$x$": f"{j}\\$x{j}\\$", "a|b": "a\\|b", "&amp;": "\\&amp;", "<b>": "\\<b\\>",
+            "high-level": "high-level", "a857d60": "a857d60",
+        }  # fmt: skip
+        shown = lambda md: re.sub(r"\\(.)", r"\1", md.replace(j, "")).replace(s, " ")  # noqa: E731
+        for text, md in cases.items():
+            with self.subTest(text):
+                self.assertEqual(summary.md(text), md)
+                self.assertEqual(shown(summary.md(text)), text)
+
 
 class Verdicts(unittest.TestCase):
     """How a pair is held against its claim (SPEC 6; issues 3, 12 and 16)."""

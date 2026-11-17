@@ -757,7 +757,11 @@ Every explanation with its origin badge; the rule with its tolerances, noise, fl
 notes.
 
 Counts are also printed as Markdown by `sentier-diagnostics summary FILE`, for a pull
-request or a reader without JavaScript.
+request or a reader without JavaScript. Each text of the file shows there as written and
+makes nothing of its own: no column, emphasis, link, list, rule, code or heading in
+Markdown, and on GitHub no mention, issue reference, emoji or maths (a word joiner, which
+shows as nothing, breaks those). A commit's hash is left whole: GitHub links it to that
+commit of the repository, a target the file cannot choose.
 
 ## 11. Acceptance cases
 
@@ -812,7 +816,7 @@ are plain ASCII decimals; `build` and `check` end in one line on ordinary mistak
 a traceback: every value of a description is of the kind the build reads, checked with its
 place before a table is opened (a fuzz test of every value of a description), and a value
 of another kind is refused, never read as something else (`"no"` as explained); the summary escapes the file's texts in
-Markdown; noise is taken beyond the floor, and a scope entry read from tables without
+Markdown at every place it writes one (each case rendered by GitHub's Markdown API); noise is taken beyond the floor, and a scope entry read from tables without
 `expect` may move; the page draws the example whole under Node with a small stand-in for
 the DOM (`tests/js/dom.js`), loads nothing from elsewhere and writes no markup from data;
 the page takes the matrix the Python writes and refuses one of another file, loads it as a

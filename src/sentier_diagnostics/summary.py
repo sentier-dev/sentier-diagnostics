@@ -8,10 +8,18 @@ from collections.abc import Mapping
 from . import chain, claims, fileformat, rule
 
 MOVES_ORDER = [k for k in rule.CLASSES if k in rule.MOVES]
-#: The characters that make Markdown of a text where it stands in a line (GitHub's flavour
-#: included: `|` adds a table column, `#12` links an issue, `$` starts maths). Each is
-#: escaped with a backslash, which CommonMark allows before any ASCII punctuation.
+#: The characters that make Markdown of a text where it stands in a line: emphasis, code,
+#: a link, HTML, an entity, a table column (`|`). Each is escaped with a backslash, which
+#: CommonMark allows before any ASCII punctuation.
 _MARKUP = re.compile(r"([\\`*_\[\]<>#!|~&$])")
+#: What starts a block where a text starts a line, or follows a list's `- `: a list (`-`,
+#: `+`, `1.`, `1)`), a rule (`---`) or a heading's underline (`===`). Escaped the same way.
+_START = re.compile(r"^(?:([-+=])|(\d{1,9})(?=[.)]))")
+#: What GitHub reads in the text Markdown has already shown, where a backslash no longer
+#: counts: a mention (`@`), an issue (`#1`, `GH-1`, `/issues/1`), an emoji (`:x:`), a link
+#: (`https:`, `mailto:`, `www.`) and maths (`$`). A word joiner (U+2060), which shows as
+#: nothing, follows each and breaks it.
+_JOIN = re.compile(r"([:#@]|/(?=\d)|(?i:www)(?=\.)|(?i:gh)(?=-\d))")
 
 
 def _n(value) -> str:
@@ -19,16 +27,28 @@ def _n(value) -> str:
 
 
 def md(text) -> str:
-    r"""A text from a file as Markdown that shows it as it is: no table column, emphasis,
-    link, markup or heading of its own, and an `@` that mentions nobody (a word joiner
-    follows it). The summary is pasted into pull requests, where a mention notifies.
+    r"""A text from a file as Markdown that shows it as it is, on GitHub too: no table
+    column, emphasis, link, list, rule, code, maths, emoji or heading of its own, no issue
+    it refers to and nobody it mentions. The summary is pasted into pull requests, where a
+    mention notifies and a reference marks the issue. Leading spaces stay, as no-break
+    spaces (four would make code).
+
+    A commit's hash is left whole: GitHub links it to that commit of the repository it is
+    pasted in, a target the file cannot choose, and a hash is copied to be used. The word
+    joiners go with a copied text.
 
     >>> print(md("fix|x <b>[a](b)</b> *now*"))
     fix\|x \<b\>\[a\](b)\</b\> \*now\*
-    >>> md("@team") == "@\u2060team"
+    >>> print(md("- 1. ---"), md("12) a"), md("2026 was"))
+    \- 1. --- 12\) a 2026 was
+    >>> md("@team #1 $x$ https://a.org") == "@\u2060team \\#\u20601 \u2060\\$x\u2060\\$ https:\u2060//a.org"
     True
     """
-    return _MARKUP.sub(r"\\\1", str(text)).replace("@", "@\u2060")
+    text = str(text)
+    lead = len(text) - len(text.lstrip(" "))
+    text = _JOIN.sub("\\1\u2060", "\u00a0" * lead + text[lead:]).replace("$", "\u2060$")
+    text = _MARKUP.sub(r"\\\1", text)
+    return _START.sub(lambda m: "\\" + m.group(1) if m.group(1) else m.group(2) + "\\", text)
 
 
 def noise_text(noise: Mapping, names: Mapping[str, str], ends: int | None = None) -> str:
