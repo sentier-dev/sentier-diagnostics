@@ -1542,6 +1542,50 @@
 "why": "the band edge at 10.0"
 },
 {
+"after": 20.0,
+"band": "up, factor over 10",
+"before": 1.0,
+"class": "beyond 10x",
+"direction": "up",
+"floor": 0.9999999999999998,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": 1.0,
+"band": "down, factor over 10",
+"before": 20.0,
+"class": "beyond 10x",
+"direction": "down",
+"floor": 0.9999999999999998,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -20.0,
+"band": "down, factor over 10",
+"before": -1.0,
+"class": "beyond 10x",
+"direction": "down",
+"floor": 0.9999999999999998,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -1.0,
+"band": "up, factor over 10",
+"before": -20.0,
+"class": "beyond 10x",
+"direction": "up",
+"floor": 0.9999999999999998,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
 "after": 5.0,
 "band": "up, factor 2-10",
 "before": 1.0,
@@ -1550,7 +1594,7 @@
 "floor": 0.9999999999999998,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 1.0,
@@ -1561,7 +1605,7 @@
 "floor": 0.9999999999999998,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -5.0,
@@ -1572,7 +1616,7 @@
 "floor": 0.9999999999999998,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -1.0,
@@ -1583,13 +1627,13 @@
 "floor": 0.9999999999999998,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 0.5,
-"band": null,
+"band": "down, factor 1.25-2",
 "before": 1.0,
-"class": "zero result",
+"class": "differs",
 "direction": "down",
 "floor": 0.9999999999999998,
 "noise": null,
@@ -1598,9 +1642,9 @@
 },
 {
 "after": 1.0,
-"band": null,
+"band": "up, factor 1.25-2",
 "before": 0.5,
-"class": "zero reference",
+"class": "differs",
 "direction": "up",
 "floor": 0.9999999999999998,
 "noise": null,
@@ -1609,9 +1653,9 @@
 },
 {
 "after": -0.5,
-"band": null,
+"band": "up, factor 1.25-2",
 "before": -1.0,
-"class": "zero result",
+"class": "differs",
 "direction": "up",
 "floor": 0.9999999999999998,
 "noise": null,
@@ -1620,9 +1664,9 @@
 },
 {
 "after": -1.0,
-"band": null,
+"band": "down, factor 1.25-2",
 "before": -0.5,
-"class": "zero reference",
+"class": "differs",
 "direction": "down",
 "floor": 0.9999999999999998,
 "noise": null,
@@ -1674,6 +1718,50 @@
 "why": "across the floor within the tolerance"
 },
 {
+"after": 20.0,
+"band": "up, factor over 10",
+"before": 1.0,
+"class": "beyond 10x",
+"direction": "up",
+"floor": 0.9999999999999999,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": 1.0,
+"band": "down, factor over 10",
+"before": 20.0,
+"class": "beyond 10x",
+"direction": "down",
+"floor": 0.9999999999999999,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -20.0,
+"band": "down, factor over 10",
+"before": -1.0,
+"class": "beyond 10x",
+"direction": "down",
+"floor": 0.9999999999999999,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -1.0,
+"band": "up, factor over 10",
+"before": -20.0,
+"class": "beyond 10x",
+"direction": "up",
+"floor": 0.9999999999999999,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
 "after": 5.0,
 "band": "up, factor 2-10",
 "before": 1.0,
@@ -1682,7 +1770,7 @@
 "floor": 0.9999999999999999,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 1.0,
@@ -1693,7 +1781,7 @@
 "floor": 0.9999999999999999,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -5.0,
@@ -1704,7 +1792,7 @@
 "floor": 0.9999999999999999,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -1.0,
@@ -1715,13 +1803,13 @@
 "floor": 0.9999999999999999,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 0.5,
-"band": null,
+"band": "down, factor 1.25-2",
 "before": 1.0,
-"class": "zero result",
+"class": "differs",
 "direction": "down",
 "floor": 0.9999999999999999,
 "noise": null,
@@ -1730,9 +1818,9 @@
 },
 {
 "after": 1.0,
-"band": null,
+"band": "up, factor 1.25-2",
 "before": 0.5,
-"class": "zero reference",
+"class": "differs",
 "direction": "up",
 "floor": 0.9999999999999999,
 "noise": null,
@@ -1741,9 +1829,9 @@
 },
 {
 "after": -0.5,
-"band": null,
+"band": "up, factor 1.25-2",
 "before": -1.0,
-"class": "zero result",
+"class": "differs",
 "direction": "up",
 "floor": 0.9999999999999999,
 "noise": null,
@@ -1752,9 +1840,9 @@
 },
 {
 "after": -1.0,
-"band": null,
+"band": "down, factor 1.25-2",
 "before": -0.5,
-"class": "zero reference",
+"class": "differs",
 "direction": "down",
 "floor": 0.9999999999999999,
 "noise": null,
@@ -1804,50 +1892,94 @@
 "noise": null,
 "tolerance": 1e-05,
 "why": "across the floor within the tolerance"
+},
+{
+"after": 20.0,
+"band": null,
+"before": 1.0,
+"class": "zero reference",
+"direction": "up",
+"floor": 1.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": 1.0,
+"band": null,
+"before": 20.0,
+"class": "zero result",
+"direction": "down",
+"floor": 1.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -20.0,
+"band": null,
+"before": -1.0,
+"class": "zero reference",
+"direction": "down",
+"floor": 1.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -1.0,
+"band": null,
+"before": -20.0,
+"class": "zero result",
+"direction": "up",
+"floor": 1.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
 },
 {
 "after": 5.0,
-"band": null,
+"band": "up, factor 2-10",
 "before": 1.0,
-"class": "zero reference",
+"class": "differs",
 "direction": "up",
 "floor": 1.0,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 1.0,
-"band": null,
+"band": "down, factor 2-10",
 "before": 5.0,
-"class": "zero result",
+"class": "differs",
 "direction": "down",
 "floor": 1.0,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -5.0,
-"band": null,
+"band": "down, factor 2-10",
 "before": -1.0,
-"class": "zero reference",
+"class": "differs",
 "direction": "down",
 "floor": 1.0,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -1.0,
-"band": null,
+"band": "up, factor 2-10",
 "before": -5.0,
-"class": "zero result",
+"class": "differs",
 "direction": "up",
 "floor": 1.0,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 0.5,
@@ -1936,50 +2068,94 @@
 "noise": null,
 "tolerance": 1e-05,
 "why": "across the floor within the tolerance"
+},
+{
+"after": 20.0,
+"band": null,
+"before": 1.0,
+"class": "zero reference",
+"direction": "up",
+"floor": 1.0000000000000002,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": 1.0,
+"band": null,
+"before": 20.0,
+"class": "zero result",
+"direction": "down",
+"floor": 1.0000000000000002,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -20.0,
+"band": null,
+"before": -1.0,
+"class": "zero reference",
+"direction": "down",
+"floor": 1.0000000000000002,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -1.0,
+"band": null,
+"before": -20.0,
+"class": "zero result",
+"direction": "up",
+"floor": 1.0000000000000002,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
 },
 {
 "after": 5.0,
-"band": null,
+"band": "up, factor 2-10",
 "before": 1.0,
-"class": "zero reference",
+"class": "differs",
 "direction": "up",
 "floor": 1.0000000000000002,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 1.0,
-"band": null,
+"band": "down, factor 2-10",
 "before": 5.0,
-"class": "zero result",
+"class": "differs",
 "direction": "down",
 "floor": 1.0000000000000002,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -5.0,
-"band": null,
+"band": "down, factor 2-10",
 "before": -1.0,
-"class": "zero reference",
+"class": "differs",
 "direction": "down",
 "floor": 1.0000000000000002,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -1.0,
-"band": null,
+"band": "up, factor 2-10",
 "before": -5.0,
-"class": "zero result",
+"class": "differs",
 "direction": "up",
 "floor": 1.0000000000000002,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 0.5,
@@ -2068,50 +2244,94 @@
 "noise": null,
 "tolerance": 1e-05,
 "why": "across the floor within the tolerance"
+},
+{
+"after": 20.0,
+"band": null,
+"before": 1.0,
+"class": "zero reference",
+"direction": "up",
+"floor": 1.0000000000000004,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": 1.0,
+"band": null,
+"before": 20.0,
+"class": "zero result",
+"direction": "down",
+"floor": 1.0000000000000004,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -20.0,
+"band": null,
+"before": -1.0,
+"class": "zero reference",
+"direction": "down",
+"floor": 1.0000000000000004,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -1.0,
+"band": null,
+"before": -20.0,
+"class": "zero result",
+"direction": "up",
+"floor": 1.0000000000000004,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
 },
 {
 "after": 5.0,
-"band": null,
+"band": "up, factor 2-10",
 "before": 1.0,
-"class": "zero reference",
+"class": "differs",
 "direction": "up",
 "floor": 1.0000000000000004,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 1.0,
-"band": null,
+"band": "down, factor 2-10",
 "before": 5.0,
-"class": "zero result",
+"class": "differs",
 "direction": "down",
 "floor": 1.0000000000000004,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -5.0,
-"band": null,
+"band": "down, factor 2-10",
 "before": -1.0,
-"class": "zero reference",
+"class": "differs",
 "direction": "down",
 "floor": 1.0000000000000004,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -1.0,
-"band": null,
+"band": "up, factor 2-10",
 "before": -5.0,
-"class": "zero result",
+"class": "differs",
 "direction": "up",
 "floor": 1.0000000000000004,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 0.5,
@@ -2200,6 +2420,226 @@
 "noise": null,
 "tolerance": 1e-05,
 "why": "across the floor within the tolerance"
+},
+{
+"after": 9.999999999999996,
+"band": "up, factor 2-10",
+"before": 1.0,
+"class": "differs",
+"direction": "up",
+"floor": 1.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 1.0,
+"band": "down, factor 2-10",
+"before": 9.999999999999996,
+"class": "differs",
+"direction": "down",
+"floor": 1.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -9.999999999999996,
+"band": "down, factor 2-10",
+"before": -1.0,
+"class": "differs",
+"direction": "down",
+"floor": 1.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -1.0,
+"band": "up, factor 2-10",
+"before": -9.999999999999996,
+"class": "differs",
+"direction": "up",
+"floor": 1.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 9.999999999999998,
+"band": "up, factor 2-10",
+"before": 1.0,
+"class": "differs",
+"direction": "up",
+"floor": 1.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 1.0,
+"band": "down, factor 2-10",
+"before": 9.999999999999998,
+"class": "differs",
+"direction": "down",
+"floor": 1.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -9.999999999999998,
+"band": "down, factor 2-10",
+"before": -1.0,
+"class": "differs",
+"direction": "down",
+"floor": 1.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -1.0,
+"band": "up, factor 2-10",
+"before": -9.999999999999998,
+"class": "differs",
+"direction": "up",
+"floor": 1.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 10.0,
+"band": "up, factor 2-10",
+"before": 1.0,
+"class": "differs",
+"direction": "up",
+"floor": 1.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 1.0,
+"band": "down, factor 2-10",
+"before": 10.0,
+"class": "differs",
+"direction": "down",
+"floor": 1.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -10.0,
+"band": "down, factor 2-10",
+"before": -1.0,
+"class": "differs",
+"direction": "down",
+"floor": 1.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -1.0,
+"band": "up, factor 2-10",
+"before": -10.0,
+"class": "differs",
+"direction": "up",
+"floor": 1.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 10.000000000000002,
+"band": null,
+"before": 1.0,
+"class": "zero reference",
+"direction": "up",
+"floor": 1.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 1.0,
+"band": null,
+"before": 10.000000000000002,
+"class": "zero result",
+"direction": "down",
+"floor": 1.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -10.000000000000002,
+"band": null,
+"before": -1.0,
+"class": "zero reference",
+"direction": "down",
+"floor": 1.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -1.0,
+"band": null,
+"before": -10.000000000000002,
+"class": "zero result",
+"direction": "up",
+"floor": 1.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 10.000000000000004,
+"band": null,
+"before": 1.0,
+"class": "zero reference",
+"direction": "up",
+"floor": 1.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 1.0,
+"band": null,
+"before": 10.000000000000004,
+"class": "zero result",
+"direction": "down",
+"floor": 1.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -10.000000000000004,
+"band": null,
+"before": -1.0,
+"class": "zero reference",
+"direction": "down",
+"floor": 1.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -1.0,
+"band": null,
+"before": -10.000000000000004,
+"class": "zero result",
+"direction": "up",
+"floor": 1.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
 },
 {
 "after": -1.0000000000000004,
@@ -4138,6 +4578,50 @@
 "why": "the band edge at 10.0"
 },
 {
+"after": 7.4e-11,
+"band": "up, factor over 10",
+"before": 3.7e-12,
+"class": "beyond 10x",
+"direction": "up",
+"floor": 3.699999999999998e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": 3.7e-12,
+"band": "down, factor over 10",
+"before": 7.4e-11,
+"class": "beyond 10x",
+"direction": "down",
+"floor": 3.699999999999998e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -7.4e-11,
+"band": "down, factor over 10",
+"before": -3.7e-12,
+"class": "beyond 10x",
+"direction": "down",
+"floor": 3.699999999999998e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -3.7e-12,
+"band": "up, factor over 10",
+"before": -7.4e-11,
+"class": "beyond 10x",
+"direction": "up",
+"floor": 3.699999999999998e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
 "after": 1.85e-11,
 "band": "up, factor 2-10",
 "before": 3.7e-12,
@@ -4146,7 +4630,7 @@
 "floor": 3.699999999999998e-12,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 3.7e-12,
@@ -4157,7 +4641,7 @@
 "floor": 3.699999999999998e-12,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -1.85e-11,
@@ -4168,7 +4652,7 @@
 "floor": 3.699999999999998e-12,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -3.7e-12,
@@ -4179,13 +4663,13 @@
 "floor": 3.699999999999998e-12,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 1.85e-12,
-"band": null,
+"band": "down, factor 1.25-2",
 "before": 3.7e-12,
-"class": "zero result",
+"class": "differs",
 "direction": "down",
 "floor": 3.699999999999998e-12,
 "noise": null,
@@ -4194,9 +4678,9 @@
 },
 {
 "after": 3.7e-12,
-"band": null,
+"band": "up, factor 1.25-2",
 "before": 1.85e-12,
-"class": "zero reference",
+"class": "differs",
 "direction": "up",
 "floor": 3.699999999999998e-12,
 "noise": null,
@@ -4205,9 +4689,9 @@
 },
 {
 "after": -1.85e-12,
-"band": null,
+"band": "up, factor 1.25-2",
 "before": -3.7e-12,
-"class": "zero result",
+"class": "differs",
 "direction": "up",
 "floor": 3.699999999999998e-12,
 "noise": null,
@@ -4216,9 +4700,9 @@
 },
 {
 "after": -3.7e-12,
-"band": null,
+"band": "down, factor 1.25-2",
 "before": -1.85e-12,
-"class": "zero reference",
+"class": "differs",
 "direction": "down",
 "floor": 3.699999999999998e-12,
 "noise": null,
@@ -4270,6 +4754,50 @@
 "why": "across the floor within the tolerance"
 },
 {
+"after": 7.4e-11,
+"band": "up, factor over 10",
+"before": 3.7e-12,
+"class": "beyond 10x",
+"direction": "up",
+"floor": 3.699999999999999e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": 3.7e-12,
+"band": "down, factor over 10",
+"before": 7.4e-11,
+"class": "beyond 10x",
+"direction": "down",
+"floor": 3.699999999999999e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -7.4e-11,
+"band": "down, factor over 10",
+"before": -3.7e-12,
+"class": "beyond 10x",
+"direction": "down",
+"floor": 3.699999999999999e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -3.7e-12,
+"band": "up, factor over 10",
+"before": -7.4e-11,
+"class": "beyond 10x",
+"direction": "up",
+"floor": 3.699999999999999e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
 "after": 1.85e-11,
 "band": "up, factor 2-10",
 "before": 3.7e-12,
@@ -4278,7 +4806,7 @@
 "floor": 3.699999999999999e-12,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 3.7e-12,
@@ -4289,7 +4817,7 @@
 "floor": 3.699999999999999e-12,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -1.85e-11,
@@ -4300,7 +4828,7 @@
 "floor": 3.699999999999999e-12,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -3.7e-12,
@@ -4311,13 +4839,13 @@
 "floor": 3.699999999999999e-12,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 1.85e-12,
-"band": null,
+"band": "down, factor 1.25-2",
 "before": 3.7e-12,
-"class": "zero result",
+"class": "differs",
 "direction": "down",
 "floor": 3.699999999999999e-12,
 "noise": null,
@@ -4326,9 +4854,9 @@
 },
 {
 "after": 3.7e-12,
-"band": null,
+"band": "up, factor 1.25-2",
 "before": 1.85e-12,
-"class": "zero reference",
+"class": "differs",
 "direction": "up",
 "floor": 3.699999999999999e-12,
 "noise": null,
@@ -4337,9 +4865,9 @@
 },
 {
 "after": -1.85e-12,
-"band": null,
+"band": "up, factor 1.25-2",
 "before": -3.7e-12,
-"class": "zero result",
+"class": "differs",
 "direction": "up",
 "floor": 3.699999999999999e-12,
 "noise": null,
@@ -4348,9 +4876,9 @@
 },
 {
 "after": -3.7e-12,
-"band": null,
+"band": "down, factor 1.25-2",
 "before": -1.85e-12,
-"class": "zero reference",
+"class": "differs",
 "direction": "down",
 "floor": 3.699999999999999e-12,
 "noise": null,
@@ -4400,50 +4928,94 @@
 "noise": null,
 "tolerance": 1e-05,
 "why": "across the floor within the tolerance"
+},
+{
+"after": 7.4e-11,
+"band": null,
+"before": 3.7e-12,
+"class": "zero reference",
+"direction": "up",
+"floor": 3.7e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": 3.7e-12,
+"band": null,
+"before": 7.4e-11,
+"class": "zero result",
+"direction": "down",
+"floor": 3.7e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -7.4e-11,
+"band": null,
+"before": -3.7e-12,
+"class": "zero reference",
+"direction": "down",
+"floor": 3.7e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -3.7e-12,
+"band": null,
+"before": -7.4e-11,
+"class": "zero result",
+"direction": "up",
+"floor": 3.7e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
 },
 {
 "after": 1.85e-11,
-"band": null,
+"band": "up, factor 2-10",
 "before": 3.7e-12,
-"class": "zero reference",
+"class": "differs",
 "direction": "up",
 "floor": 3.7e-12,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 3.7e-12,
-"band": null,
+"band": "down, factor 2-10",
 "before": 1.85e-11,
-"class": "zero result",
+"class": "differs",
 "direction": "down",
 "floor": 3.7e-12,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -1.85e-11,
-"band": null,
+"band": "down, factor 2-10",
 "before": -3.7e-12,
-"class": "zero reference",
+"class": "differs",
 "direction": "down",
 "floor": 3.7e-12,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -3.7e-12,
-"band": null,
+"band": "up, factor 2-10",
 "before": -1.85e-11,
-"class": "zero result",
+"class": "differs",
 "direction": "up",
 "floor": 3.7e-12,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 1.85e-12,
@@ -4532,50 +5104,94 @@
 "noise": null,
 "tolerance": 1e-05,
 "why": "across the floor within the tolerance"
+},
+{
+"after": 7.4e-11,
+"band": null,
+"before": 3.7e-12,
+"class": "zero reference",
+"direction": "up",
+"floor": 3.700000000000001e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": 3.7e-12,
+"band": null,
+"before": 7.4e-11,
+"class": "zero result",
+"direction": "down",
+"floor": 3.700000000000001e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -7.4e-11,
+"band": null,
+"before": -3.7e-12,
+"class": "zero reference",
+"direction": "down",
+"floor": 3.700000000000001e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -3.7e-12,
+"band": null,
+"before": -7.4e-11,
+"class": "zero result",
+"direction": "up",
+"floor": 3.700000000000001e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
 },
 {
 "after": 1.85e-11,
-"band": null,
+"band": "up, factor 2-10",
 "before": 3.7e-12,
-"class": "zero reference",
+"class": "differs",
 "direction": "up",
 "floor": 3.700000000000001e-12,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 3.7e-12,
-"band": null,
+"band": "down, factor 2-10",
 "before": 1.85e-11,
-"class": "zero result",
+"class": "differs",
 "direction": "down",
 "floor": 3.700000000000001e-12,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -1.85e-11,
-"band": null,
+"band": "down, factor 2-10",
 "before": -3.7e-12,
-"class": "zero reference",
+"class": "differs",
 "direction": "down",
 "floor": 3.700000000000001e-12,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -3.7e-12,
-"band": null,
+"band": "up, factor 2-10",
 "before": -1.85e-11,
-"class": "zero result",
+"class": "differs",
 "direction": "up",
 "floor": 3.700000000000001e-12,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 1.85e-12,
@@ -4664,50 +5280,94 @@
 "noise": null,
 "tolerance": 1e-05,
 "why": "across the floor within the tolerance"
+},
+{
+"after": 7.4e-11,
+"band": null,
+"before": 3.7e-12,
+"class": "zero reference",
+"direction": "up",
+"floor": 3.700000000000002e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": 3.7e-12,
+"band": null,
+"before": 7.4e-11,
+"class": "zero result",
+"direction": "down",
+"floor": 3.700000000000002e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -7.4e-11,
+"band": null,
+"before": -3.7e-12,
+"class": "zero reference",
+"direction": "down",
+"floor": 3.700000000000002e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -3.7e-12,
+"band": null,
+"before": -7.4e-11,
+"class": "zero result",
+"direction": "up",
+"floor": 3.700000000000002e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
 },
 {
 "after": 1.85e-11,
-"band": null,
+"band": "up, factor 2-10",
 "before": 3.7e-12,
-"class": "zero reference",
+"class": "differs",
 "direction": "up",
 "floor": 3.700000000000002e-12,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 3.7e-12,
-"band": null,
+"band": "down, factor 2-10",
 "before": 1.85e-11,
-"class": "zero result",
+"class": "differs",
 "direction": "down",
 "floor": 3.700000000000002e-12,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -1.85e-11,
-"band": null,
+"band": "down, factor 2-10",
 "before": -3.7e-12,
-"class": "zero reference",
+"class": "differs",
 "direction": "down",
 "floor": 3.700000000000002e-12,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -3.7e-12,
-"band": null,
+"band": "up, factor 2-10",
 "before": -1.85e-11,
-"class": "zero result",
+"class": "differs",
 "direction": "up",
 "floor": 3.700000000000002e-12,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 1.85e-12,
@@ -4796,6 +5456,226 @@
 "noise": null,
 "tolerance": 1e-05,
 "why": "across the floor within the tolerance"
+},
+{
+"after": 3.699999999999999e-11,
+"band": "up, factor 2-10",
+"before": 3.7e-12,
+"class": "differs",
+"direction": "up",
+"floor": 3.7e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 3.7e-12,
+"band": "down, factor 2-10",
+"before": 3.699999999999999e-11,
+"class": "differs",
+"direction": "down",
+"floor": 3.7e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -3.699999999999999e-11,
+"band": "down, factor 2-10",
+"before": -3.7e-12,
+"class": "differs",
+"direction": "down",
+"floor": 3.7e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -3.7e-12,
+"band": "up, factor 2-10",
+"before": -3.699999999999999e-11,
+"class": "differs",
+"direction": "up",
+"floor": 3.7e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 3.6999999999999995e-11,
+"band": "up, factor 2-10",
+"before": 3.7e-12,
+"class": "differs",
+"direction": "up",
+"floor": 3.7e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 3.7e-12,
+"band": "down, factor 2-10",
+"before": 3.6999999999999995e-11,
+"class": "differs",
+"direction": "down",
+"floor": 3.7e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -3.6999999999999995e-11,
+"band": "down, factor 2-10",
+"before": -3.7e-12,
+"class": "differs",
+"direction": "down",
+"floor": 3.7e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -3.7e-12,
+"band": "up, factor 2-10",
+"before": -3.6999999999999995e-11,
+"class": "differs",
+"direction": "up",
+"floor": 3.7e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 3.7e-11,
+"band": "up, factor 2-10",
+"before": 3.7e-12,
+"class": "differs",
+"direction": "up",
+"floor": 3.7e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 3.7e-12,
+"band": "down, factor 2-10",
+"before": 3.7e-11,
+"class": "differs",
+"direction": "down",
+"floor": 3.7e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -3.7e-11,
+"band": "down, factor 2-10",
+"before": -3.7e-12,
+"class": "differs",
+"direction": "down",
+"floor": 3.7e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -3.7e-12,
+"band": "up, factor 2-10",
+"before": -3.7e-11,
+"class": "differs",
+"direction": "up",
+"floor": 3.7e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 3.700000000000001e-11,
+"band": null,
+"before": 3.7e-12,
+"class": "zero reference",
+"direction": "up",
+"floor": 3.7e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 3.7e-12,
+"band": null,
+"before": 3.700000000000001e-11,
+"class": "zero result",
+"direction": "down",
+"floor": 3.7e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -3.700000000000001e-11,
+"band": null,
+"before": -3.7e-12,
+"class": "zero reference",
+"direction": "down",
+"floor": 3.7e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -3.7e-12,
+"band": null,
+"before": -3.700000000000001e-11,
+"class": "zero result",
+"direction": "up",
+"floor": 3.7e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 3.7000000000000014e-11,
+"band": null,
+"before": 3.7e-12,
+"class": "zero reference",
+"direction": "up",
+"floor": 3.7e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 3.7e-12,
+"band": null,
+"before": 3.7000000000000014e-11,
+"class": "zero result",
+"direction": "down",
+"floor": 3.7e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -3.7000000000000014e-11,
+"band": null,
+"before": -3.7e-12,
+"class": "zero reference",
+"direction": "down",
+"floor": 3.7e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -3.7e-12,
+"band": null,
+"before": -3.7000000000000014e-11,
+"class": "zero result",
+"direction": "up",
+"floor": 3.7e-12,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
 },
 {
 "after": -3.700000000000002e-12,
@@ -6734,6 +7614,50 @@
 "why": "the band edge at 10.0"
 },
 {
+"after": 5000000000.0,
+"band": "up, factor over 10",
+"before": 250000000.0,
+"class": "beyond 10x",
+"direction": "up",
+"floor": 249999999.99999994,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": 250000000.0,
+"band": "down, factor over 10",
+"before": 5000000000.0,
+"class": "beyond 10x",
+"direction": "down",
+"floor": 249999999.99999994,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -5000000000.0,
+"band": "down, factor over 10",
+"before": -250000000.0,
+"class": "beyond 10x",
+"direction": "down",
+"floor": 249999999.99999994,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -250000000.0,
+"band": "up, factor over 10",
+"before": -5000000000.0,
+"class": "beyond 10x",
+"direction": "up",
+"floor": 249999999.99999994,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
 "after": 1250000000.0,
 "band": "up, factor 2-10",
 "before": 250000000.0,
@@ -6742,7 +7666,7 @@
 "floor": 249999999.99999994,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 250000000.0,
@@ -6753,7 +7677,7 @@
 "floor": 249999999.99999994,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -1250000000.0,
@@ -6764,7 +7688,7 @@
 "floor": 249999999.99999994,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -250000000.0,
@@ -6775,13 +7699,13 @@
 "floor": 249999999.99999994,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 125000000.0,
-"band": null,
+"band": "down, factor 1.25-2",
 "before": 250000000.0,
-"class": "zero result",
+"class": "differs",
 "direction": "down",
 "floor": 249999999.99999994,
 "noise": null,
@@ -6790,9 +7714,9 @@
 },
 {
 "after": 250000000.0,
-"band": null,
+"band": "up, factor 1.25-2",
 "before": 125000000.0,
-"class": "zero reference",
+"class": "differs",
 "direction": "up",
 "floor": 249999999.99999994,
 "noise": null,
@@ -6801,9 +7725,9 @@
 },
 {
 "after": -125000000.0,
-"band": null,
+"band": "up, factor 1.25-2",
 "before": -250000000.0,
-"class": "zero result",
+"class": "differs",
 "direction": "up",
 "floor": 249999999.99999994,
 "noise": null,
@@ -6812,9 +7736,9 @@
 },
 {
 "after": -250000000.0,
-"band": null,
+"band": "down, factor 1.25-2",
 "before": -125000000.0,
-"class": "zero reference",
+"class": "differs",
 "direction": "down",
 "floor": 249999999.99999994,
 "noise": null,
@@ -6866,6 +7790,50 @@
 "why": "across the floor within the tolerance"
 },
 {
+"after": 5000000000.0,
+"band": "up, factor over 10",
+"before": 250000000.0,
+"class": "beyond 10x",
+"direction": "up",
+"floor": 249999999.99999997,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": 250000000.0,
+"band": "down, factor over 10",
+"before": 5000000000.0,
+"class": "beyond 10x",
+"direction": "down",
+"floor": 249999999.99999997,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -5000000000.0,
+"band": "down, factor over 10",
+"before": -250000000.0,
+"class": "beyond 10x",
+"direction": "down",
+"floor": 249999999.99999997,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -250000000.0,
+"band": "up, factor over 10",
+"before": -5000000000.0,
+"class": "beyond 10x",
+"direction": "up",
+"floor": 249999999.99999997,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
 "after": 1250000000.0,
 "band": "up, factor 2-10",
 "before": 250000000.0,
@@ -6874,7 +7842,7 @@
 "floor": 249999999.99999997,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 250000000.0,
@@ -6885,7 +7853,7 @@
 "floor": 249999999.99999997,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -1250000000.0,
@@ -6896,7 +7864,7 @@
 "floor": 249999999.99999997,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -250000000.0,
@@ -6907,13 +7875,13 @@
 "floor": 249999999.99999997,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 125000000.0,
-"band": null,
+"band": "down, factor 1.25-2",
 "before": 250000000.0,
-"class": "zero result",
+"class": "differs",
 "direction": "down",
 "floor": 249999999.99999997,
 "noise": null,
@@ -6922,9 +7890,9 @@
 },
 {
 "after": 250000000.0,
-"band": null,
+"band": "up, factor 1.25-2",
 "before": 125000000.0,
-"class": "zero reference",
+"class": "differs",
 "direction": "up",
 "floor": 249999999.99999997,
 "noise": null,
@@ -6933,9 +7901,9 @@
 },
 {
 "after": -125000000.0,
-"band": null,
+"band": "up, factor 1.25-2",
 "before": -250000000.0,
-"class": "zero result",
+"class": "differs",
 "direction": "up",
 "floor": 249999999.99999997,
 "noise": null,
@@ -6944,9 +7912,9 @@
 },
 {
 "after": -250000000.0,
-"band": null,
+"band": "down, factor 1.25-2",
 "before": -125000000.0,
-"class": "zero reference",
+"class": "differs",
 "direction": "down",
 "floor": 249999999.99999997,
 "noise": null,
@@ -6996,50 +7964,94 @@
 "noise": null,
 "tolerance": 1e-05,
 "why": "across the floor within the tolerance"
+},
+{
+"after": 5000000000.0,
+"band": null,
+"before": 250000000.0,
+"class": "zero reference",
+"direction": "up",
+"floor": 250000000.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": 250000000.0,
+"band": null,
+"before": 5000000000.0,
+"class": "zero result",
+"direction": "down",
+"floor": 250000000.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -5000000000.0,
+"band": null,
+"before": -250000000.0,
+"class": "zero reference",
+"direction": "down",
+"floor": 250000000.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -250000000.0,
+"band": null,
+"before": -5000000000.0,
+"class": "zero result",
+"direction": "up",
+"floor": 250000000.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
 },
 {
 "after": 1250000000.0,
-"band": null,
+"band": "up, factor 2-10",
 "before": 250000000.0,
-"class": "zero reference",
+"class": "differs",
 "direction": "up",
 "floor": 250000000.0,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 250000000.0,
-"band": null,
+"band": "down, factor 2-10",
 "before": 1250000000.0,
-"class": "zero result",
+"class": "differs",
 "direction": "down",
 "floor": 250000000.0,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -1250000000.0,
-"band": null,
+"band": "down, factor 2-10",
 "before": -250000000.0,
-"class": "zero reference",
+"class": "differs",
 "direction": "down",
 "floor": 250000000.0,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -250000000.0,
-"band": null,
+"band": "up, factor 2-10",
 "before": -1250000000.0,
-"class": "zero result",
+"class": "differs",
 "direction": "up",
 "floor": 250000000.0,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 125000000.0,
@@ -7128,50 +8140,94 @@
 "noise": null,
 "tolerance": 1e-05,
 "why": "across the floor within the tolerance"
+},
+{
+"after": 5000000000.0,
+"band": null,
+"before": 250000000.0,
+"class": "zero reference",
+"direction": "up",
+"floor": 250000000.00000003,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": 250000000.0,
+"band": null,
+"before": 5000000000.0,
+"class": "zero result",
+"direction": "down",
+"floor": 250000000.00000003,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -5000000000.0,
+"band": null,
+"before": -250000000.0,
+"class": "zero reference",
+"direction": "down",
+"floor": 250000000.00000003,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -250000000.0,
+"band": null,
+"before": -5000000000.0,
+"class": "zero result",
+"direction": "up",
+"floor": 250000000.00000003,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
 },
 {
 "after": 1250000000.0,
-"band": null,
+"band": "up, factor 2-10",
 "before": 250000000.0,
-"class": "zero reference",
+"class": "differs",
 "direction": "up",
 "floor": 250000000.00000003,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 250000000.0,
-"band": null,
+"band": "down, factor 2-10",
 "before": 1250000000.0,
-"class": "zero result",
+"class": "differs",
 "direction": "down",
 "floor": 250000000.00000003,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -1250000000.0,
-"band": null,
+"band": "down, factor 2-10",
 "before": -250000000.0,
-"class": "zero reference",
+"class": "differs",
 "direction": "down",
 "floor": 250000000.00000003,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -250000000.0,
-"band": null,
+"band": "up, factor 2-10",
 "before": -1250000000.0,
-"class": "zero result",
+"class": "differs",
 "direction": "up",
 "floor": 250000000.00000003,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 125000000.0,
@@ -7260,50 +8316,94 @@
 "noise": null,
 "tolerance": 1e-05,
 "why": "across the floor within the tolerance"
+},
+{
+"after": 5000000000.0,
+"band": null,
+"before": 250000000.0,
+"class": "zero reference",
+"direction": "up",
+"floor": 250000000.00000006,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": 250000000.0,
+"band": null,
+"before": 5000000000.0,
+"class": "zero result",
+"direction": "down",
+"floor": 250000000.00000006,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -5000000000.0,
+"band": null,
+"before": -250000000.0,
+"class": "zero reference",
+"direction": "down",
+"floor": 250000000.00000006,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
+},
+{
+"after": -250000000.0,
+"band": null,
+"before": -5000000000.0,
+"class": "zero result",
+"direction": "up",
+"floor": 250000000.00000006,
+"noise": null,
+"tolerance": 1e-05,
+"why": "the floor before"
 },
 {
 "after": 1250000000.0,
-"band": null,
+"band": "up, factor 2-10",
 "before": 250000000.0,
-"class": "zero reference",
+"class": "differs",
 "direction": "up",
 "floor": 250000000.00000006,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 250000000.0,
-"band": null,
+"band": "down, factor 2-10",
 "before": 1250000000.0,
-"class": "zero result",
+"class": "differs",
 "direction": "down",
 "floor": 250000000.00000006,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -1250000000.0,
-"band": null,
+"band": "down, factor 2-10",
 "before": -250000000.0,
-"class": "zero reference",
+"class": "differs",
 "direction": "down",
 "floor": 250000000.00000006,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": -250000000.0,
-"band": null,
+"band": "up, factor 2-10",
 "before": -1250000000.0,
-"class": "zero result",
+"class": "differs",
 "direction": "up",
 "floor": 250000000.00000006,
 "noise": null,
 "tolerance": 1e-05,
-"why": "the floor before"
+"why": "the floor before, within ten times"
 },
 {
 "after": 125000000.0,
@@ -7392,6 +8492,226 @@
 "noise": null,
 "tolerance": 1e-05,
 "why": "across the floor within the tolerance"
+},
+{
+"after": 2499999999.999999,
+"band": "up, factor 2-10",
+"before": 250000000.0,
+"class": "differs",
+"direction": "up",
+"floor": 250000000.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 250000000.0,
+"band": "down, factor 2-10",
+"before": 2499999999.999999,
+"class": "differs",
+"direction": "down",
+"floor": 250000000.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -2499999999.999999,
+"band": "down, factor 2-10",
+"before": -250000000.0,
+"class": "differs",
+"direction": "down",
+"floor": 250000000.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -250000000.0,
+"band": "up, factor 2-10",
+"before": -2499999999.999999,
+"class": "differs",
+"direction": "up",
+"floor": 250000000.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 2499999999.9999995,
+"band": "up, factor 2-10",
+"before": 250000000.0,
+"class": "differs",
+"direction": "up",
+"floor": 250000000.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 250000000.0,
+"band": "down, factor 2-10",
+"before": 2499999999.9999995,
+"class": "differs",
+"direction": "down",
+"floor": 250000000.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -2499999999.9999995,
+"band": "down, factor 2-10",
+"before": -250000000.0,
+"class": "differs",
+"direction": "down",
+"floor": 250000000.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -250000000.0,
+"band": "up, factor 2-10",
+"before": -2499999999.9999995,
+"class": "differs",
+"direction": "up",
+"floor": 250000000.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 2500000000.0,
+"band": "up, factor 2-10",
+"before": 250000000.0,
+"class": "differs",
+"direction": "up",
+"floor": 250000000.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 250000000.0,
+"band": "down, factor 2-10",
+"before": 2500000000.0,
+"class": "differs",
+"direction": "down",
+"floor": 250000000.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -2500000000.0,
+"band": "down, factor 2-10",
+"before": -250000000.0,
+"class": "differs",
+"direction": "down",
+"floor": 250000000.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -250000000.0,
+"band": "up, factor 2-10",
+"before": -2500000000.0,
+"class": "differs",
+"direction": "up",
+"floor": 250000000.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 2500000000.0000005,
+"band": null,
+"before": 250000000.0,
+"class": "zero reference",
+"direction": "up",
+"floor": 250000000.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 250000000.0,
+"band": null,
+"before": 2500000000.0000005,
+"class": "zero result",
+"direction": "down",
+"floor": 250000000.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -2500000000.0000005,
+"band": null,
+"before": -250000000.0,
+"class": "zero reference",
+"direction": "down",
+"floor": 250000000.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -250000000.0,
+"band": null,
+"before": -2500000000.0000005,
+"class": "zero result",
+"direction": "up",
+"floor": 250000000.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 2500000000.000001,
+"band": null,
+"before": 250000000.0,
+"class": "zero reference",
+"direction": "up",
+"floor": 250000000.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": 250000000.0,
+"band": null,
+"before": 2500000000.000001,
+"class": "zero result",
+"direction": "down",
+"floor": 250000000.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -2500000000.000001,
+"band": null,
+"before": -250000000.0,
+"class": "zero reference",
+"direction": "down",
+"floor": 250000000.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
+},
+{
+"after": -250000000.0,
+"band": null,
+"before": -2500000000.000001,
+"class": "zero result",
+"direction": "up",
+"floor": 250000000.0,
+"noise": null,
+"tolerance": 1e-05,
+"why": "across the floor at ten times"
 },
 {
 "after": -250000000.00000006,

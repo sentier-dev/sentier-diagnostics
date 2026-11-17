@@ -37,8 +37,8 @@
     'within noise': 'they differ by no more than two builds of one state do',
     'differs': 'the results differ',
     'beyond 10x': 'one result is more than ten times the size of the other',
-    'zero reference': 'the result before is zero or within the floor; the result after is not',
-    'zero result': 'the result after is zero or within the floor; the result before is not',
+    'zero reference': 'the result before is zero or within the floor, the result after is not, and they are not of one sign within ten times',
+    'zero result': 'the result after is zero or within the floor, the result before is not, and they are not of one sign within ten times',
     'sign change': 'the two results have different signs',
     'near zero': 'both results are within their floor: their ratio says nothing',
     'missing': 'a side has no result; it is not read as zero'
@@ -268,10 +268,11 @@
     var gap = size ? Math.abs(after - before) / size : 0;
     if (sameSign && gap <= tolerance) return 'agrees';
     if (sameSign && noise && gap <= noise) return 'within noise';
-    if (smallBefore) return 'zero reference';
-    if (smallAfter) return 'zero result';
+    var beyond = size > BEYOND_FACTOR * Math.min(Math.abs(before), Math.abs(after));
+    // across the floor: to or from zero only where there is no ratio within ten times
+    if ((smallBefore || smallAfter) && (beyond || !sameSign)) return smallBefore ? 'zero reference' : 'zero result';
     if (!sameSign) return 'sign change';
-    if (size > BEYOND_FACTOR * Math.min(Math.abs(before), Math.abs(after))) return 'beyond 10x';
+    if (beyond) return 'beyond 10x';
     return 'differs';
   }
   function judge(before, after, floor, tolerance, noise) {
@@ -1729,7 +1730,7 @@
 
     function renderRule() {
       var body = clear(q('rule-body'));
-      body.appendChild(el('p', null, ['Every value is put into one class by one rule, in this order: missing, near zero, agrees, within noise (both only where the two share a sign), zero reference, zero result, sign change, beyond 10x, differs. ' +
+      body.appendChild(el('p', null, ['Every value is put into one class by one rule, in this order: missing, near zero, agrees, within noise (both only where the two share a sign), zero reference, zero result, sign change, beyond 10x, differs. A pair of one sign that crosses the floor and stays within ten times is classed by its ratio: it did not go to or from zero. ' +
         'Direction is up where the result after is larger as a signed number, down otherwise; colour follows the direction only. ' +
         'Beyond 10x: one size more than ' + D.rule.beyond + ' times the other. The whole way is counted with a tolerance of ' + D.rule.total_tolerance + ', the largest of the steps, and noise ' + totalNoiseSaid() + '. ' +
         'Noise belongs to a state: how far two builds of it differ. A step, a run of steps and the whole way are compared with the sum of the noise of their two ends, since rebuilding both moves the difference by up to the sum; a state inside a run adds nothing, as the pair holds none of its results. The published results are exact. ' +

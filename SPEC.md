@@ -270,8 +270,8 @@ class. The classes are tried in this order; the first that holds is the class:
 | near zero | both sides lie within the floor | no |
 | agrees | they share a sign and differ by no more than the tolerance, relative to the larger size | no |
 | within noise | they share a sign and differ by more, but by no more than the step's measured noise | no |
-| zero reference | the side before lies within the floor, the side after does not | yes |
-| zero result | the side after lies within the floor, the side before does not | yes |
+| zero reference | the side before lies within the floor, the side after does not, and they have no ratio within ten times (the side before is zero, of the other sign, or more than ten times smaller) | yes |
+| zero result | the side after lies within the floor, the side before does not, and they have no ratio within ten times | yes |
 | sign change | both lie beyond the floor and have different signs | yes |
 | beyond 10x | one size is more than ten times the other (exactly ten is not beyond) | yes |
 | differs | any other difference | yes |
@@ -282,8 +282,15 @@ by solver noise is not a change (A26). A pair beyond the floor on both sides is 
 before; only a pair that crosses the floor by no more than the tolerance or the noise is
 affected.
 
+A pair of one sign that crosses the floor and stays within ten times is classed by its
+ratio, as differs: 0.0101 and 0.0099 at a floor of 0.01 differ by 2 %, and neither went to
+zero (A31). Only where the two have no such ratio (a zero, another sign, or a side more than
+ten times smaller than the other) did the result go to or from zero. The edge is the edge of
+beyond 10x, so the classes meet there and nowhere else.
+
 No class blanks a value, sets it to zero or calls it agreement. Both results are always
-kept. A ratio is taken only where both sides lie beyond the floor and share a sign. How far
+kept. A ratio is taken only where both sides share a sign and, where one lies within the
+floor, the two lie within ten times of each other. How far
 two sizes lie apart is the |log10| of their factor; where the factor is too large or too
 small for a float (1e-300 and 1e300), the difference of their logarithms, in Python and on
 the page alike (A27).
@@ -766,6 +773,7 @@ the page script (`tests/js/page.test.js`), so the two cannot drift apart unnotic
 | A28 | A move within the noise of its step was counted as "differs" over the whole way, which judged without noise | sentier-agribalyse | `StateNoise` (a move within the noise of an end), node "the whole way and a run take the noise of their two ends" |
 | A29 | A run of steps judged by the page has the classes and counts of the Python reference, item by item, is refused where its steps disagree with the file, and steps apart are refused; the page's rule agrees with the Python's on every edge, to the last bit | review of PR 22 | `Together`, `Boundaries`, `tests/fixtures/together.json`, `tests/fixtures/boundaries.json`, node "a run judged by the page", "every edge of the rule", "refuses a run", "steps apart are refused" |
 | A30 | The noise of a state inside a run or the whole way, taken as the largest of any step, put 1,504 of 2,451 real differences "within noise"; a comparison now takes the sum of the noise of its two ends, never an inner state's | sentier-agribalyse | `StateNoise`, `Together` (sum of two measured ends), node "two states are compared with the sum of their noise", "a run is judged with the sum of the noise of its two ends" |
+| A31 | A pair of one sign across the floor was a zero result whatever its ratio: 0.0101 → 0.0099 at a floor of 0.01 (2 %) ranked above 1.0 → 50.0; it is now classed by its ratio where the two lie within ten times | issue #38 | cases A31-*, `Boundaries` ("across the floor at ten times") |
 
 Also tested: the validator refuses a class, direction or verdict that contradicts the
 values, items out of order, counts that do not add up, unknown keys and other formats

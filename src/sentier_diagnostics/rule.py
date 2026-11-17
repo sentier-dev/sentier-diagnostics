@@ -11,16 +11,20 @@ and after. It gets exactly one class:
                      relative to the larger
     within noise     they share a sign and differ by more, but by no more than two builds
                      of one state do
-    zero reference   the side before lies within the floor, the side after does not
-    zero result      the side after lies within the floor, the side before does not
+    zero reference   the side before lies within the floor, the side after does not, and
+                     they have no ratio: the side before is zero, of the other sign, or
+                     more than ten times smaller
+    zero result      the same, the other way round: the side after went to zero
     sign change      both sides lie beyond the floor and have different signs
     beyond 10x       one side is more than ten times the size of the other
     differs          any other difference
 
 The classes are tried in this order; the first that holds is the class. So a pair on
 both sides of the floor that agrees is "agrees": crossing the floor by solver noise is not
-a change. No class blanks a value, sets it to zero or calls it agreement: the two results
-are always kept.
+a change. A pair of one sign that crosses the floor and stays within ten times is classed
+by its ratio like any other pair: 0.0101 and 0.0099 at a floor of 0.01 differ by 2 %, they
+did not go to zero. No class blanks a value, sets it to zero or calls it agreement: the two
+results are always kept.
 
 **Direction** has one rule: a pair that moved (`MOVES`) went up where the result after
 is larger than the result before, as signed numbers, and down otherwise. Two results
@@ -187,8 +191,10 @@ def classify(
     ('zero result', 'sign change', 'agrees')
     >>> classify(1.0, 1.02, noise=0.05), classify(1.0, 20.0), classify(-2.0, -4.0)
     ('within noise', 'beyond 10x', 'differs')
-    >>> classify(0.010000001, 0.009999999, floor=0.01), classify(0.02, 0.005, floor=0.01)
-    ('agrees', 'zero result')
+    >>> classify(0.010000001, 0.009999999, floor=0.01), classify(0.0101, 0.0099, floor=0.01)
+    ('agrees', 'differs')
+    >>> classify(0.2, 0.005, floor=0.01), classify(-0.2, 0.005, floor=0.01)
+    ('zero result', 'zero result')
     """
     if before is None or after is None:
         return MISSING
@@ -201,14 +207,14 @@ def classify(
         return AGREES
     if same_sign and noise and gap <= noise:
         return WITHIN_NOISE
-    if small_before:
-        return ZERO_REFERENCE
-    if small_after:
-        return ZERO_RESULT
+    larger, smaller = max(abs(before), abs(after)), min(abs(before), abs(after))
+    beyond = larger > BEYOND_FACTOR * smaller
+    # across the floor: to or from zero only where there is no ratio within ten times
+    if (small_before or small_after) and (beyond or not same_sign):
+        return ZERO_REFERENCE if small_before else ZERO_RESULT
     if not same_sign:
         return SIGN_CHANGE
-    larger, smaller = max(abs(before), abs(after)), min(abs(before), abs(after))
-    if larger > BEYOND_FACTOR * smaller:
+    if beyond:
         return BEYOND
     return DIFFERS
 
