@@ -337,6 +337,29 @@ test('a matrix of another file, or of another shape, is refused', () => {
   assert.match(page.checkMatrix(fewer, data), /says 10 items/);
 });
 
+test('a matrix that says other numbers of a listed item than its file is refused', () => {
+  // a matrix left over from another run of the same chain: same title, states, steps and count
+  const data = local();
+  const listed = data.items[0].id;
+  const at = full().items.findIndex((row) => row[0] === listed);
+  const tripled = full(); tripled.values[at] = tripled.values[at].map((v) => (typeof v === 'number' ? v * 3 : v));
+  assert.match(page.checkMatrix(tripled, data), new RegExp('item ' + listed + ', .*: its results or classes differ'));
+  const reclassed = full();
+  const code = reclassed.classes[at][0];
+  const other = [...reclassed.classes.join('')].find((c) => c !== code); // another class the matrix itself uses
+  reclassed.classes[at] = other + reclassed.classes[at].slice(1);
+  assert.match(page.checkMatrix(reclassed, data), /its results or classes differ/);
+  const renamed = full(); renamed.items[at][1] = 'Another name';
+  assert.match(page.checkMatrix(renamed, data), /its name, place, group or unit differ/);
+  const swapped = full(); swapped.items[at][0] = 'not-listed';
+  assert.match(page.checkMatrix(swapped, data), /1 of the items this file lists are not in it/);
+  // an item the file does not list has nothing to be held to
+  const unlisted = full();
+  const free = unlisted.items.findIndex((row) => !data.items.some((item) => item.id === row[0]));
+  unlisted.values[free] = unlisted.values[free].map((v) => (typeof v === 'number' ? v * 3 : v));
+  assert.equal(page.checkMatrix(unlisted, data), null);
+});
+
 test('the grid shows the listed items, says so, and every item once the matrix is here', () => {
   const data = local();
   const before = dom.page(data); // over file: the matrix.json the file names cannot be read

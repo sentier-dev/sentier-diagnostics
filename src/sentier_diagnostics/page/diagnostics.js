@@ -406,7 +406,33 @@
         for (var s = 0; s < said.length; s++) if (said[s] !== NO_CLAIM && !VERDICT_CODES.hasOwnProperty(said[s])) return 'item ' + row[0] + ': an unknown verdict code';
       }
     }
-    return null;
+    return listedDiffer(matrixRows(m, d), d);
+  }
+
+  // A matrix says of every item this file lists what the file says: its name, place, group and
+  // unit, its results, classes, directions and verdicts. A matrix left over from another run of
+  // the same chain has the same title, states, steps and count, and other numbers; the page
+  // would draw them in place of the file's.
+  function listedDiffer(rows, d) {
+    var ids = d.indicators.map(function (i) { return i.id; });
+    var found = 0;
+    for (var r = 0; r < rows.length; r++) {
+      var row = rows[r], item = row.item;
+      if (!item) continue;
+      found++;
+      if (row.name !== item.name || row.place !== item.place || row.group !== item.group || row.unit !== item.unit) {
+        return 'item ' + row.id + ': its name, place, group or unit differ from what this file lists';
+      }
+      for (var x = 0; x < ids.length; x++) {
+        var id = ids[x];
+        var verdicts = row.verdicts && item.verdicts ? sameList(row.verdicts[id], item.verdicts[id] || []) : !row.verdicts === !item.verdicts;
+        if (!sameList(row.values[id], item.values[id] || []) || !sameList(row.classes[id], item.classes[id] || []) ||
+            !sameList(row.directions[id], item.directions[id] || []) || !verdicts) {
+          return 'item ' + row.id + ', ' + id + ': its results or classes differ from what this file lists for it';
+        }
+      }
+    }
+    return found === d.items.length ? null : (d.items.length - found) + ' of the items this file lists are not in it';
   }
 
   // the rows of a checked matrix, in the shape of a listed item: values, classes, directions
