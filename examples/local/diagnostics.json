@@ -1,0 +1,1156 @@
+{
+ "format": "sentier-diagnostics/1",
+ "tier": "items",
+ "audience": "local",
+ "title": "A made-up chain: published results to the current build",
+ "about": "Made-up results of ten items in three indicators. Nobody's data.",
+ "item": {
+  "one": "product",
+  "many": "products"
+ },
+ "indicators": [
+  {
+   "id": "x:climate",
+   "name": "Climate change",
+   "short": "Climate",
+   "unit": "kg CO2 eq"
+  },
+  {
+   "id": "x:water",
+   "name": "Water use",
+   "short": "Water",
+   "unit": "m3"
+  },
+  {
+   "id": "x:tox",
+   "name": "Human toxicity",
+   "short": "Toxicity",
+   "unit": "CTUh"
+  }
+ ],
+ "rule": {
+  "floor_factor": 0.01,
+  "floors_from": "published",
+  "beyond": 10.0,
+  "total_tolerance": 0.0005,
+  "total_noise": {},
+  "floors": [
+   {
+    "indicator": "x:climate",
+    "unit": "MJ",
+    "value": 0.0003,
+    "basis": "median",
+    "n": 1
+   },
+   {
+    "indicator": "x:climate",
+    "unit": "h",
+    "value": 0.42,
+    "basis": "median",
+    "n": 1
+   },
+   {
+    "indicator": "x:climate",
+    "unit": "kg",
+    "value": 0.0049,
+    "basis": "median",
+    "n": 8
+   },
+   {
+    "indicator": "x:water",
+    "unit": "MJ",
+    "value": 4.000000000000001e-06,
+    "basis": "median",
+    "n": 1
+   },
+   {
+    "indicator": "x:water",
+    "unit": "h",
+    "value": 0.009000000000000001,
+    "basis": "median",
+    "n": 1
+   },
+   {
+    "indicator": "x:water",
+    "unit": "kg",
+    "value": 0.011000000000000001,
+    "basis": "median",
+    "n": 7
+   },
+   {
+    "indicator": "x:tox",
+    "unit": "MJ",
+    "value": 3e-11,
+    "basis": "median",
+    "n": 1
+   },
+   {
+    "indicator": "x:tox",
+    "unit": "h",
+    "value": 0.0,
+    "basis": "none",
+    "n": 0
+   },
+   {
+    "indicator": "x:tox",
+    "unit": "kg",
+    "value": 1.95e-09,
+    "basis": "median",
+    "n": 8
+   }
+  ]
+ },
+ "states": [
+  {
+   "id": "published",
+   "label": "Published",
+   "about": "What the publisher released.",
+   "kind": "published",
+   "identity": {
+    "release": "1.0"
+   },
+   "join": {
+    "compared": 10,
+    "unmatched": 1,
+    "ambiguous": 0,
+    "note": "One published row names no item of the build."
+   }
+  },
+  {
+   "id": "repro",
+   "label": "Recomputed",
+   "about": null,
+   "kind": "build",
+   "identity": {
+    "commit": "0000001"
+   },
+   "join": null,
+   "noise": {
+    "measured": false,
+    "between": null,
+    "by": null,
+    "note": null
+   }
+  },
+  {
+   "id": "fix-1",
+   "label": "With fix 1",
+   "about": null,
+   "kind": "build",
+   "identity": {
+    "commit": "0000002"
+   },
+   "join": null,
+   "noise": {
+    "measured": true,
+    "between": [
+     "fix-1",
+     "rebuilt"
+    ],
+    "by": {
+     "x:climate": 0.0,
+     "x:water": 0.02439024390243894,
+     "x:tox": 0.0
+    },
+    "note": "Two builds of commit 0000002, on two machines."
+   }
+  },
+  {
+   "id": "rebuilt",
+   "label": "Rebuilt",
+   "about": null,
+   "kind": "build",
+   "identity": {
+    "commit": "0000002",
+    "machine": "second"
+   },
+   "join": null,
+   "noise": {
+    "measured": true,
+    "between": [
+     "fix-1",
+     "rebuilt"
+    ],
+    "by": {
+     "x:climate": 0.0,
+     "x:water": 0.02439024390243894,
+     "x:tox": 0.0
+    },
+    "note": "Two builds of commit 0000002, on two machines."
+   }
+  },
+  {
+   "id": "mapping-2",
+   "label": "With mapping 2",
+   "about": null,
+   "kind": "build",
+   "identity": {
+    "commit": "0000003"
+   },
+   "join": null,
+   "noise": {
+    "measured": false,
+    "between": null,
+    "by": null,
+    "note": null
+   }
+  }
+ ],
+ "steps": [
+  {
+   "id": "step-0",
+   "from": "published",
+   "to": "repro",
+   "label": "Reproduction",
+   "about": "The released data computed again with the same method.",
+   "kind": "reproduction",
+   "explained": true,
+   "link": null,
+   "claim": {
+    "text": "Nothing moves beyond the rounding of the published results.",
+    "by": {
+     "kind": "code",
+     "name": "reproduction rule",
+     "model": null,
+     "run_by": null
+    },
+    "reach": null,
+    "scope": []
+   },
+   "tolerance": {
+    "value": 0.0005,
+    "basis": "published rounding",
+    "note": "four significant digits"
+   },
+   "noise": {
+    "measured": false,
+    "between": null,
+    "by": null,
+    "note": null
+   }
+  },
+  {
+   "id": "fix-1",
+   "from": "repro",
+   "to": "fix-1",
+   "label": "Fertiliser amounts of two cereals",
+   "about": "The nitrogen amounts of wheat and rice were per hectare, not per kilogram.",
+   "kind": "fix",
+   "explained": true,
+   "link": "https://example.org/findings/fix-1",
+   "claim": {
+    "text": "Wheat and rice go down in climate change, by 30 % at most. Nothing else moves.",
+    "by": {
+     "kind": "person",
+     "name": "A. Author",
+     "model": null,
+     "run_by": null
+    },
+    "reach": 2,
+    "scope": [
+     {
+      "indicators": [
+       "x:climate"
+      ],
+      "items": [
+       "p01",
+       "p05"
+      ],
+      "direction": "down",
+      "largest": 0.3,
+      "expect": "must"
+     }
+    ]
+   },
+   "tolerance": {
+    "value": 1e-05,
+    "basis": "default",
+    "note": "one order of magnitude above the solver noise of two builds"
+   },
+   "noise": {
+    "measured": true,
+    "between": null,
+    "by": {
+     "x:climate": 0.0,
+     "x:water": 0.02439024390243894,
+     "x:tox": 0.0
+    },
+    "note": null
+   }
+  },
+  {
+   "id": "rebuilt",
+   "from": "fix-1",
+   "to": "rebuilt",
+   "label": "Built again on another machine",
+   "about": "The same state, built on a second machine.",
+   "kind": "rebuild",
+   "explained": false,
+   "link": null,
+   "claim": null,
+   "tolerance": {
+    "value": 1e-05,
+    "basis": "default",
+    "note": "one order of magnitude above the solver noise of two builds"
+   },
+   "noise": {
+    "measured": true,
+    "between": null,
+    "by": {
+     "x:climate": 0.0,
+     "x:water": 0.04878048780487788,
+     "x:tox": 0.0
+    },
+    "note": null
+   }
+  },
+  {
+   "id": "mapping-2",
+   "from": "rebuilt",
+   "to": "mapping-2",
+   "label": "Mapping change 2",
+   "about": "Five items take another background dataset.",
+   "kind": "mapping",
+   "explained": true,
+   "link": null,
+   "claim": {
+    "text": "Items whose supply chain reaches the changed links may move in water use; maize must.",
+    "by": {
+     "kind": "code",
+     "name": "reach of the changed links",
+     "model": null,
+     "run_by": null
+    },
+    "reach": 4,
+    "scope": [
+     {
+      "indicators": [
+       "x:water"
+      ],
+      "items": [
+       "p02",
+       "p04",
+       "p07",
+       "p10"
+      ],
+      "direction": "any",
+      "largest": null,
+      "expect": "may"
+     },
+     {
+      "indicators": [
+       "x:water"
+      ],
+      "items": [
+       "p02"
+      ],
+      "direction": "up",
+      "largest": 0.5,
+      "expect": "must"
+     }
+    ]
+   },
+   "tolerance": {
+    "value": 1e-05,
+    "basis": "default",
+    "note": "one order of magnitude above the solver noise of two builds"
+   },
+   "noise": {
+    "measured": true,
+    "between": null,
+    "by": {
+     "x:climate": 0.0,
+     "x:water": 0.02439024390243894,
+     "x:tox": 0.0
+    },
+    "note": null
+   }
+  }
+ ],
+ "counts": {
+  "steps": {
+   "step-0": {
+    "x:climate": {
+     "pairs": 10,
+     "classes": {
+      "agrees": 10,
+      "within noise": 0,
+      "differs": 0,
+      "beyond 10x": 0,
+      "zero reference": 0,
+      "zero result": 0,
+      "sign change": 0,
+      "near zero": 0,
+      "missing": 0
+     },
+     "missing": {
+      "before": 0,
+      "after": 0,
+      "both": 0
+     },
+     "directions": {
+      "up": 0,
+      "down": 0
+     },
+     "bands": {
+      "down, factor over 10": 0,
+      "down, factor 2-10": 0,
+      "down, factor 1.25-2": 0,
+      "down, factor 1.1-1.25": 0,
+      "down, factor 1-1.1": 0,
+      "up, factor 1-1.1": 0,
+      "up, factor 1.1-1.25": 0,
+      "up, factor 1.25-2": 0,
+      "up, factor 2-10": 0,
+      "up, factor over 10": 0
+     },
+     "verdicts": {
+      "as claimed": 0,
+      "off claim": 0,
+      "not claimed": 0,
+      "claimed, not moved": 0,
+      "within noise": 0,
+      "unchanged": 10,
+      "not judged": 0
+     },
+     "closer": null,
+     "further": null
+    },
+    "x:water": {
+     "pairs": 10,
+     "classes": {
+      "agrees": 9,
+      "within noise": 0,
+      "differs": 0,
+      "beyond 10x": 0,
+      "zero reference": 0,
+      "zero result": 0,
+      "sign change": 0,
+      "near zero": 0,
+      "missing": 1
+     },
+     "missing": {
+      "before": 1,
+      "after": 0,
+      "both": 0
+     },
+     "directions": {
+      "up": 0,
+      "down": 0
+     },
+     "bands": {
+      "down, factor over 10": 0,
+      "down, factor 2-10": 0,
+      "down, factor 1.25-2": 0,
+      "down, factor 1.1-1.25": 0,
+      "down, factor 1-1.1": 0,
+      "up, factor 1-1.1": 0,
+      "up, factor 1.1-1.25": 0,
+      "up, factor 1.25-2": 0,
+      "up, factor 2-10": 0,
+      "up, factor over 10": 0
+     },
+     "verdicts": {
+      "as claimed": 0,
+      "off claim": 0,
+      "not claimed": 0,
+      "claimed, not moved": 0,
+      "within noise": 0,
+      "unchanged": 9,
+      "not judged": 1
+     },
+     "closer": null,
+     "further": null
+    },
+    "x:tox": {
+     "pairs": 10,
+     "classes": {
+      "agrees": 7,
+      "within noise": 0,
+      "differs": 1,
+      "beyond 10x": 0,
+      "zero reference": 0,
+      "zero result": 0,
+      "sign change": 0,
+      "near zero": 2,
+      "missing": 0
+     },
+     "missing": {
+      "before": 0,
+      "after": 0,
+      "both": 0
+     },
+     "directions": {
+      "up": 1,
+      "down": 0
+     },
+     "bands": {
+      "down, factor over 10": 0,
+      "down, factor 2-10": 0,
+      "down, factor 1.25-2": 0,
+      "down, factor 1.1-1.25": 0,
+      "down, factor 1-1.1": 0,
+      "up, factor 1-1.1": 1,
+      "up, factor 1.1-1.25": 0,
+      "up, factor 1.25-2": 0,
+      "up, factor 2-10": 0,
+      "up, factor over 10": 0
+     },
+     "verdicts": {
+      "as claimed": 0,
+      "off claim": 0,
+      "not claimed": 1,
+      "claimed, not moved": 0,
+      "within noise": 0,
+      "unchanged": 7,
+      "not judged": 2
+     },
+     "closer": null,
+     "further": null
+    }
+   },
+   "fix-1": {
+    "x:climate": {
+     "pairs": 10,
+     "classes": {
+      "agrees": 7,
+      "within noise": 0,
+      "differs": 3,
+      "beyond 10x": 0,
+      "zero reference": 0,
+      "zero result": 0,
+      "sign change": 0,
+      "near zero": 0,
+      "missing": 0
+     },
+     "missing": {
+      "before": 0,
+      "after": 0,
+      "both": 0
+     },
+     "directions": {
+      "up": 1,
+      "down": 2
+     },
+     "bands": {
+      "down, factor over 10": 0,
+      "down, factor 2-10": 0,
+      "down, factor 1.25-2": 1,
+      "down, factor 1.1-1.25": 1,
+      "down, factor 1-1.1": 0,
+      "up, factor 1-1.1": 0,
+      "up, factor 1.1-1.25": 1,
+      "up, factor 1.25-2": 0,
+      "up, factor 2-10": 0,
+      "up, factor over 10": 0
+     },
+     "verdicts": {
+      "as claimed": 1,
+      "off claim": 1,
+      "not claimed": 1,
+      "claimed, not moved": 0,
+      "within noise": 0,
+      "unchanged": 7,
+      "not judged": 0
+     },
+     "closer": 0,
+     "further": 3
+    },
+    "x:water": {
+     "pairs": 10,
+     "classes": {
+      "agrees": 10,
+      "within noise": 0,
+      "differs": 0,
+      "beyond 10x": 0,
+      "zero reference": 0,
+      "zero result": 0,
+      "sign change": 0,
+      "near zero": 0,
+      "missing": 0
+     },
+     "missing": {
+      "before": 0,
+      "after": 0,
+      "both": 0
+     },
+     "directions": {
+      "up": 0,
+      "down": 0
+     },
+     "bands": {
+      "down, factor over 10": 0,
+      "down, factor 2-10": 0,
+      "down, factor 1.25-2": 0,
+      "down, factor 1.1-1.25": 0,
+      "down, factor 1-1.1": 0,
+      "up, factor 1-1.1": 0,
+      "up, factor 1.1-1.25": 0,
+      "up, factor 1.25-2": 0,
+      "up, factor 2-10": 0,
+      "up, factor over 10": 0
+     },
+     "verdicts": {
+      "as claimed": 0,
+      "off claim": 0,
+      "not claimed": 0,
+      "claimed, not moved": 0,
+      "within noise": 0,
+      "unchanged": 10,
+      "not judged": 0
+     },
+     "closer": 0,
+     "further": 0
+    },
+    "x:tox": {
+     "pairs": 10,
+     "classes": {
+      "agrees": 8,
+      "within noise": 0,
+      "differs": 0,
+      "beyond 10x": 0,
+      "zero reference": 0,
+      "zero result": 0,
+      "sign change": 0,
+      "near zero": 2,
+      "missing": 0
+     },
+     "missing": {
+      "before": 0,
+      "after": 0,
+      "both": 0
+     },
+     "directions": {
+      "up": 0,
+      "down": 0
+     },
+     "bands": {
+      "down, factor over 10": 0,
+      "down, factor 2-10": 0,
+      "down, factor 1.25-2": 0,
+      "down, factor 1.1-1.25": 0,
+      "down, factor 1-1.1": 0,
+      "up, factor 1-1.1": 0,
+      "up, factor 1.1-1.25": 0,
+      "up, factor 1.25-2": 0,
+      "up, factor 2-10": 0,
+      "up, factor over 10": 0
+     },
+     "verdicts": {
+      "as claimed": 0,
+      "off claim": 0,
+      "not claimed": 0,
+      "claimed, not moved": 0,
+      "within noise": 0,
+      "unchanged": 8,
+      "not judged": 2
+     },
+     "closer": 0,
+     "further": 0
+    }
+   },
+   "rebuilt": {
+    "x:climate": {
+     "pairs": 10,
+     "classes": {
+      "agrees": 10,
+      "within noise": 0,
+      "differs": 0,
+      "beyond 10x": 0,
+      "zero reference": 0,
+      "zero result": 0,
+      "sign change": 0,
+      "near zero": 0,
+      "missing": 0
+     },
+     "missing": {
+      "before": 0,
+      "after": 0,
+      "both": 0
+     },
+     "directions": {
+      "up": 0,
+      "down": 0
+     },
+     "bands": {
+      "down, factor over 10": 0,
+      "down, factor 2-10": 0,
+      "down, factor 1.25-2": 0,
+      "down, factor 1.1-1.25": 0,
+      "down, factor 1-1.1": 0,
+      "up, factor 1-1.1": 0,
+      "up, factor 1.1-1.25": 0,
+      "up, factor 1.25-2": 0,
+      "up, factor 2-10": 0,
+      "up, factor over 10": 0
+     },
+     "verdicts": null,
+     "closer": 0,
+     "further": 0
+    },
+    "x:water": {
+     "pairs": 10,
+     "classes": {
+      "agrees": 8,
+      "within noise": 1,
+      "differs": 0,
+      "beyond 10x": 0,
+      "zero reference": 0,
+      "zero result": 0,
+      "sign change": 0,
+      "near zero": 0,
+      "missing": 1
+     },
+     "missing": {
+      "before": 0,
+      "after": 1,
+      "both": 0
+     },
+     "directions": {
+      "up": 0,
+      "down": 0
+     },
+     "bands": {
+      "down, factor over 10": 0,
+      "down, factor 2-10": 0,
+      "down, factor 1.25-2": 0,
+      "down, factor 1.1-1.25": 0,
+      "down, factor 1-1.1": 0,
+      "up, factor 1-1.1": 0,
+      "up, factor 1.1-1.25": 0,
+      "up, factor 1.25-2": 0,
+      "up, factor 2-10": 0,
+      "up, factor over 10": 0
+     },
+     "verdicts": null,
+     "closer": 0,
+     "further": 0
+    },
+    "x:tox": {
+     "pairs": 10,
+     "classes": {
+      "agrees": 8,
+      "within noise": 0,
+      "differs": 0,
+      "beyond 10x": 0,
+      "zero reference": 0,
+      "zero result": 0,
+      "sign change": 0,
+      "near zero": 2,
+      "missing": 0
+     },
+     "missing": {
+      "before": 0,
+      "after": 0,
+      "both": 0
+     },
+     "directions": {
+      "up": 0,
+      "down": 0
+     },
+     "bands": {
+      "down, factor over 10": 0,
+      "down, factor 2-10": 0,
+      "down, factor 1.25-2": 0,
+      "down, factor 1.1-1.25": 0,
+      "down, factor 1-1.1": 0,
+      "up, factor 1-1.1": 0,
+      "up, factor 1.1-1.25": 0,
+      "up, factor 1.25-2": 0,
+      "up, factor 2-10": 0,
+      "up, factor over 10": 0
+     },
+     "verdicts": null,
+     "closer": 0,
+     "further": 0
+    }
+   },
+   "mapping-2": {
+    "x:climate": {
+     "pairs": 10,
+     "classes": {
+      "agrees": 7,
+      "within noise": 0,
+      "differs": 0,
+      "beyond 10x": 0,
+      "zero reference": 0,
+      "zero result": 1,
+      "sign change": 1,
+      "near zero": 0,
+      "missing": 1
+     },
+     "missing": {
+      "before": 0,
+      "after": 1,
+      "both": 0
+     },
+     "directions": {
+      "up": 1,
+      "down": 1
+     },
+     "bands": {
+      "down, factor over 10": 0,
+      "down, factor 2-10": 0,
+      "down, factor 1.25-2": 0,
+      "down, factor 1.1-1.25": 0,
+      "down, factor 1-1.1": 0,
+      "up, factor 1-1.1": 0,
+      "up, factor 1.1-1.25": 0,
+      "up, factor 1.25-2": 0,
+      "up, factor 2-10": 0,
+      "up, factor over 10": 0
+     },
+     "verdicts": {
+      "as claimed": 0,
+      "off claim": 0,
+      "not claimed": 2,
+      "claimed, not moved": 0,
+      "within noise": 0,
+      "unchanged": 7,
+      "not judged": 1
+     },
+     "closer": 0,
+     "further": 2
+    },
+    "x:water": {
+     "pairs": 10,
+     "classes": {
+      "agrees": 7,
+      "within noise": 1,
+      "differs": 0,
+      "beyond 10x": 1,
+      "zero reference": 0,
+      "zero result": 0,
+      "sign change": 0,
+      "near zero": 0,
+      "missing": 1
+     },
+     "missing": {
+      "before": 1,
+      "after": 0,
+      "both": 0
+     },
+     "directions": {
+      "up": 1,
+      "down": 0
+     },
+     "bands": {
+      "down, factor over 10": 0,
+      "down, factor 2-10": 0,
+      "down, factor 1.25-2": 0,
+      "down, factor 1.1-1.25": 0,
+      "down, factor 1-1.1": 0,
+      "up, factor 1-1.1": 0,
+      "up, factor 1.1-1.25": 0,
+      "up, factor 1.25-2": 0,
+      "up, factor 2-10": 0,
+      "up, factor over 10": 1
+     },
+     "verdicts": {
+      "as claimed": 1,
+      "off claim": 0,
+      "not claimed": 0,
+      "claimed, not moved": 1,
+      "within noise": 1,
+      "unchanged": 6,
+      "not judged": 1
+     },
+     "closer": 0,
+     "further": 1
+    },
+    "x:tox": {
+     "pairs": 10,
+     "classes": {
+      "agrees": 7,
+      "within noise": 0,
+      "differs": 1,
+      "beyond 10x": 0,
+      "zero reference": 1,
+      "zero result": 0,
+      "sign change": 0,
+      "near zero": 1,
+      "missing": 0
+     },
+     "missing": {
+      "before": 0,
+      "after": 0,
+      "both": 0
+     },
+     "directions": {
+      "up": 1,
+      "down": 1
+     },
+     "bands": {
+      "down, factor over 10": 0,
+      "down, factor 2-10": 0,
+      "down, factor 1.25-2": 1,
+      "down, factor 1.1-1.25": 0,
+      "down, factor 1-1.1": 0,
+      "up, factor 1-1.1": 0,
+      "up, factor 1.1-1.25": 0,
+      "up, factor 1.25-2": 0,
+      "up, factor 2-10": 0,
+      "up, factor over 10": 0
+     },
+     "verdicts": {
+      "as claimed": 0,
+      "off claim": 0,
+      "not claimed": 2,
+      "claimed, not moved": 0,
+      "within noise": 0,
+      "unchanged": 7,
+      "not judged": 1
+     },
+     "closer": 0,
+     "further": 2
+    }
+   }
+  },
+  "total": {
+   "x:climate": {
+    "pairs": 10,
+    "classes": {
+     "agrees": 4,
+     "within noise": 0,
+     "differs": 3,
+     "beyond 10x": 0,
+     "zero reference": 0,
+     "zero result": 1,
+     "sign change": 1,
+     "near zero": 0,
+     "missing": 1
+    },
+    "missing": {
+     "before": 0,
+     "after": 1,
+     "both": 0
+    },
+    "directions": {
+     "up": 2,
+     "down": 3
+    },
+    "bands": {
+     "down, factor over 10": 0,
+     "down, factor 2-10": 0,
+     "down, factor 1.25-2": 1,
+     "down, factor 1.1-1.25": 1,
+     "down, factor 1-1.1": 0,
+     "up, factor 1-1.1": 0,
+     "up, factor 1.1-1.25": 1,
+     "up, factor 1.25-2": 0,
+     "up, factor 2-10": 0,
+     "up, factor over 10": 0
+    },
+    "verdicts": null,
+    "closer": null,
+    "further": null
+   },
+   "x:water": {
+    "pairs": 10,
+    "classes": {
+     "agrees": 6,
+     "within noise": 0,
+     "differs": 2,
+     "beyond 10x": 1,
+     "zero reference": 0,
+     "zero result": 0,
+     "sign change": 0,
+     "near zero": 0,
+     "missing": 1
+    },
+    "missing": {
+     "before": 1,
+     "after": 0,
+     "both": 0
+    },
+    "directions": {
+     "up": 3,
+     "down": 0
+    },
+    "bands": {
+     "down, factor over 10": 0,
+     "down, factor 2-10": 0,
+     "down, factor 1.25-2": 0,
+     "down, factor 1.1-1.25": 0,
+     "down, factor 1-1.1": 0,
+     "up, factor 1-1.1": 1,
+     "up, factor 1.1-1.25": 1,
+     "up, factor 1.25-2": 0,
+     "up, factor 2-10": 0,
+     "up, factor over 10": 1
+    },
+    "verdicts": null,
+    "closer": null,
+    "further": null
+   },
+   "x:tox": {
+    "pairs": 10,
+    "classes": {
+     "agrees": 6,
+     "within noise": 0,
+     "differs": 2,
+     "beyond 10x": 0,
+     "zero reference": 1,
+     "zero result": 0,
+     "sign change": 0,
+     "near zero": 1,
+     "missing": 0
+    },
+    "missing": {
+     "before": 0,
+     "after": 0,
+     "both": 0
+    },
+    "directions": {
+     "up": 2,
+     "down": 1
+    },
+    "bands": {
+     "down, factor over 10": 0,
+     "down, factor 2-10": 0,
+     "down, factor 1.25-2": 1,
+     "down, factor 1.1-1.25": 0,
+     "down, factor 1-1.1": 0,
+     "up, factor 1-1.1": 1,
+     "up, factor 1.1-1.25": 0,
+     "up, factor 1.25-2": 0,
+     "up, factor 2-10": 0,
+     "up, factor over 10": 0
+    },
+    "verdicts": null,
+    "closer": null,
+    "further": null
+   }
+  }
+ },
+ "attribution": {
+  "x:climate": {
+   "dominant": {
+    "step-0": 0,
+    "fix-1": 3,
+    "rebuilt": 0,
+    "mapping-2": 2
+   },
+   "not_attributable": 0,
+   "spread": 0,
+   "unexplained_moved": 0
+  },
+  "x:water": {
+   "dominant": {
+    "step-0": 0,
+    "fix-1": 0,
+    "rebuilt": 0,
+    "mapping-2": 1
+   },
+   "not_attributable": 1,
+   "spread": 1,
+   "unexplained_moved": 0
+  },
+  "x:tox": {
+   "dominant": {
+    "step-0": 1,
+    "fix-1": 0,
+    "rebuilt": 0,
+    "mapping-2": 2
+   },
+   "not_attributable": 0,
+   "spread": 0,
+   "unexplained_moved": 0
+  }
+ },
+ "items": [
+  {"id": "p08", "name": "Compost, used as fertiliser", "place": "CH", "group": "waste", "unit": "kg", "values": {"x:climate": [-0.5, -0.5, -0.5, -0.5, 0.2], "x:water": [0.05, 0.05, 0.05, 0.05, 0.05], "x:tox": [-2e-06, -2e-06, -2e-06, -2e-06, -4e-06]}, "classes": {"x:climate": ["agrees", "agrees", "agrees", "sign change", "sign change"], "x:water": ["agrees", "agrees", "agrees", "agrees", "agrees"], "x:tox": ["agrees", "agrees", "agrees", "differs", "differs"]}, "directions": {"x:climate": [null, null, null, "up", "up"], "x:water": [null, null, null, null, null], "x:tox": [null, null, null, "down", "down"]}, "bands": {"x:climate": [null, null, null, null, null], "x:water": [null, null, null, null, null], "x:tox": [null, null, null, "down, factor 1.25-2", "down, factor 1.25-2"]}, "verdicts": {"x:climate": ["unchanged", "unchanged", null, "not claimed"], "x:water": ["unchanged", "unchanged", null, "unchanged"], "x:tox": ["unchanged", "unchanged", null, "not claimed"]}, "breakdowns": null},
+  {"id": "p09", "name": "Machine hour, harvesting", "place": "CH", "group": "services", "unit": "h", "values": {"x:climate": [42.0, 42.00042, 42.00042, 42.00042, 42.00042], "x:water": [0.9, 0.9, 0.9, 0.9, 0.9], "x:tox": [0.0, 0.0, 0.0, 0.0, 4e-07]}, "classes": {"x:climate": ["agrees", "agrees", "agrees", "agrees", "agrees"], "x:water": ["agrees", "agrees", "agrees", "agrees", "agrees"], "x:tox": ["near zero", "near zero", "near zero", "zero reference", "zero reference"]}, "directions": {"x:climate": [null, null, null, null, null], "x:water": [null, null, null, null, null], "x:tox": [null, null, null, "up", "up"]}, "bands": {"x:climate": [null, null, null, null, null], "x:water": [null, null, null, null, null], "x:tox": [null, null, null, null, null]}, "verdicts": {"x:climate": ["unchanged", "unchanged", null, "unchanged"], "x:water": ["unchanged", "unchanged", null, "unchanged"], "x:tox": ["not judged", "not judged", null, "not claimed"]}, "breakdowns": null},
+  {"id": "p07", "name": "Heat from wood chips", "place": "CH", "group": "energy", "unit": "MJ", "values": {"x:climate": [0.03, 0.03, 0.03, 0.03, 0.0], "x:water": [0.0004, 0.0004, 0.0004, 0.0004, 0.0004], "x:tox": [3e-09, 3e-09, 3e-09, 3e-09, 3e-09]}, "classes": {"x:climate": ["agrees", "agrees", "agrees", "zero result", "zero result"], "x:water": ["agrees", "agrees", "agrees", "agrees", "agrees"], "x:tox": ["agrees", "agrees", "agrees", "agrees", "agrees"]}, "directions": {"x:climate": [null, null, null, "down", "down"], "x:water": [null, null, null, null, null], "x:tox": [null, null, null, null, null]}, "bands": {"x:climate": [null, null, null, null, null], "x:water": [null, null, null, null, null], "x:tox": [null, null, null, null, null]}, "verdicts": {"x:climate": ["unchanged", "unchanged", null, "not claimed"], "x:water": ["unchanged", "unchanged", null, "unchanged"], "x:tox": ["unchanged", "unchanged", null, "unchanged"]}, "breakdowns": null},
+  {"id": "p10", "name": "Tomato, greenhouse", "place": "NL", "group": "crops", "unit": "kg", "values": {"x:climate": [1.3, 1.3, 1.3, 1.3, 1.3], "x:water": [0.02, 0.02, 0.02, 0.02, 0.5], "x:tox": [2.1e-07, 2.3e-07, 2.3e-07, 2.3e-07, 2.3e-07]}, "classes": {"x:climate": ["agrees", "agrees", "agrees", "agrees", "agrees"], "x:water": ["agrees", "agrees", "agrees", "beyond 10x", "beyond 10x"], "x:tox": ["differs", "agrees", "agrees", "agrees", "differs"]}, "directions": {"x:climate": [null, null, null, null, null], "x:water": [null, null, null, "up", "up"], "x:tox": ["up", null, null, null, "up"]}, "bands": {"x:climate": [null, null, null, null, null], "x:water": [null, null, null, "up, factor over 10", "up, factor over 10"], "x:tox": ["up, factor 1-1.1", null, null, null, "up, factor 1-1.1"]}, "verdicts": {"x:climate": ["unchanged", "unchanged", null, "unchanged"], "x:water": ["unchanged", "unchanged", null, "as claimed"], "x:tox": ["not claimed", "unchanged", null, "unchanged"]}, "breakdowns": null},
+  {"id": "p05", "name": "Rice", "place": "IT", "group": "crops", "unit": "kg", "values": {"x:climate": [1.9, 1.9, 0.95, 0.95, 0.95], "x:water": [3.4, 3.4, 3.4, 3.4, 3.4], "x:tox": [1e-12, 1e-12, 1e-12, 1e-12, 3e-12]}, "classes": {"x:climate": ["agrees", "differs", "agrees", "agrees", "differs"], "x:water": ["agrees", "agrees", "agrees", "agrees", "agrees"], "x:tox": ["near zero", "near zero", "near zero", "near zero", "near zero"]}, "directions": {"x:climate": [null, "down", null, null, "down"], "x:water": [null, null, null, null, null], "x:tox": [null, null, null, null, null]}, "bands": {"x:climate": [null, "down, factor 1.25-2", null, null, "down, factor 1.25-2"], "x:water": [null, null, null, null, null], "x:tox": [null, null, null, null, null]}, "verdicts": {"x:climate": ["unchanged", "off claim", null, "unchanged"], "x:water": ["unchanged", "unchanged", null, "unchanged"], "x:tox": ["not judged", "not judged", null, "not judged"]}, "breakdowns": null},
+  {"id": "p03", "name": "Barley", "place": "DE", "group": "crops", "unit": "kg", "values": {"x:climate": [0.48, 0.47999, 0.575988, 0.575988, 0.575988], "x:water": [1.1, 1.1, 1.1, null, 1.3], "x:tox": [1.9e-07, 1.9e-07, 1.9e-07, 1.9e-07, 1.9e-07]}, "classes": {"x:climate": ["agrees", "differs", "agrees", "agrees", "differs"], "x:water": ["agrees", "agrees", "missing", "missing", "differs"], "x:tox": ["agrees", "agrees", "agrees", "agrees", "agrees"]}, "directions": {"x:climate": [null, "up", null, null, "up"], "x:water": [null, null, null, null, "up"], "x:tox": [null, null, null, null, null]}, "bands": {"x:climate": [null, "up, factor 1.1-1.25", null, null, "up, factor 1.1-1.25"], "x:water": [null, null, null, null, "up, factor 1.1-1.25"], "x:tox": [null, null, null, null, null]}, "verdicts": {"x:climate": ["unchanged", "not claimed", null, "unchanged"], "x:water": ["unchanged", "unchanged", null, "not judged"], "x:tox": ["unchanged", "unchanged", null, "unchanged"]}, "breakdowns": null}
+ ],
+ "items_count": {
+  "all": 10,
+  "qualifying": 10,
+  "listed": 6,
+  "not_listed": 4
+ },
+ "explanations": [
+  {
+   "about": {
+    "step": "fix-1",
+    "indicator": "x:climate",
+    "item": null
+   },
+   "finding": "reason",
+   "text": "The fertiliser amounts were per hectare; divided by the yield they are per kilogram, which lowers the nitrogen field emissions of both cereals.",
+   "by": {
+    "kind": "person",
+    "name": "A. Author",
+    "model": null,
+    "run_by": null
+   },
+   "source": {
+    "link": null,
+    "doc": "docs/findings/fix-1.md"
+   },
+   "not_checked": null
+  },
+  {
+   "about": {
+    "step": null,
+    "indicator": "x:tox",
+    "item": "p05"
+   },
+   "finding": "reason",
+   "text": "The toxicity results of rice lie far below one hundredth of the median result of the items measured per kilogram: they are counted as near zero.",
+   "by": {
+    "kind": "code",
+    "name": "floor rule",
+    "model": null,
+    "run_by": null
+   },
+   "source": null,
+   "not_checked": null
+  },
+  {
+   "about": {
+    "step": "mapping-2",
+    "indicator": "x:water",
+    "item": "p10"
+   },
+   "finding": "reason",
+   "text": "The new mapping links tomatoes to a greenhouse heated with fresh water from a well, which multiplies the water use.",
+   "by": {
+    "kind": "model",
+    "name": null,
+    "model": "example-model-1",
+    "run_by": "example maintainers (agent-run)"
+   },
+   "source": null,
+   "not_checked": "Nobody compared the greenhouse's water balance with a second source."
+  },
+  {
+   "about": {
+    "step": "step-0",
+    "indicator": "x:tox",
+    "item": "p08"
+   },
+   "finding": "none found",
+   "text": "Compost's toxicity result fell to almost nothing in the reproduction. The recipe, the background datasets and the method were compared; none of them explains it.",
+   "by": {
+    "kind": "person",
+    "name": "B. Reviewer",
+    "model": null,
+    "run_by": null
+   },
+   "source": null,
+   "not_checked": null
+  }
+ ],
+ "notes": [
+  "A made-up example: nobody's data."
+ ],
+ "made_by": "sentier-diagnostics 0.1.0",
+ "matrix": {
+  "file": "matrix.json",
+  "items": 10
+ }
+}

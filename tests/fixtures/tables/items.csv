@@ -1,0 +1,5 @@
+item,unit,name,place,group
+w1,kg,Wheat,CH,Cereals
+w2,kg,Oats,CH,Cereals
+h1,MJ,Heat from wood,CH,Energy
+c1,kg,Compost,CH,Fertiliser

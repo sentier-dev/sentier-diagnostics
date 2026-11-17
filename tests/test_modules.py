@@ -1,0 +1,886 @@
+"""Unit tests per module: the validator, tables, breakdowns, building from tables, the page
+writer, the command and the doctests."""
+
+from __future__ import annotations
+
+import contextlib
+import doctest
+import importlib
+import io
+import json
+import re
+import tempfile
+import unittest
+from pathlib import Path
+
+from sentier_diagnostics import breakdown, chain, claims, cli, example, fileformat, from_tables, page, rule, summary, tables
+
+from . import helpers
+from .helpers import A, B
+
+HERE = Path(__file__).parent
+FIXTURES = HERE / "fixtures" / "tables"
+MODULES = ["rule", "claims", "chain", "fileformat", "breakdown", "tables", "summary", "page", "from_tables", "matrix", "together",
+           "fixes"]
+
+
+def load_tests(loader, tests, pattern):
+    for name in MODULES:
+        tests.addTests(doctest.DocTestSuite(importlib.import_module(f"sentier_diagnostics.{name}")))
+    return tests
+
+
+class Validator(unittest.TestCase):
+    """The validator works every listed value out again and refuses a file that disagrees."""
+
+    def setUp(self):
+        self.data = example.build()
+
+    def refuses(self, change, says=None):
+        found = fileformat.errors(helpers.mutated(self.data, change))
+        self.assertTrue(found, "the validator took a wrong file")
+        if says:
+            self.assertTrue(any(says in e for e in found), found)
+
+    def test_the_example_is_valid(self):
+        self.assertEqual(fileformat.errors(self.data), [])
+
+    def test_the_word_for_an_indicator_is_optional_and_checked(self):
+        for word in ({"one": "impact category", "many": "impact categories"}, None):
+            self.assertEqual(fileformat.errors(helpers.mutated(self.data, lambda d: d.update(indicator=word))), [])
+        for wrong in ({"one": "category"}, {"one": "x", "many": "y", "few": "z"}, {"one": "", "many": "y"},
+                      {"one": "x" * 31, "many": "y"}, "impact category", ["one", "many"]):  # fmt: skip
+            self.refuses(lambda d, w=wrong: d.update(indicator=w), "`indicator`")
+
+    def test_a_class_that_contradicts_the_rule(self):
+        def change(d):
+            item = next(i for i in d["items"] if i["classes"]["x:climate"][-1] == rule.DIFFERS)
+            item["classes"]["x:climate"][-1] = rule.AGREES
+        self.refuses(change)
+
+    def test_a_verdict_that_contradicts_the_claim(self):
+        def change(d):
+            item = next(i for i in d["items"] if "as claimed" in i["verdicts"]["x:climate"])
+            k = item["verdicts"]["x:climate"].index("as claimed")
+            item["verdicts"]["x:climate"][k] = "off claim"
+        self.refuses(change)
+
+    def test_a_direction_that_contradicts_the_values(self):
+        def change(d):
+            item = next(i for i in d["items"] if i["directions"]["x:climate"][-1] == "down")
+            item["directions"]["x:climate"][-1] = "up"
+        self.refuses(change)
+
+    def test_items_out_of_order(self):
+        self.refuses(lambda d: d["items"].reverse(), "worst first")
+
+    def test_counts_that_do_not_add_up(self):
+        self.refuses(lambda d: d["counts"]["total"]["x:climate"]["classes"].update(agrees=99), "add up")
+
+    def test_another_major_version(self):
+        found = fileformat.errors(helpers.mutated(self.data, lambda d: d.update(format="sentier-diagnostics/2")))
+        self.assertEqual(found, ["format 'sentier-diagnostics/2': this reader knows sentier-diagnostics/1 only"])
+
+    def test_an_older_format(self):
+        found = fileformat.errors({"format": "sentier/before-after/2"})
+        self.assertTrue(found)
+
+    def test_unknown_and_missing_keys(self):
+        self.refuses(lambda d: d.update(colour="blue"), "does not know")
+        self.refuses(lambda d: d.pop("audience"), "requires")
+
+    def test_a_published_state_after_the_first(self):
+        self.refuses(lambda d: d["states"][2].update(kind="published"), "first state")
+
+    def test_a_join_that_is_not_counts(self):
+        self.refuses(lambda d: d["states"][0]["join"].update(compared=-1), "join")
+
+    def test_an_explanation_finding(self):
+        self.refuses(lambda d: d["explanations"][0].update(finding="accepted"), "finding")
+
+    def test_control_characters_in_text(self):
+        self.refuses(lambda d: d.update(title="a\u0000b"))
+
+    def test_values_of_any_type_are_faults_and_never_raise(self):
+        """Every node of the example replaced by values of other types: the check returns
+        faults that name a place, and never raises or stops without one (issue 4)."""
+        odd = ([], {}, [[]], {"a": 1}, "x", -1, 1.5, True, None, 10**400, [None])
+        data = json.loads(json.dumps(self.data))
+        data["items"] = data["items"][:5]  # five items hold every kind of node, and the explained ones
+        data["items_count"].update(listed=5, not_listed=data["items_count"]["qualifying"] - 5)
+
+        def nodes(node, at=()):
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    yield node, key
+                    yield from nodes(value)
+            elif isinstance(node, list):  # the first, second and last of a list stand for the rest
+                for key in sorted({0, 1, len(node) - 1} & set(range(len(node)))):
+                    yield node, key
+                    yield from nodes(node[key])
+
+        stopped = []
+        for parent, key in list(nodes(data)):
+            kept = parent[key]
+            for value in odd:
+                parent[key] = value
+                try:
+                    found = fileformat.errors(data)
+                except Exception as error:  # noqa: BLE001 - the test is that nothing raises
+                    self.fail(f"{key!r} = {value!r}: {type(error).__name__}: {error}")
+                self.assertIsInstance(found, list)
+                stopped += [(key, value) for e in found if e.startswith(fileformat.STOPPED)]
+            parent[key] = kept
+        self.assertEqual(stopped, [])
+        self.assertEqual(fileformat.errors(data), [])
+
+    def test_a_claim_list_in_a_file_of_counts(self):
+        data = example.build(tier="counts")
+        listed = example.build()["steps"][1]["claim"]
+        found = fileformat.errors(helpers.mutated(data, lambda d: d["steps"][1].update(claim=listed)))
+        self.assertTrue(found)
+
+
+class CountsAgainstItems(unittest.TestCase):
+    """Where every item worth a look is listed, the counts are worked out again from the items
+    and must match; where some are left out, nothing listed may exceed what is counted. Each
+    edit below keeps every sum the validator checked before (sentier-bafu's review of PR 2)."""
+
+    def setUp(self):
+        self.data = example.build()
+        self.assertEqual(self.data["items_count"]["not_listed"], 0)
+
+    def refuses(self, change, says):
+        found = fileformat.errors(helpers.mutated(self.data, change))
+        self.assertTrue(any(says in e for e in found), found)
+
+    def test_up_and_down_swapped_with_their_bands(self):
+        def change(d):
+            b = d["counts"]["steps"]["fix-1"]["x:climate"]
+            b["directions"]["up"], b["directions"]["down"] = b["directions"]["down"], b["directions"]["up"]
+            swapped = {k.replace("up,", "UP,").replace("down,", "up,").replace("UP,", "down,"): v
+                       for k, v in b["bands"].items()}  # fmt: skip
+            b["bands"] = {k: swapped[k] for k in b["bands"]}
+        self.refuses(change, "listed items")
+
+    def test_verdicts_rewritten_to_as_claimed(self):
+        def change(d):
+            v = d["counts"]["steps"]["fix-1"]["x:climate"]["verdicts"]
+            v["as claimed"] += v["off claim"] + v["not claimed"]
+            v["off claim"] = v["not claimed"] = 0
+        self.refuses(change, "listed items")
+
+    def test_a_band_count_moved(self):
+        def change(d):
+            b = d["counts"]["total"]["x:water"]["bands"]
+            moved = next(k for k, n in b.items() if n and k.startswith("up"))
+            b[moved] -= 1
+            b["up, factor 2-10" if moved != "up, factor 2-10" else "up, factor 1-1.1"] += 1
+        self.refuses(change, "listed items")
+
+    def test_missing_moved_to_the_other_side(self):
+        def change(d):
+            for blocks in d["counts"]["steps"].values():
+                for b in blocks.values():
+                    if b["missing"]["after"]:
+                        b["missing"]["before"] += b["missing"]["after"]
+                        b["missing"]["after"] = 0
+                        return
+        self.refuses(change, "listed items")
+
+    def test_attribution_rewritten(self):
+        def change(d):
+            for one in d["attribution"].values():
+                total = sum(one["dominant"].values())
+                one["dominant"] = dict.fromkeys(one["dominant"], 0) | {"rebuilt": total}
+                one["unexplained_moved"] = 0
+        self.refuses(change, "attribution")
+
+    def test_closer_and_further_where_none_can_be(self):
+        self.refuses(lambda d: d["counts"]["total"]["x:climate"].update(closer=0, further=0), "closer")
+        self.refuses(lambda d: d["counts"]["steps"]["step-0"]["x:climate"].update(closer=0, further=0), "closer")
+
+    def test_closer_and_further_rewritten(self):
+        def change(d):
+            b = d["counts"]["steps"]["fix-1"]["x:climate"]
+            b["closer"], b["further"] = b["closer"] + b["further"], 0
+        self.refuses(change, "listed items")
+
+    def test_a_reach_that_is_not_the_size_of_the_lists(self):
+        self.refuses(lambda d: d["steps"][1]["claim"].update(reach=4900), "reach")
+
+    def test_floors_said_to_come_from_elsewhere(self):
+        self.refuses(lambda d: d["rule"].update(floors_from="mapping-2"), "first state")
+        self.refuses(lambda d: [f.update(basis="none", n=0) for f in d["rule"]["floors"]], "floor")
+
+    def test_with_items_left_out_nothing_listed_exceeds_the_counts(self):
+        data = helpers.two_states({A: {"p": 1.0, "q": 1.0}}, {A: {"p": 2.0, "q": 3.0}}, listed=1)
+        self.assertEqual((data["items_count"]["not_listed"], data["items"][0]["id"]), (1, "q"))
+        self.assertEqual(fileformat.errors(data), [])
+
+        def change(d):  # q (listed) went up by a factor 3, p (not listed) by 2: say both by 2
+            d["counts"]["total"][A]["bands"].update({"up, factor 2-10": 0, "up, factor 1.25-2": 2})
+        self.assertEqual(data["counts"]["total"][A]["bands"]["up, factor 2-10"], 1)
+        self.refuses_in(data, change, "listed items")
+
+    def refuses_in(self, data, change, says):
+        found = fileformat.errors(helpers.mutated(data, change))
+        self.assertTrue(any(says in e for e in found), found)
+
+
+class Tables(unittest.TestCase):
+    def write(self, text: str) -> Path:
+        folder = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: [p.unlink() for p in folder.iterdir()] and folder.rmdir())
+        path = folder / "t.csv"
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def test_a_byte_order_mark_is_not_part_of_the_first_column(self):
+        found = tables.read_results(self.write("\ufeffitem,x:a,x:b\np,1,2\n"), [A, B])
+        self.assertEqual(found, {A: {"p": 1.0}, B: {"p": 2.0}})
+
+    def test_an_empty_cell_is_missing(self):
+        found = tables.read_results(self.write("item,x:a,x:b\np,,0\n"), [A, B])
+        self.assertEqual(found, {A: {"p": None}, B: {"p": 0.0}})
+
+    def test_refusals(self):
+        for text in (
+            "item,x:a,x:b,x:c\np,1,2,3\n",  # an unknown column
+            "item,x:a,x:a,x:b\np,1,1,2\n",  # a column twice
+            "item,x:a,x:b\np,1,2\np,1,2\n",  # an item twice
+            "item,x:a,x:b\np,1\n",  # a short row
+            "item,x:a,x:b\np,inf,2\n",  # not finite
+            "item,x:a,x:b\np,one,2\n",  # not a number
+            "item,x:a,x:b\n,1,2\n",  # no item
+            "",  # empty
+            "item,x:a,x:b\np,1_5,2\n",  # Python reads 1_5 as 15
+            "item,x:a,x:b\np,１２,2\n",  # full-width digits
+            "item,x:a,x:b\np,٣,2\n",  # Arabic-Indic digits
+            "item,x:a,x:b\np,1e-400,2\n",  # a result that is not zero, read as zero
+            "item,x:a,x:b\np,0x10,2\n",  # not a decimal
+        ):
+            with self.subTest(text):
+                with self.assertRaises(tables.TableError):
+                    tables.read_results(self.write(text), [A, B])
+
+    def test_decimal_numbers_as_machines_write_them(self):
+        found = tables.read_results(self.write("item,x:a,x:b\np,-0,+1.5E+3\nq,.5,0e-400\nr,7.,1e-300\n"), [A, B])
+        self.assertEqual(found, {A: {"p": 0.0, "q": 0.5, "r": 7.0}, B: {"p": 1500.0, "q": 0.0, "r": 1e-300}})
+
+    def test_items_need_a_unit_column(self):
+        with self.assertRaises(tables.TableError):
+            tables.read_items(self.write("item,name\np,P\n"))
+        found = tables.read_items(self.write("unit,item\nkg,p\n"))
+        self.assertEqual(found["p"]["unit"], "kg")
+
+
+class Breakdowns(unittest.TestCase):
+    def test_both_sides_choose_the_parts(self):
+        """A part large only after is listed, though it was zero before."""
+        parts = [("a", None, 1.0, 1.0), ("b", None, 0.9, 0.9), ("new", None, 0.0, 2.0), ("small", None, 0.1, 0.1)]
+        found = breakdown.build("p", "s0", "s1", {A: ("kg", parts)}, top=2)
+        entry = found["indicators"][A]
+        self.assertEqual([p["label"] for p in entry["parts"]], ["new", "a"])
+        self.assertEqual(entry["parts_not_listed"], 2)
+        self.assertEqual(entry["rest"], [1.0, 1.0])
+        self.assertEqual(entry["total"], [2.0, 4.0])
+
+    def test_a_rest_without_parts_left_out(self):
+        good = breakdown.build("p", "s0", "s1", {A: ("kg", [("a", None, 1.0, 2.0)])})
+        bad = helpers.mutated(good, lambda d: d["indicators"][A].update(rest=[0.5, 0.0], total=[1.5, 2.0]))
+        self.assertTrue(breakdown.errors(bad))
+
+    def test_a_breakdown_is_of_the_item_and_step_that_name_it(self):
+        data, wheat = example.build(), example.wheat_breakdown()
+        self.assertEqual(breakdown.against(wheat, data, ("p01", "fix-1")), [])
+        for named_by in (("p05", "fix-1"), ("p01", "total"), ("p01", "mapping-2")):
+            with self.subTest(named_by):
+                found = breakdown.against(wheat, data, named_by)
+                self.assertTrue(any("named by" in e for e in found), found)
+
+    def test_check_refuses_a_breakdown_named_by_another_item(self):
+        data = example.build()
+        rice = next(i for i in data["items"] if i["id"] == "p05")
+        rice["breakdowns"] = {"total": "p01-fix-1.json"}
+        folder = Path(tempfile.mkdtemp())
+        chain.write(data, folder / chain.FILE)
+        breakdown.write(example.wheat_breakdown(), folder / "p01-fix-1.json")
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(cli.check([folder / chain.FILE]), 1)
+        self.assertIn("named by 'p05'", out.getvalue())
+        with self.assertRaises(ValueError):
+            page.write(data, folder / "page", {"p01-fix-1.json": example.wheat_breakdown()})
+
+
+class Attribution(unittest.TestCase):
+    """Which step carries an item's whole difference (SPEC 7; issue 8)."""
+
+    def chain_of(self, values, noise):
+        """`noise` is that of each built state, in order: a step is compared with the sum of
+        its two states' noise, the published results being exact."""
+        steps = [chain.step(f"s{k}", f"Step {k}", kind="fix") for k in range(len(noise))]
+        return chain.build(
+            "Attribution",
+            indicators=helpers.INDICATORS,
+            states=[chain.state("p", "Published", kind="published")]
+            + [chain.state(f"b{k}", f"Build {k}", noise=chain.noise(("x", "y"), {A: n}) if n else None)
+               for k, n in enumerate(noise)],  # fmt: skip
+            steps=steps,
+            values={"p": {A: {"i": values[0]}}} | {f"b{k}": {A: {"i": v}} for k, v in enumerate(values[1:])},
+            units={"i": "kg"},
+        )
+
+    def test_a_step_that_did_not_move_carries_nothing(self):
+        # Build 0's noise is in both its steps: the second moves by 9 %, beyond it
+        data = self.chain_of([1.0, 1.045, 1.15], [0.05, None])
+        self.assertEqual([data["items"][0]["classes"][A][k] for k in range(3)],
+                         [rule.WITHIN_NOISE, rule.DIFFERS, rule.DIFFERS])  # fmt: skip
+        self.assertEqual(data["attribution"][A]["dominant"], {"s0": 0, "s1": 1})
+
+    def test_a_whole_way_that_moved_while_no_step_did_is_spread(self):
+        data = self.chain_of([1.0, 1.04, 1.08], [0.05, 0.05])
+        self.assertEqual(data["items"][0]["classes"][A][2], rule.DIFFERS)
+        self.assertEqual(data["attribution"][A]["dominant"], {"s0": 0, "s1": 0})
+        self.assertEqual(data["attribution"][A]["spread"], 1)
+        self.assertEqual(fileformat.errors(data), [])
+        self.assertIn("| Spread over steps |", summary.text(data))
+
+    def test_a_tie_goes_to_the_earlier_step(self):
+        data = self.chain_of([1.0, 2.0, 3.0], [None, None])
+        self.assertEqual(data["attribution"][A]["dominant"], {"s0": 1, "s1": 0})
+
+    def test_the_validator_works_the_spread_out_again(self):
+        data = self.chain_of([1.0, 1.04, 1.08], [0.05, 0.05])
+        moved = helpers.mutated(data, lambda d: d["attribution"][A].update(spread=0, dominant={"s0": 1, "s1": 0}))
+        self.assertTrue(any("attribution" in e for e in fileformat.errors(moved)))
+
+
+class FromTables(unittest.TestCase):
+    def test_the_fixture_builds(self):
+        data = from_tables.build(FIXTURES / "description.json")
+        self.assertEqual(fileformat.errors(data), [])
+        self.assertEqual(data["audience"], "public")
+        step0 = data["counts"]["steps"]["step-0"]
+        self.assertEqual(step0["x:water"]["missing"], {"before": 0, "after": 1, "both": 0})
+        fix = data["steps"][1]
+        self.assertTrue(fix["noise"]["measured"])
+        self.assertAlmostEqual(fix["noise"]["by"]["x:water"], 3e-7 / 1.2000004, places=12)
+        wheat = next(i for i in data["items"] if i["id"] == "w1")
+        self.assertEqual(wheat["verdicts"]["x:climate"], ["unchanged", "as claimed"])
+        self.assertEqual(data["explanations"][0]["finding"], "none found")
+
+    def test_the_located_factors_step(self):
+        """The first real step sentier-bafu will show, made up: water use and land use may
+        move, nothing else does. Both move as claimed; the steel's climate change is not
+        claimed."""
+        data = from_tables.build(HERE / "fixtures" / "located-factors" / "description.json")
+        self.assertEqual(fileformat.errors(data), [])
+        counts = data["counts"]["steps"]["located-factors"]
+        said = {i: {k: n for k, n in b["verdicts"].items() if n} for i, b in counts.items()}
+        self.assertEqual(said, {"x:water": {"as claimed": 3, "unchanged": 3},
+                                "x:climate": {"not claimed": 1, "unchanged": 5},
+                                "x:ecotox": {"unchanged": 6},
+                                "x:land": {"as claimed": 1, "unchanged": 5}})  # fmt: skip
+        steel = next(i for i in data["items"] if i["id"] == "d5")
+        self.assertEqual(steel["verdicts"]["x:climate"], ["not claimed"])
+        self.assertIsNone(counts["x:water"]["closer"])  # no published state: nothing to come closer to
+
+    def description(self, folder: Path, tables_: dict, spec: dict) -> Path:
+        for name, text in tables_.items():
+            (folder / name).write_text(text, encoding="utf-8")
+        path = folder / "d.json"
+        path.write_text(json.dumps(spec), encoding="utf-8")
+        return path
+
+    def test_a_scope_entry_without_expect_may_move(self):
+        """SPEC 6: `may` is the default. A "may move" claim read from tables does not report
+        what did not move as "claimed, not moved"."""
+        spec = {"title": "t", "item": {"one": "i", "many": "is"},
+                "indicators": [{"id": A, "name": "A", "short": "A", "unit": "m3"}], "items": "items.csv",
+                "states": [{"id": "s0", "label": "0", "results": "s0.csv"}, {"id": "s1", "label": "1", "results": "s1.csv"}],
+                "steps": [{"id": "st", "label": "step", "kind": "method",
+                           "claim": {"text": "A may move.", "by": {"kind": "person", "name": "A"},
+                                     "scope": [{"indicators": [A], "items": "*"}]}}]}  # fmt: skip
+        with tempfile.TemporaryDirectory() as folder:
+            path = self.description(Path(folder), {"items.csv": "item,unit\na,kg\nb,kg\n",
+                                                   "s0.csv": f"item,{A}\na,1.0\nb,2.0\n",
+                                                   "s1.csv": f"item,{A}\na,1.5\nb,2.0\n"}, spec)  # fmt: skip
+            data = from_tables.build(path)
+        self.assertEqual(data["steps"][0]["claim"]["scope"][0]["expect"], "may")
+        said = {k: n for k, n in data["counts"]["steps"]["st"][A]["verdicts"].items() if n}
+        self.assertEqual(said, {"as claimed": 1, "unchanged": 1})
+
+    def test_a_description_names_its_word_for_an_indicator(self):
+        spec = {"title": "t", "item": {"one": "i", "many": "is"},
+                "indicators": [{"id": A, "name": "A", "short": "A", "unit": "m3"}], "items": "items.csv",
+                "states": [{"id": "s0", "label": "0", "results": "s0.csv"}, {"id": "s1", "label": "1", "results": "s1.csv"}],
+                "steps": [{"id": "st", "label": "step", "kind": "method"}]}  # fmt: skip
+        tables_ = {"items.csv": "item,unit\na,kg\n", "s0.csv": f"item,{A}\na,1.0\n", "s1.csv": f"item,{A}\na,1.5\n"}
+        with tempfile.TemporaryDirectory() as folder:
+            self.assertNotIn("indicator", from_tables.build(self.description(Path(folder), tables_, spec)))
+            word = {"one": "impact category", "many": "impact categories"}
+            data = from_tables.build(self.description(Path(folder), tables_, {**spec, "indicator": word}))
+            self.assertEqual((data["indicator"], fileformat.errors(data)), (word, []))
+            wrong = {**spec, "indicator": {"one": "impact category"}}
+            self.assertTrue(any("indicator" in e for e in from_tables.description_errors(wrong)))
+
+    def test_noise_is_taken_beyond_the_floor_only(self):
+        """A residue near zero (4e-16 in one build, 0 in the other) is not noise: it would make
+        the noise 1.0 and hide a correction by a factor of 580 as "within noise"."""
+        spec = {"title": "t", "item": {"one": "i", "many": "is"},
+                "indicators": [{"id": A, "name": "A", "short": "A", "unit": "kg"}], "items": "items.csv",
+                "states": [{"id": "s0", "label": "0", "results": "s0.csv",
+                            "noise": {"tables": [{"label": "a", "results": "s0.csv"}, {"label": "b", "results": "again.csv"}]}},
+                           {"id": "s1", "label": "1", "results": "s1.csv"}],
+                "steps": [{"id": "fix", "label": "fix", "kind": "fix",
+                           "claim": {"text": "Berries go down.", "by": {"kind": "person", "name": "A"},
+                                     "scope": [{"indicators": [A], "items": ["berry"], "direction": "down", "expect": "must"}]}}]}  # fmt: skip
+        with tempfile.TemporaryDirectory() as folder:
+            path = self.description(Path(folder), {"items.csv": "item,unit\nberry,kg\ndump,kg\nmid,kg\n",
+                                                   "s0.csv": f"item,{A}\nberry,383.17\ndump,3.9e-16\nmid,0.52\n",
+                                                   "s1.csv": f"item,{A}\nberry,0.6587\ndump,3.9e-16\nmid,0.52\n",
+                                                   "again.csv": f"item,{A}\nberry,383.17\ndump,0\nmid,0.52\n"}, spec)  # fmt: skip
+            data = from_tables.build(path)
+        self.assertEqual(data["steps"][0]["noise"]["by"], {A: 0.0})
+        berry = data["items"][0]
+        self.assertEqual((berry["id"], berry["classes"][A][0], berry["verdicts"][A][0]), ("berry", "beyond 10x", "as claimed"))
+
+    def test_an_indicator_without_a_pair_beyond_the_floor_has_no_noise(self):
+        floor = {"a": 0.1, "b": 0.1}
+        self.assertIsNone(chain.noise_of({"a": 0.0, "b": 0.05}, {"a": 1e-9, "b": 0.0}, floor=floor))
+        self.assertEqual(chain.noise_of({"a": 1.0, "b": 0.05}, {"a": 1.0, "b": 0.0}, floor=floor), 0.0)
+        said = chain.noise(("a", "b"), {A: 0.0, B: None})
+        self.assertEqual(said["by"], {A: 0.0})
+
+    SMALL = {"title": "t", "indicators": [{"id": A, "name": "A", "short": "A", "unit": "kg"}], "items": "items.csv",
+             "states": [{"id": "s0", "label": "0", "results": "s0.csv"}, {"id": "s1", "label": "1", "results": "s1.csv"}],
+             "steps": [{"id": "st", "label": "step", "kind": "fix"}]}  # fmt: skip
+    SMALL_TABLES = {"items.csv": "item,unit\na,kg\nb,kg\n", "s0.csv": f"item,{A}\na,1.0\nb,2.0\n",
+                    "s1.csv": f"item,{A}\na,1.5\nb,2.0\n"}  # fmt: skip
+
+    def test_an_item_without_results_is_missing_in_every_state(self):
+        """An item of the items table that no results table holds is counted, as missing on
+        both sides of every step (issue 13)."""
+        with tempfile.TemporaryDirectory() as folder:
+            tables_ = self.SMALL_TABLES | {"items.csv": "item,unit\na,kg\nb,kg\nghost,kg\n"}
+            data = from_tables.build(self.description(Path(folder), tables_, self.SMALL))
+        self.assertEqual(data["items_count"]["all"], 3)
+        self.assertEqual(data["counts"]["steps"]["st"][A]["missing"], {"before": 0, "after": 0, "both": 1})
+        ghost = next(i for i in data["items"] if i["id"] == "ghost")
+        self.assertEqual(ghost["values"][A], [None, None])
+
+    def test_ordinary_mistakes_are_sentences_not_tracebacks(self):
+        """Each mistake ends in one ValueError that says what is wrong, and the command prints
+        it after `error:` and exits 1 (issue 11)."""
+        cases = {
+            "a results table that is not there": ({}, {"s1.csv": None}),
+            "a cell larger than a CSV field may be": ({}, {"s1.csv": f"item,{A}\na,{'1' * 140000}\nb,2\n"}),
+            "listed that is a text": ({"listed": "5"}, {}),
+            "no title": ({"title": None}, {}),
+            "an indicator without an id": ({"indicators": [{"name": "A"}]}, {}),
+            "a state without results": ({"states": [{"id": "s0", "label": "0"}, {"id": "s1", "label": "1", "results": "s1.csv"}]}, {}),
+            "a step that is a text": ({"steps": ["st"]}, {}),
+            "a claim without text": ({"steps": [{"id": "st", "label": "s", "kind": "fix", "claim": {"scope": []}}]}, {}),
+            "a noise of three states": ({"steps": [{"id": "st", "label": "s", "kind": "fix", "noise": {"states": ["s0", "s1", "s1"]}}]}, {}),
+            "a noise of an unknown state": ({"steps": [{"id": "st", "label": "s", "kind": "fix", "noise": {"states": ["s0", "x"]}}]}, {}),
+            "a tolerance without a value": ({"steps": [{"id": "st", "label": "s", "kind": "fix", "tolerance": {"basis": "declared"}}]}, {}),
+        }  # fmt: skip
+        for name, (changes, table_changes) in cases.items():
+            with self.subTest(name), tempfile.TemporaryDirectory() as folder:
+                spec = {k: v for k, v in (self.SMALL | changes).items() if v is not None}
+                tables_ = {k: v for k, v in (self.SMALL_TABLES | table_changes).items() if v is not None}
+                path = self.description(Path(folder), tables_, spec)
+                with self.assertRaises(ValueError) as caught:
+                    from_tables.build(path)
+                self.assertNotIn("Traceback", str(caught.exception))
+                with contextlib.redirect_stderr(io.StringIO()) as err:
+                    self.assertEqual(cli.main(["build", str(path), "--out", str(Path(folder) / "out.json")]), 1)
+                self.assertTrue(err.getvalue().startswith("error: "), err.getvalue())
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "d.json"
+            path.write_text("[1, 2]", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                from_tables.build(path)
+
+    def test_an_unknown_key_in_a_description(self):
+        spec = json.loads((FIXTURES / "description.json").read_text(encoding="utf-8"))
+        with tempfile.TemporaryDirectory() as folder:
+            for name in ("items.csv", "published.csv", "repro.csv", "again.csv", "fixed.csv"):
+                (Path(folder) / name).write_text((FIXTURES / name).read_text(encoding="utf-8"), encoding="utf-8")
+            path = Path(folder) / "d.json"
+            path.write_text(json.dumps(spec | {"status": "accepted"}), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                from_tables.build(path)
+            (Path(folder) / "items.csv").write_text("item,unit\nw1,kg\n", encoding="utf-8")
+            path.write_text(json.dumps(spec), encoding="utf-8")
+            with self.assertRaises(ValueError):  # results of items without a unit
+                from_tables.build(path)
+
+
+class Page(unittest.TestCase):
+    def test_the_assets_load_nothing_from_elsewhere(self):
+        for name, path in page.assets(standalone=True).items():
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(name):
+                for said in ("http://", "https://", "//cdn", "@import", "fonts.g", "<iframe"):
+                    self.assertNotIn(said, text)
+
+    def test_the_script_writes_no_markup(self):
+        script = page.assets()["diagnostics.js"].read_text(encoding="utf-8")
+        for said in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval("):
+            self.assertNotIn(said, script)
+
+    def test_a_text_cannot_end_the_script_element(self):
+        text = page.as_script("X", {"title": "</script><script>alert(1)</script>"})
+        self.assertNotIn("</", text)
+        self.assertTrue(text.isascii())
+
+    def test_the_page_refuses_a_wrong_file(self):
+        with tempfile.TemporaryDirectory() as folder:
+            with self.assertRaises(ValueError):
+                page.write({"format": "sentier-diagnostics/1"}, Path(folder))
+
+    def test_the_page_is_written(self):
+        with tempfile.TemporaryDirectory() as folder:
+            where = page.write(example.build(), Path(folder), {"p01-fix-1.json": example.wheat_breakdown()})
+            names = sorted(p.name for p in where.parent.iterdir())
+            self.assertEqual(names, ["diagnostics.css", "diagnostics.js", "index.html", "standalone.css"])
+
+
+class Command(unittest.TestCase):
+    def run_cli(self, *args) -> tuple[int, str]:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            code = cli.main([str(a) for a in args])
+        return code, out.getvalue()
+
+    def test_example_check_summary_page(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            self.assertEqual(self.run_cli("example", "--out", folder)[0], 0)
+            code, said = self.run_cli("check", folder / "diagnostics.json", folder / "p01-fix-1.json")
+            self.assertEqual(code, 0, said)
+            code, said = self.run_cli("summary", folder / "diagnostics.json")
+            self.assertEqual(code, 0)
+            self.assertIn("## Steps", said)
+            (folder / "p01-fix-1.json").unlink()
+            code, said = self.run_cli("check", folder / "diagnostics.json")
+            self.assertEqual(code, 0)
+            self.assertIn("not beside it (not checked)", said)  # said, never silent
+            self.assertEqual(self.run_cli("page", folder / "diagnostics.json", "--out", folder / "p")[0], 0)
+
+    def test_check_fails_on_a_wrong_file(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "d.json"
+            path.write_text(json.dumps(helpers.mutated(example.build(), lambda d: d.update(tier="all"))), encoding="utf-8")
+            code, said = self.run_cli("check", path)
+            self.assertEqual(code, 1)
+            self.assertIn("FAIL", said)
+
+    def test_build_from_tables(self):
+        with tempfile.TemporaryDirectory() as folder:
+            out = Path(folder) / "d.json"
+            code, said = self.run_cli("build", FIXTURES / "description.json", "--out", out)
+            self.assertEqual(code, 0, said)
+            self.assertEqual(fileformat.errors(chain.read(out)), [])
+
+
+class Summary(unittest.TestCase):
+    def test_a_local_file_says_so(self):
+        data = helpers.two_states({A: {"p": 1.0}}, {A: {"p": 2.0}})
+        self.assertIn("Local file", summary.text(data))
+        self.assertNotIn("Local file", summary.text(example.build()))
+
+    def test_missing_on_both_sides_is_missing_before_and_after(self):
+        data = helpers.two_states({A: {"p": None, "q": 1.0}, B: {"p": 1.0, "q": 1.0}},
+                                  {A: {"p": None, "q": 1.0}, B: {"p": 1.0, "q": 1.0}})  # fmt: skip
+        self.assertEqual(data["counts"]["steps"]["one"][A]["missing"], {"before": 0, "after": 0, "both": 1})
+        row = next(line for line in summary.text(data).splitlines() if line.startswith("| 0. "))
+        self.assertEqual(row.split(" | ")[4:6], ["1", "1"])
+
+    def test_the_noise_says_its_size(self):
+        said = summary.text(example.build())
+        self.assertIn("Water 2.4 %", said)
+
+    def test_steps_are_numbered_from_1_where_the_chain_starts_from_no_published_results(self):
+        """Step 0 checks that the published results are reproduced; a chain that starts from
+        a build of its own has no such step and counts from 1."""
+        published = summary.text(helpers.two_states({A: {"p": 1.0}}, {A: {"p": 2.0}}))
+        self.assertTrue(any(line.startswith("| 0. One step |") for line in published.splitlines()))
+        built = summary.text(helpers.two_states({A: {"p": 1.0}}, {A: {"p": 2.0}}, first_kind="build"))
+        rows = [line for line in built.splitlines() if line.startswith("| 1. One step |")]
+        self.assertEqual(len(rows), 1)
+        self.assertNotIn("Step 0", built)
+
+    def test_the_file_word_for_an_indicator(self):
+        data = example.build()
+        self.assertIn(f"{len(data['indicators'])} indicators.", summary.text(data))
+        data["indicator"] = {"one": "impact category", "many": "impact categories"}
+        self.assertEqual(fileformat.errors(data), [])
+        said = summary.text(data)
+        self.assertIn(f"{len(data['indicators'])} impact categories.", said)
+        self.assertIn("| Impact category |", said)
+        self.assertIn("one per impact category and reference unit", said)
+        self.assertNotIn("| Indicator |", said)
+        self.assertNotIn(" indicators. ", said.replace(data["about"], ""))
+
+    def test_texts_of_the_file_are_not_markdown(self):
+        """A text from the file cannot add a table column, a link, markup or a mention to a
+        pull request the summary is pasted into (issue 17)."""
+        data = example.build()
+        data["title"] = "A <b>title</b> for @someone, see [this](https://example.org) | *now*"
+        data["steps"][1]["label"] = "fix|x"
+        data["steps"][1]["kind"] = "_k_"
+        data["indicators"][0]["short"] = "C`O`2"
+        data["notes"] = ["ask @team about #12"]
+        self.assertEqual(fileformat.errors(data), [])
+        said = summary.text(data)
+        for raw in ("<b>", "@someone", "@team", "[this](", "fix|x", "*now*", "_k_", "C`O`2"):
+            self.assertNotIn(raw, said)
+        row = next(line for line in said.splitlines() if line.startswith("| 1. "))
+        header = next(line for line in said.splitlines() if line.startswith("| Step |"))
+        unescaped = lambda line: len(re.findall(r"(?<!\\)\|", line))  # noqa: E731
+        self.assertEqual(unescaped(row), unescaped(header))
+
+
+class Verdicts(unittest.TestCase):
+    """How a pair is held against its claim (SPEC 6; issues 3, 12 and 16)."""
+
+    def verdict(self, kind, before, after, entries):
+        way = rule.direction(before, after, kind)
+        return claims.verdict(kind, before, after, way, entries)
+
+    def test_a_must_that_did_not_move_beyond_the_noise_or_the_floor_is_unmet(self):
+        must = claims.scope([A], {"p"}, "down", None, claims.MUST)
+        may = claims.scope([A], {"p"}, "down", None, claims.MAY)
+        for kind in (rule.AGREES, rule.WITHIN_NOISE, rule.NEAR_ZERO):
+            with self.subTest(kind):
+                self.assertEqual(self.verdict(kind, 1.0, 1.0, [must]), claims.NOT_MOVED)
+        self.assertEqual(self.verdict(rule.WITHIN_NOISE, 1.0, 1.0, [may]), claims.NOISE)
+        self.assertEqual(self.verdict(rule.NEAR_ZERO, 0.0, 0.0, [may]), claims.NOT_JUDGED)
+        self.assertEqual(self.verdict(rule.MISSING, None, 1.0, [must]), claims.NOT_JUDGED)
+
+    def test_a_must_is_judged_on_its_own_where_entries_overlap(self):
+        must_down = claims.scope([A], {"p"}, "down", None, claims.MUST)
+        may_any = claims.scope([A], {"p"}, "any", None, claims.MAY)
+        self.assertEqual(self.verdict(rule.DIFFERS, 1.0, 2.0, [must_down, may_any]), claims.OFF_CLAIM)
+        self.assertEqual(self.verdict(rule.DIFFERS, 2.0, 1.0, [must_down, may_any]), claims.AS_CLAIMED)
+        self.assertEqual(self.verdict(rule.DIFFERS, 1.0, 2.0, [may_any]), claims.AS_CLAIMED)
+
+    def test_a_zero_reference_is_never_within_a_relative_largest(self):
+        capped = claims.scope([A], {"p"}, "up", 0.3, claims.MAY)
+        self.assertEqual(self.verdict(rule.ZERO_REFERENCE, 9e-10, 1.1e-9, [capped]), claims.OFF_CLAIM)
+        uncapped = claims.scope([A], {"p"}, "up", None, claims.MAY)
+        self.assertEqual(self.verdict(rule.ZERO_REFERENCE, 9e-10, 1.1e-9, [uncapped]), claims.AS_CLAIMED)
+
+    def test_a_scope_item_no_state_holds_is_refused(self):
+        with self.assertRaises(ValueError):
+            helpers.two_states({A: {"p": 1.0}}, {A: {"p": 2.0}}, claim=helpers.claim_down({"p", "typo"}))
+
+    def test_a_must_on_a_near_zero_pair_is_listed_and_valid(self):
+        data = helpers.two_states({A: {"p": 1.0, "q": 1.0, "z": 0.0}}, {A: {"p": 1.0, "q": 2.0, "z": 0.0}},
+                                  claim=helpers.claim_down({"z"}))  # fmt: skip
+        self.assertEqual(fileformat.errors(data), [])
+        z = next(i for i in data["items"] if i["id"] == "z")
+        self.assertEqual(z["verdicts"][A], [claims.NOT_MOVED])
+
+    def test_reach_is_the_size_of_the_lists_beside_a_star(self):
+        found = claims.published(claims.claim("t", [claims.scope([A], {"p", "q"}), claims.scope([B])]), keep_items=False)
+        self.assertEqual(found["reach"], 2)
+        self.assertEqual([e["items"] for e in found["scope"]], [None, "*"])
+
+    def test_a_scope_may_list_as_many_items_as_a_file(self):
+        many = {f"i{k}" for k in range(600)}
+        data = helpers.two_states({A: dict.fromkeys(many, 1.0)}, {A: dict.fromkeys(many, 1.0)},
+                                  claim=claims.claim("t", [claims.scope([A], many)], by=claims.origin("person", "A")))  # fmt: skip
+        self.assertEqual(fileformat.errors(data), [])
+        self.assertEqual(len(data["steps"][0]["claim"]["scope"][0]["items"]), 600)
+
+
+class Chain(unittest.TestCase):
+    def test_a_file_with_its_keys_in_another_order_is_written_whole(self):
+        """The list of items is not found by its text: a claim's empty list after it is left alone."""
+        nothing = claims.claim("Nothing listed moves.", [claims.scope([A], set())], by=claims.origin("person", "A"))
+        data = helpers.two_states({A: {"p": 1.0}}, {A: {"p": 2.0}}, claim=nothing)
+        reordered = {"items": data["items"], **{k: v for k, v in data.items() if k != "items"}}
+        self.assertEqual(json.loads(chain.dumps(reordered)), data)
+        self.assertEqual(chain.dumps(data), chain.dumps(dict(data)))
+
+    def test_scope_items_given_as_one_text_are_refused(self):
+        with self.assertRaises(TypeError):
+            claims.scope([A], "p01")
+
+    def test_a_reach_that_disagrees_with_the_lists_is_refused(self):
+        with self.assertRaises(ValueError):
+            claims.published(claims.claim("t", [claims.scope([A], {"p", "q"})], reach=4900))
+        self.assertEqual(claims.published(claims.claim("t", [claims.scope([A], {"p", "q"})]))["reach"], 2)
+
+    def test_a_lone_surrogate_is_not_a_text(self):
+        data = example.build()
+        data["title"] = "half \ud800 a character"
+        self.assertTrue(fileformat.errors(data))
+
+    def test_no_approval_hides_in_a_state_identity(self):
+        """SPEC 8: a file carries no status and no approval, and `identity` is no way round it."""
+        for key in ("status", "accepted_by", "Approved", "approval"):
+            with self.subTest(key):
+                data = helpers.mutated(example.build(), lambda d, key=key: d["states"][1]["identity"].update({key: "yes"}))
+                self.assertTrue(any("identity" in e for e in fileformat.errors(data)))
+
+    def test_a_key_written_twice_is_refused_when_read(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "d.json"
+            text = chain.dumps(example.build())
+            path.write_text(text.replace('"tier": "items",', '"tier": "items", "tier": "counts",', 1), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                chain.read(path)
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(cli.check([path]), 1)
+            self.assertIn("twice", out.getvalue())
+
+    def test_the_limit_of_listed_items_is_named(self):
+        data = example.build()
+        data["items"] = data["items"] * 501  # 5,010: the count agrees, only the limit is met
+        data["items_count"].update(listed=len(data["items"]), qualifying=len(data["items"]), all=len(data["items"]))
+        self.assertTrue(any("of at most 5000" in e for e in fileformat.errors(data)))
+
+    def test_check_refuses_a_file_larger_than_a_page_holds(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "d.json"
+            text = chain.dumps(example.build())
+            path.write_text(text + " " * (fileformat.MAX_BYTES - len(text.encode()) + 1), encoding="utf-8")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(cli.check([path]), 1)
+            self.assertIn("bytes", out.getvalue())
+
+
+class EachRuleOnItsOwn(unittest.TestCase):
+    """Each check of the validator, broken on its own in the example: its own fault must be
+    named. Other checks often refuse the same file too, so a test that asserts only that
+    the file is refused cannot tell a check that works from one that is gone (issue 15)."""
+
+    def refused(self, change, said):
+        found = fileformat.errors(helpers.mutated(example.build(), change))
+        self.assertTrue(any(said in e for e in found), f"{said!r} not in {found}")
+
+    @staticmethod
+    def block(d, step="fix-1", indicator="x:climate"):
+        return d["counts"]["steps"][step][indicator]
+
+    def test_bands_add_up_to_what_differs(self):
+        self.refused(lambda d: self.block(d)["bands"].update({"up, factor 1-1.1": 1}),
+                     "the bands do not add up to what differs")  # fmt: skip
+
+    def test_no_more_bands_up_than_went_up(self):
+        def change(d):
+            self.block(d)["bands"].update({"up, factor 1.1-1.25": 2, "down, factor 1.25-2": 0})
+
+        self.refused(change, "more bands up than values that went up")
+
+    def test_up_and_down_add_up_to_what_moved(self):
+        self.refused(lambda d: self.block(d)["directions"].update(up=2), "up and down do not add up to what moved")
+
+    def test_verdicts_add_up_to_the_pairs(self):
+        self.refused(lambda d: self.block(d)["verdicts"].update(unchanged=8), "the verdicts do not add up to the pairs")
+
+    def test_every_item_is_counted(self):
+        self.refused(lambda d: d["items_count"].update(all=11, qualifying=10), "not every item is counted")
+
+    def test_the_attribution_accounts_for_every_item_that_moved(self):
+        self.refused(lambda d: d["attribution"]["x:climate"].update(spread=1),
+                     "does not account for every item whose total moved")  # fmt: skip
+
+    def test_a_link_is_https(self):
+        self.refused(lambda d: d["steps"][1].update(link="http://example.org/fix-1"), "is not an https address")
+
+    def test_a_breakdown_is_named_by_a_file_name_not_a_path(self):
+        self.refused(lambda d: d["items"][0].update(breakdowns={"fix-1": "../p01-fix-1.json"}),
+                     "a file that is a path")  # fmt: skip
+
+    def test_an_item_is_listed_once(self):
+        def change(d):
+            d["items"][1] = d["items"][0]
+
+        self.refused(change, "is listed twice")
+
+    def test_two_steps_have_two_ids(self):
+        self.refused(lambda d: d["steps"][2].update(id="fix-1"), "two steps have the same id")
+
+    def test_a_step_leads_from_one_state_to_the_next(self):
+        self.refused(lambda d: d["steps"][1].update(**{"from": "published"}), "does not lead from state")
+
+    def test_the_tolerance_of_the_whole_way_is_the_largest(self):
+        self.refused(lambda d: d["rule"].update(total_tolerance=1e-3), "not the largest tolerance of the steps")
+
+    def test_a_person_is_named(self):
+        self.refused(lambda d: d["explanations"][0]["by"].update(name=None), "a person is named")
+
+    def test_a_listed_verdict_fits_its_class(self):
+        def change(d):
+            item = next(i for i in d["items"] if i["classes"]["x:climate"][1] == rule.AGREES)
+            item["verdicts"]["x:climate"][1] = claims.AS_CLAIMED
+
+        self.refused(change, "'agrees' cannot be 'as claimed'")
+
+    def test_a_file_of_counts_explains_no_single_item(self):
+        def change(d):
+            d["tier"] = "counts"
+            d["items"] = []
+            for entry in (e for s in d["steps"] if s["claim"] for e in s["claim"]["scope"]):
+                if isinstance(entry["items"], list):
+                    entry["items"] = None  # a file of counts keeps its claim lists private
+            d["items_count"].update(listed=0, not_listed=d["items_count"]["qualifying"])
+
+        self.refused(change, "a file of counts explains no single item")
+
+    def test_an_item_with_nothing_worth_a_look_is_not_listed(self):
+        same = {"p": 1.0, "q": 1.0}
+        quiet = helpers.two_states({A: same, B: same}, {A: {"p": 2.0, "q": 1.0}, B: same})
+        loud = helpers.two_states({A: same, B: same}, {A: {"p": 2.0, "q": 3.0}, B: same})
+        self.assertEqual([i["id"] for i in quiet["items"]], ["p"])
+        q = next(i for i in loud["items"] if i["id"] == "q")
+        q["values"][A] = [1.0, 1.0]
+        q["classes"][A] = [rule.AGREES, rule.AGREES]
+        q["directions"][A] = q["bands"][A] = [None, None]
+        quiet["items"].append(q)
+        quiet["items_count"].update(listed=2, qualifying=2)
+        found = fileformat.errors(quiet)
+        self.assertTrue(any("listed, though nothing in it is worth a look" in e for e in found), found)
+
+    def test_write_refuses_a_file_larger_than_a_page_holds(self):
+        data = example.build()
+        with tempfile.TemporaryDirectory() as folder, self.assertRaises(ValueError) as said:
+            original, fileformat.MAX_BYTES = fileformat.MAX_BYTES, 1000
+            try:
+                chain.write(data, Path(folder) / "d.json")
+            finally:
+                fileformat.MAX_BYTES = original
+        self.assertIn("a page holds 1000 at most", str(said.exception))
+
+
+class SummaryCounts(unittest.TestCase):
+    """The summary prints the file's counts as they are (issue 15)."""
+
+    def setUp(self):
+        self.data = helpers.three_states({A: {"p": 1.0, "q": 1.0, "r": 1.0}}, {A: {"p": 1.5, "q": None, "r": -1.0}},
+                                         {A: {"p": 1.75, "q": 3.0, "r": 0.0}}, explained=(True, False))  # fmt: skip
+        self.lines = summary.text(self.data).splitlines()
+
+    def cells(self, start):
+        row = next(line for line in self.lines if line.startswith(start))
+        return [c.strip() for c in row.strip("|").split("|")]
+
+    def test_values_moved_counts_every_class_that_moved(self):
+        # step 0: p differs, r changes sign; q is missing, which is not a move
+        self.assertEqual(self.cells("| 0. First step")[3], "2")
+
+    def test_not_attributable_is_printed(self):
+        header, row = self.cells("| Indicator"), self.cells("| A |")
+        self.assertEqual(row[header.index("Not attributable")], "1")
+        self.assertEqual(row[header.index("Spread over steps")], "0")
+
+
+if __name__ == "__main__":
+    unittest.main()

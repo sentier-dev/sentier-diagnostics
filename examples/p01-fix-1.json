@@ -1,0 +1,62 @@
+{
+ "format": "sentier-diagnostics-breakdown/1",
+ "item": "p01",
+ "from": "repro",
+ "to": "fix-1",
+ "indicators": {
+  "x:climate": {
+   "unit": "kg CO2 eq",
+   "total": [
+    0.520013,
+    0.468012
+   ],
+   "parts": [
+    {
+     "label": "Dinitrogen monoxide, field",
+     "kind": "elementary flow",
+     "values": [
+      0.18,
+      0.128012
+     ]
+    },
+    {
+     "label": "Nitrogen fertiliser, production",
+     "kind": "background process",
+     "values": [
+      0.11,
+      0.099
+     ]
+    },
+    {
+     "label": "Diesel, burned in machinery",
+     "kind": "background process",
+     "values": [
+      0.09,
+      0.09
+     ]
+    },
+    {
+     "label": "Seed",
+     "kind": "background process",
+     "values": [
+      0.05,
+      0.05
+     ]
+    },
+    {
+     "label": "Drying",
+     "kind": "background process",
+     "values": [
+      0.04,
+      0.04
+     ]
+    }
+   ],
+   "rest": [
+    0.050013,
+    0.061
+   ],
+   "parts_not_listed": 3
+  }
+ }
+}

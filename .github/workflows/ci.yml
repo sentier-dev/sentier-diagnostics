@@ -1,0 +1,59 @@
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Tests and doctests, from the source
+        run: python -m unittest discover -s tests -t . -v
+      - name: The example builds, checks and has a page
+        run: |
+          PYTHONPATH=src python -m sentier_diagnostics example --out build/example
+          PYTHONPATH=src python -m sentier_diagnostics check build/example/diagnostics.json build/example/p01-fix-1.json
+          PYTHONPATH=src python -m sentier_diagnostics check examples/diagnostics.json examples/p01-fix-1.json
+          PYTHONPATH=src python -m sentier_diagnostics summary examples/diagnostics.json
+
+  package:
+    name: The package, installed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Build, install into a fresh environment, run from it
+        run: |
+          uv build --out-dir dist
+          uv venv --python 3.12 /tmp/installed
+          uv pip install --python /tmp/installed/bin/python dist/*.whl
+          /tmp/installed/bin/sentier-diagnostics --version
+          /tmp/installed/bin/sentier-diagnostics example --out /tmp/example
+          /tmp/installed/bin/sentier-diagnostics check /tmp/example/diagnostics.json
+          test -f /tmp/example/page/index.html
+          /tmp/installed/bin/python -m unittest discover -s tests -t .
+
+  page:
+    name: The page script
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Acceptance cases against the script
+        run: node --test tests/js/page.test.js
