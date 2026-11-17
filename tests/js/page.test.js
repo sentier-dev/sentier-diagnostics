@@ -1121,6 +1121,53 @@ test('the matrix shows first the indicators in which the chosen comparison moved
   }
 });
 
+test('a host that routes by its hash keeps the page out of the address, and the page keeps its view (review of #34)', () => {
+  const data = example();
+  const step = data.steps[2];
+  const pressed = (drawn) => chips(drawn).find((c) => c.getAttribute('aria-pressed') === 'true').getAttribute('data-comp');
+  // without it, the page's part joins the host's route: a hash router reads it as its path
+  const joined = dom.page(data, undefined, { hash: '/products/12' });
+  const first = gridRows(joined)[0].getAttribute('data-item');
+  gridRows(joined)[0].childNodes[0].dispatch('click', {});
+  assert.equal(joined.context.location.hash, '/products/12&sd.item=' + first);
+  // with it, the address is the host's alone, and the page keeps what is chosen itself
+  const off = { 'data-sd-address': 'off' };
+  const drawn = dom.page(data, undefined, { hash: '/products/12', attributes: off });
+  chips(drawn).find((c) => c.getAttribute('data-comp') === step.id).dispatch('click', {});
+  const item = gridRows(drawn)[0].getAttribute('data-item');
+  gridRows(drawn)[0].childNodes[0].dispatch('click', {});
+  assert.equal(drawn.context.location.hash, '#/products/12');
+  assert.equal(drawn.byId.item.hidden, false, 'the item opens');
+  assert.match(drawn.byId['item-title'].textContent, new RegExp(data.items.find((i) => i.id === item).name));
+  assert.equal(pressed(drawn), step.id);
+  // the host's route moves on: the page keeps its step and its item
+  drawn.open('/products/13');
+  assert.equal(pressed(drawn), step.id);
+  assert.equal(drawn.byId.item.hidden, false);
+  // an address in the page's own words is not the page's
+  drawn.open('sd.step=' + encodeURIComponent(data.steps[0].id));
+  assert.equal(pressed(drawn), step.id);
+  // closing the item leaves the address as the host has it, and keeps the step
+  drawn.byId['item-close'].dispatch('click', {});
+  assert.equal(drawn.byId.item.hidden, true);
+  assert.equal(drawn.context.location.hash, '#sd.step=' + encodeURIComponent(data.steps[0].id));
+  assert.equal(pressed(drawn), step.id);
+  // and none opens it when it is drawn
+  const asked = dom.page(data, undefined, { hash: 'sd.step=' + encodeURIComponent(step.id) + '&sd.item=' + encodeURIComponent(data.items[0].id), attributes: off });
+  assert.equal(asked.byId.item.hidden, true);
+  assert.equal(pressed(asked), 'total');
+  // what is chosen survives the page reading its parts again, as it does when its matrix comes
+  const later = dom.page(local(), undefined, { attributes: { ...off, 'data-sd-matrix': 'matrix.js' } });
+  const chosen = local().steps[1].id;
+  chips(later).find((c) => c.getAttribute('data-comp') === chosen).dispatch('click', {});
+  gridRows(later)[0].childNodes[0].dispatch('click', {});
+  later.context.SENTIER_DIAGNOSTICS_MATRIX = full();
+  later.head.querySelectorAll('script[src]')[0].onload();
+  assert.match(later.byId['matrix-said'].textContent, /matrix of all 10 products is loaded/);
+  assert.equal(pressed(later), chosen);
+  assert.equal(later.byId.item.hidden, false);
+});
+
 test('an address with a step opens the page on that step, and with an item on that item', () => {
   const data = example();
   const step = data.steps[2];

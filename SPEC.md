@@ -651,7 +651,13 @@ on each root they sit in, and one observer of the document, and each of these ho
 pages weakly, as do the list of keys and a matrix's script. A page the host still holds is
 kept and works again when it is put back. Where the browser has no `WeakRef`, a removed page
 is held until `unmount()`. Every part the page does not
-own is kept as it was. An
+own is kept as it was, and the page's parts are joined to it with `&`. A host that routes
+by its hash (`#/products/12`, as Vue's hash mode, React's `HashRouter` or Angular's
+`useHash` do) would read `#/products/12&sd.item=p08` as the path `/products/12&sd.item=p08`;
+a route with a query (`#/products?tab=2`) takes them as more of its query, which does no
+harm. Such
+a host keeps the page out of the address with `data-sd-address="off"`: the page then holds
+its parts itself, neither reads nor writes the address, and no address opens it. An
 address naming a step the file does not have, steps apart, or a run the page cannot judge
 (no matrix), says so and shows the whole way. Below
 them, each closed until a reader opens it: the steps and the whole way (10.2), the worst

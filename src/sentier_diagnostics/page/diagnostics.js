@@ -3600,6 +3600,12 @@
     // the list of keys and the list of pages waiting hold each page weakly, so a key whose
     // page was collected is free.
     var OWN_PARTS = ['step', 'steps', 'set', 'item'];
+    // A host that routes by its hash (`#/products/12`) reads any part after it as part of its
+    // route, so it keeps the page out of the address: `data-sd-address="off"`. The page then
+    // holds its parts itself, as it would write them, and reads them back from there; it
+    // neither reads nor writes the address, and no address opens it.
+    var addressed = root.getAttribute('data-sd-address') !== 'off';
+    var ownAddress = '';
     var keyProblem = null; // a key the page can never hold: it is not a word, or it is one of the page's own
     var waiting = false; // another page in the document holds the key the host named: the page draws nothing
     // the key each page holds, by key: a weak reference to the page's entry
@@ -3712,7 +3718,7 @@
       wakeOthers();
     }
     function hashList() {
-      var text = (win.location.hash || '').replace(/^#/, '');
+      var text = addressed ? (win.location.hash || '').replace(/^#/, '') : ownAddress;
       return text ? text.split('&') : [];
     }
     function ownName(part) {
@@ -3757,6 +3763,7 @@
       if (item) said.push(KEY + 'item=' + encodeURIComponent(item));
       var others = hashList().filter(function (part) { return ownName(part) === null; });
       var wanted = others.concat(said).join('&');
+      if (!addressed) { ownAddress = wanted; return false; } // kept, and drawn by the caller
       if ((win.location.hash || '').replace(/^#/, '') === wanted) return false;
       if (wanted) win.location.hash = wanted;
       // nothing left to say: the address loses its "#", and the host keeps its history state
@@ -4084,7 +4091,7 @@
           matchScheme();
         },
         // a page that takes its key here has read the address already
-        address: function () { var was = acting; if (present() && was) route(); }
+        address: function () { var was = acting; if (present() && was && addressed) route(); }
       };
       teardown.push(listeners.join(entry));
       observe();
