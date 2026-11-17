@@ -2197,6 +2197,19 @@ test('a matrix the host put in its page under another query is taken where it is
   assert.ok(handed([{ src: 'other/matrix.js?v=3', matrix: full() }]).head.querySelector('script[src]'));
 });
 
+test('the whole way names each count of the attribution in its own column (issue 8)', () => {
+  const data = example();
+  const water = data.indicators.find((i) => i.id === 'x:water');
+  data.attribution['x:water'] = { ...data.attribution['x:water'], spread: 4, not_attributable: 1, unexplained_moved: 2 };
+  const drawn = dom.page(data);
+  const rows = drawn.byId['total-table'].all().filter((n) => n.tagName === 'TR');
+  const head = rows[0].childNodes.map((c) => c.textContent);
+  const row = rows.find((r) => r.childNodes[0].textContent.startsWith(water.name));
+  const cell = (name) => row.childNodes[head.indexOf(name)].textContent;
+  assert.deepEqual([cell('Spread over steps'), cell('Not attributable'), cell('Moved by what nothing explains')], ['4', '1', '2']);
+  assert.match(row.childNodes[head.indexOf('Spread over steps')].getAttribute('title'), /the step with its largest difference did not move it/);
+});
+
 test('an item the file does not list is said to carry no explanation, never "none given" (issue 31)', () => {
   const data = local();
   const drawn = withMatrix();

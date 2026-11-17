@@ -274,19 +274,24 @@ def severity(before: float | None, after: float | None, kind: str) -> tuple[int,
 
 
 def largest_step(series: list[float], kinds: list[str]) -> int | None:
-    """The step that carries an item's whole difference along a chain: of the steps whose
-    pair moved, the one with the largest difference, the earlier one where two are equal.
-    None where no step moved: the whole way moved by small steps that add up ("spread").
+    """The step that carries an item's whole difference along a chain: the step with the
+    largest difference, the earlier one where two are equal, where that step moved the item.
+    None where it did not (it agrees, is within its noise or near zero): the whole way moved,
+    and the step that moved it most is one that, judged alone, did not ("spread"). A
+    smaller step that moved is never named in its place: it carries less of the difference
+    than the one that did not.
 
     >>> largest_step([1.0, 2.0, 3.0], [DIFFERS, DIFFERS]), largest_step([1.0, 1.04, 1.08], [WITHIN_NOISE] * 2)
     (0, None)
-    >>> largest_step([1.0, 1.045, 1.075], [WITHIN_NOISE, DIFFERS])
+    >>> largest_step([1.0, 1.045, 1.15], [WITHIN_NOISE, DIFFERS])
     1
+    >>> largest_step([1.0, 1.05, 1.25, 1.6], [DIFFERS, WITHIN_NOISE, WITHIN_NOISE]) is None
+    True
     """
-    moved = [k for k, kind in enumerate(kinds) if kind in MOVES]
-    if not moved:
+    if not kinds:
         return None
-    return max(moved, key=lambda k: (abs(series[k + 1] - series[k]), -k))
+    k = max(range(len(kinds)), key=lambda k: (abs(series[k + 1] - series[k]), -k))
+    return k if kinds[k] in MOVES else None
 
 
 def floor_of(values: Iterable[float | None], factor: float = FLOOR_FACTOR) -> tuple[float, int]:

@@ -1344,7 +1344,7 @@
         });
         row.push(el('td', { cls: 'num', text: n(block.directions.up) }), el('td', { cls: 'num', text: n(block.directions.down) }));
         row.push(el('td', { cls: 'sd-wide', text: ranked.join(', ') || 'none' }));
-        row.push(el('td', { cls: 'num', text: n(att.spread), title: 'its total moved, and no single step moved it: small steps that add up' }));
+        row.push(el('td', { cls: 'num', text: n(att.spread), title: 'its total moved, and the step with its largest difference did not move it: only together do the steps move it' }));
         row.push(el('td', { cls: 'num', text: n(att.not_attributable), title: 'its total moved, and it has no result in a state between: its difference cannot be split' }));
         row.push(el('td', { cls: 'num', text: n(att.unexplained_moved), title: 'moved in a step that no cause explains' }));
         tbody.appendChild(el('tr', null, row));

@@ -346,6 +346,54 @@ class Attribution(unittest.TestCase):
         self.assertEqual(fileformat.errors(data), [])
         self.assertIn("| Spread over steps |", summary.text(data))
 
+    def chain_items(self, values, noise):
+        """Several items along one chain: `values` maps each to its result in every state,
+        None where it has none; `noise` is that of each built state, as in `chain_of`."""
+        steps = [chain.step(f"s{k}", f"Step {k}", kind="fix") for k in range(len(noise))]
+        names = ["p"] + [f"b{k}" for k in range(len(noise))]
+        return chain.build(
+            "Attribution",
+            indicators=helpers.INDICATORS,
+            states=[chain.state("p", "Published", kind="published")]
+            + [chain.state(f"b{k}", f"Build {k}", noise=chain.noise(("x", "y"), {A: n}) if n else None)
+               for k, n in enumerate(noise)],  # fmt: skip
+            steps=steps,
+            values={name: {A: {i: v[at] for i, v in values.items() if v[at] is not None}} for at, name in enumerate(names)},
+            units={i: "kg" for i in values},
+        )
+
+    def test_the_largest_step_carries_it_only_where_it_moved_the_item(self):
+        # issue 8: the largest step, s2 (0.35), is within its noise; s0 moved by less (0.05)
+        # and is not named in its place: in the item view it is 8.3 % of the difference
+        data = self.chain_of([1.0, 1.05, 1.25, 1.6], [0.01, 0.3, 0.01])
+        self.assertEqual([data["items"][0]["classes"][A][k] for k in range(4)],
+                         [rule.DIFFERS, rule.WITHIN_NOISE, rule.WITHIN_NOISE, rule.DIFFERS])  # fmt: skip
+        self.assertEqual(data["attribution"][A]["dominant"], {"s0": 0, "s1": 0, "s2": 0})
+        self.assertEqual(data["attribution"][A]["spread"], 1)
+        self.assertEqual(fileformat.errors(data), [])
+
+    def test_the_summary_and_the_validator_count_the_spread(self):
+        data = self.chain_items({
+            "i": [1.0, 1.05, 1.25, 1.6],   # largest step within its noise, a smaller one moved: spread
+            "k": [1.0, 1.1, 1.3, 1.65],    # the same
+            "q": [1.0, 1.0, 1.25, 1.6],    # no step moved: spread
+            "j": [1.0, 1.0, 1.0, 2.0],     # carried by s2
+            "m": [1.0, 2.0, 2.0, 2.0],     # carried by s0
+            "n": [1.0, None, 2.0, 2.0],    # no result in Build 0: not attributable
+        }, [0.01, 0.3, 0.01])  # fmt: skip
+        said = data["attribution"][A]
+        self.assertEqual((said["dominant"], said["spread"], said["not_attributable"]), ({"s0": 1, "s1": 0, "s2": 1}, 3, 1))
+        self.assertEqual(fileformat.errors(data), [])
+        lines = summary.text(data).splitlines()
+        head = next(line for line in lines if "| Spread over steps |" in line)
+        row = lines[lines.index(head) + 2]
+        cells = dict(zip([c.strip() for c in head.strip("|").split("|")], [c.strip() for c in row.strip("|").split("|")]))
+        self.assertEqual((cells["Largest step"], cells["Spread over steps"], cells["Not attributable"]),
+                         ("Step 0 (1), Step 2 (1)", "3", "1"))  # fmt: skip
+        for change in (dict(spread=2), dict(spread=4), dict(dominant={"s0": 3, "s1": 0, "s2": 1}, spread=1)):
+            moved = helpers.mutated(data, lambda d, change=change: d["attribution"][A].update(change))
+            self.assertTrue(any("attribution" in e for e in fileformat.errors(moved)), change)
+
     def test_a_tie_goes_to_the_earlier_step(self):
         data = self.chain_of([1.0, 2.0, 3.0], [None, None])
         self.assertEqual(data["attribution"][A]["dominant"], {"s0": 1, "s1": 0})

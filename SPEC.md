@@ -446,13 +446,14 @@ differences: `last − first = Σ (state k+1 − state k)`. The split is exact b
 up to the rounding of floating point; it needs one build per state, which is what a chain
 is. Per indicator the file counts, among the items that moved over the whole way:
 
-- `dominant`: for each step, the items whose largest difference comes from that step,
-  among the steps in which the item moved. A step in which it agrees, is within noise or
-  is near zero carries none of it, however large its difference. Where two steps move it
-  by the same amount, the earlier one carries it;
-- `spread`: items that moved over the whole way while no single step moved them: each
-  step stayed within its tolerance, its noise or the floor, and only together do they
-  move it. No step carries such an item;
+- `dominant`: for each step, the items whose largest difference, over all the steps,
+  comes from that step, where that step moved the item. Where two steps differ by the same
+  amount, the earlier one is the largest;
+- `spread`: items that moved over the whole way while the step with their largest
+  difference did not move them: that step agrees, is within its noise or is near zero, so
+  that only together do the steps move the item. No step carries such an item, and a
+  smaller step that moved is not named in its place, as it carries less of the difference.
+  An item whose every step stayed within its tolerance, its noise or the floor is spread;
 - `not_attributable`: items that have no result in some state between. Their difference
   cannot be split, and the file says how many;
 - `unexplained_moved`: items that moved in a step marked `explained: false`, counted
