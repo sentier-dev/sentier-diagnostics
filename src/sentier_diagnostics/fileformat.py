@@ -136,17 +136,64 @@ def is_text(value, limit: int = MAX_TEXT) -> bool:
     >>> is_text("Wheat"), is_text("a\\nb"), is_text("half \\ud800"), is_text(" ")
     (True, False, False, False)
     """
-    return (
-        isinstance(value, str)
-        and 0 < len(value) <= limit
-        and bool(value.strip())
-        and not any(unicodedata.category(c) in ("Cc", "Cs") for c in value)
-    )
+    return text_fault(value, limit) is None
+
+
+def text_fault(value, limit: int = MAX_TEXT) -> str | None:
+    """What keeps a value from being a text a page can show, said with its limit; None for a
+    text.
+
+    >>> text_fault("Wheat"), text_fault("x" * 80, 80), text_fault("x" * 81, 80), text_fault(" "), text_fault(3)
+    (None, None, 'is longer than 80 characters (81)', 'is empty', 'is not a text')
+    """
+    if not isinstance(value, str):
+        return "is not a text"
+    if not value.strip():
+        return "is empty"
+    if len(value) > limit:
+        return f"is longer than {limit} characters ({len(value)})"
+    if any(unicodedata.category(c) == "Cc" for c in value):
+        return "holds a control character, such as a line break or a tab"
+    if any(unicodedata.category(c) == "Cs" for c in value):
+        return "holds half of a character (a lone surrogate)"
+    return None
+
+
+def text_errors(where: str, one: Mapping, limits: Mapping[str, int], optional=(), prefix: str = "") -> list[str]:
+    """A sentence for each field of `one` that is not a text within its limit; a field named in
+    `optional` may also be null.
+
+    >>> text_errors("step 'a'", {"label": "x" * 90, "about": None}, {"label": 80, "about": 600}, optional={"about"})
+    ["step 'a': `label` is longer than 80 characters (90)"]
+    """
+    return [
+        f"{where + ': ' if where else ''}`{prefix}{name}` {fault}"
+        for name, limit in limits.items()
+        if not (name in optional and one[name] is None) and (fault := text_fault(one[name], limit))
+    ]
 
 
 #: A word that says a state was approved: SPEC 8 allows no approval of any kind in a file,
-#: and a state's free `identity` table is no way round it.
-APPROVAL = re.compile(r"status|accept|approv", re.IGNORECASE)
+#: and a state's free `identity` table is no way round it. A stem is looked for anywhere in
+#: a key, its separators taken out (`reviewed_by`, `peerReviewed`, `sign-off`); a short word
+#: only as a word of its own (`ok`, not `token`). A stem can catch a key that is no approval
+#: (`preview`); such a key is refused, and the state can name it otherwise.
+APPROVAL_STEMS = re.compile(r"status|accept|approv|reject|review|verif|valid|certif|confirm|endors|audit|sign(ed)?off")
+APPROVAL_WORDS = frozenset(
+    {"ok", "okay", "lgtm", "qa", "pass", "passed", "passes", "ack", "acked", "checked", "signed", "agreed", "pending"}
+)
+
+
+def _approval(key: str) -> bool:
+    """Whether a key of a state's identity says an approval. Keys are printable ASCII (the
+    check of a state refuses any other), so no word hides behind a lookalike letter or an
+    invisible one.
+
+    >>> [_approval(k) for k in ("commit", "reviewed_by", "peerReviewed", "sign-off", "OK", "token", "solver")]
+    [False, True, True, True, True, False, False]
+    """
+    words = re.findall(r"[a-z]+", re.sub(r"([a-z])([A-Z])", r"\1 \2", key).lower())
+    return bool(APPROVAL_STEMS.search("".join(words))) or any(w in APPROVAL_WORDS for w in words)
 
 
 def is_optional(value, limit: int = MAX_TEXT) -> bool:
@@ -192,8 +239,9 @@ def origin_errors(found, where: str) -> list[str]:
         return [f"{where}: `by` is not {{kind, name, model, run_by}}"]
     if found["kind"] not in ORIGIN_KINDS:
         return [f"{where}: `by.kind` is not one of {', '.join(ORIGIN_KINDS)}"]
-    if not all(is_optional(found[k], MAX_LABEL) for k in ("name", "model", "run_by")):
-        return [f"{where}: `by` holds a text that is too long or not a text"]
+    texts = text_errors(where, found, dict.fromkeys(("name", "model", "run_by"), MAX_LABEL), ORIGIN_KEYS, "by.")
+    if texts:
+        return texts
     if found["kind"] in ("person", "code") and found["name"] is None:
         return [f"{where}: a {found['kind']} is named (`by.name`)"]
     if found["kind"] == "model" and (found["model"] is None or found["run_by"] is None):
@@ -214,11 +262,14 @@ def _indicators(data, found) -> list[str]:
         if not isinstance(one, dict) or set(one) != INDICATOR_KEYS:
             found.append("an indicator is not {id, name, short, unit}")
             return []
-        if not is_text(one["id"], MAX_ID) or not is_text(one["name"], MAX_ID):
-            found.append("an indicator has no `id` or `name` that is a short text")
+        if text_fault(one["id"], MAX_ID):
+            found.append(f"an indicator's `id` {text_fault(one['id'], MAX_ID)}")
             return []
-        if not is_optional(one["short"], MAX_WORD) or not is_optional(one["unit"], MAX_WORD):
-            found.append(f"indicator {one['id']!r}: `short` or `unit` is not a short text")
+        where = f"indicator {one['id']!r}"
+        if text_fault(one["name"], MAX_ID):
+            found += text_errors(where, one, {"name": MAX_ID})
+            return []
+        found += text_errors(where, one, {"short": MAX_WORD, "unit": MAX_WORD}, {"short", "unit"})
         ids.append(one["id"])
     if len(set(ids)) != len(ids):
         found.append("two indicators have the same id")
@@ -236,13 +287,14 @@ def _states(data, found, indicators) -> list[str]:
         if (
             not isinstance(one, dict)
             or not STATE_KEYS <= set(one) <= STATE_KEYS | STATE_OPTIONAL
-            or not is_text(one["id"], MAX_ID)
         ):
             found.append(f"a state is not {{{', '.join(sorted(STATE_KEYS))}}}, with `noise`")
             return []
+        if text_fault(one["id"], MAX_ID):
+            found.append(f"a state's `id` {text_fault(one['id'], MAX_ID)}")
+            return []
         where = f"state {one['id']!r}"
-        if not is_text(one["label"], MAX_LABEL) or not is_optional(one["about"]):
-            found.append(f"{where}: `label` or `about` is not a text")
+        found += text_errors(where, one, {"label": MAX_LABEL, "about": MAX_TEXT}, {"about"})
         if one["kind"] not in STATE_KINDS:
             found.append(f"{where}: `kind` is not one of {', '.join(STATE_KINDS)}")
         elif one["kind"] == "published" and k != 0:
@@ -256,22 +308,25 @@ def _states(data, found, indicators) -> list[str]:
                 found += shape
                 return []
         identity = one["identity"]
-        if not (
-            isinstance(identity, dict)
-            and len(identity) <= MAX_IDENTITY
-            and all(is_text(k2, MAX_WORD) and is_text(v, 200) for k2, v in identity.items())
-        ):
-            found.append(f"{where}: `identity` is not a table of at most {MAX_IDENTITY} short texts")
-        elif any(APPROVAL.search(k2) for k2 in identity):
+        if not isinstance(identity, dict) or len(identity) > MAX_IDENTITY:
+            found.append(f"{where}: `identity` is not a table of at most {MAX_IDENTITY} entries")
+        elif any(text_fault(k2, MAX_WORD) or text_fault(v, 200) for k2, v in identity.items()):
+            found += [f"{where}: the key {k2!r} of `identity` {text_fault(k2, MAX_WORD)}"
+                      for k2 in identity if text_fault(k2, MAX_WORD)]  # fmt: skip
+            found += text_errors(where, identity, {k2: 200 for k2 in identity if not text_fault(k2, MAX_WORD)}, (), "identity.")
+        elif not all(k2.isascii() and k2.isprintable() for k2 in identity):
+            found.append(f"{where}: a key of `identity` is printable ASCII, so that no word hides in it")
+        elif any(_approval(k2) for k2 in identity):
             found.append(f"{where}: `identity` names what makes a state, never a status or an approval (SPEC 8)")
         join = one["join"]
         if join is not None and not (
             isinstance(join, dict)
             and set(join) == JOIN_KEYS
             and all(is_count(join[k2]) for k2 in ("compared", "unmatched", "ambiguous"))
-            and is_optional(join["note"])
         ):
             found.append(f"{where}: `join` is not {{compared, unmatched, ambiguous, note}}")
+        elif join is not None:
+            found += text_errors(where, join, {"note": MAX_TEXT}, {"note"}, "join.")
         ids.append(one["id"])
     if len(set(ids)) != len(ids):
         found.append("two states have the same id")
@@ -301,8 +356,8 @@ def _claim_shape(found_claim, where, indicators, tier) -> list[str]:
     if not isinstance(found_claim, dict) or set(found_claim) != CLAIM_KEYS:
         return [f"{where}: `claim` is not {{text, by, reach, scope}}"]
     found = []
-    if not is_text(found_claim["text"]):
-        found.append(f"{where}: a claim says what it claims (`text`)")
+    if text_fault(found_claim["text"]):
+        found.append(f"{where}: a claim says what it claims, and its `text` {text_fault(found_claim['text'])}")
     if found_claim["by"] is not None:
         found += origin_errors(found_claim["by"], where)
     if found_claim["reach"] is not None and not is_count(found_claim["reach"]):
@@ -326,7 +381,7 @@ def _claim_shape(found_claim, where, indicators, tier) -> list[str]:
                 and all(is_text(i, MAX_ID) for i in items)
                 and len(set(items)) == len(items)
             ):
-                found.append(f"{where}: the items of a scope are not a list of distinct ids")
+                found.append(f"{where}: the items of a scope are not a list of distinct ids, each a text of at most {MAX_ID} characters")
         if entry["direction"] not in claims.WAYS:
             found.append(f"{where}: a scope's direction is not one of {', '.join(claims.WAYS)}")
         if entry["largest"] is not None and not is_share(entry["largest"]):
@@ -343,20 +398,22 @@ def _steps(data, found, states, indicators, tier) -> list[dict]:
         return []
     ids = []
     for k, one in enumerate(steps):
-        if not isinstance(one, dict) or set(one) != STEP_KEYS or not is_text(one["id"], MAX_ID):
+        if not isinstance(one, dict) or set(one) != STEP_KEYS:
             found.append(f"a step is not {{{', '.join(sorted(STEP_KEYS))}}}")
+            return []
+        if text_fault(one["id"], MAX_ID):
+            found.append(f"a step's `id` {text_fault(one['id'], MAX_ID)}")
             return []
         where = f"step {one['id']!r}"
         if one["id"] == TOTAL:
             found.append(f"{where}: `total` names the whole way and is no step's id")
         if (one["from"], one["to"]) != (states[k], states[k + 1]):
             found.append(f"{where}: it does not lead from state {states[k]!r} to {states[k + 1]!r}")
-        if not is_text(one["label"], MAX_LABEL) or not is_optional(one["about"]):
-            found.append(f"{where}: `label` or `about` is not a text")
-        if not is_text(one["kind"], MAX_WORD) or not isinstance(one["explained"], bool):
-            found.append(f"{where}: a step has a `kind` and says whether a cause explains it")
+        found += text_errors(where, one, {"label": MAX_LABEL, "about": MAX_TEXT, "kind": MAX_WORD}, {"about"})
+        if not isinstance(one["explained"], bool):
+            found.append(f"{where}: a step says whether a cause explains it (`explained`: true or false)")
         if not is_link(one["link"]):
-            found.append(f"{where}: `link` is not an https address")
+            found.append(f"{where}: `link` is not an https address of at most 500 characters")
         if one["claim"] is not None:
             shape = _claim_shape(one["claim"], where, indicators, tier)
             if shape:  # nothing can be judged against a claim that cannot be read
@@ -369,9 +426,12 @@ def _steps(data, found, states, indicators, tier) -> list[dict]:
             and set(said) == {"value", "basis", "note"}
             and is_share(said["value"])
             and said["basis"] in TOLERANCE_BASES
-            and is_optional(said["note"])
         ):
             found.append(f"{where}: `tolerance` is not {{value, basis, note}}")
+            return []
+        note = text_errors(where, said, {"note": MAX_TEXT}, {"note"}, "tolerance.")
+        if note:
+            found += note
             return []
         if states_carry_noise(data):
             # the step's noise is its two states', the larger per indicator (SPEC section 5.3)
@@ -398,19 +458,23 @@ def noise_errors(noise, where: str, indicators) -> list[str]:
         isinstance(noise, dict)
         and set(noise) == NOISE_KEYS
         and isinstance(noise["measured"], bool)
-        and is_optional(noise["note"])
     ):
         return [f"{where}: `noise` is not {{measured, between, by, note}}"]
+    note = text_errors(where, noise, {"note": MAX_TEXT}, {"note"}, "noise.")
+    if note:
+        return note
     if noise["measured"]:
         if not (
             isinstance(noise["between"], list)
             and len(noise["between"]) == 2
-            and all(is_text(n, MAX_LABEL) for n in noise["between"])
             and isinstance(noise["by"], dict)
             and set(noise["by"]) <= set(indicators)
             and all(is_share(v) for v in noise["by"].values())
         ):
             return [f"{where}: measured noise names the two builds and a size per indicator"]
+        if any(text_fault(n, MAX_LABEL) for n in noise["between"]):
+            return [f"{where}: a build that `noise.between` names {text_fault(n, MAX_LABEL)}"
+                    for n in noise["between"] if text_fault(n, MAX_LABEL)]  # fmt: skip
     elif noise["between"] is not None or noise["by"] is not None:
         return [f"{where}: noise that was not measured has no builds and no sizes"]
     return []
@@ -524,12 +588,15 @@ def _rule(data, found, indicators, states, steps) -> dict | None:
             isinstance(one, dict)
             and set(one) == FLOOR_KEYS
             and one["indicator"] in indicators
-            and is_optional(one["unit"], MAX_WORD)
             and is_share(one["value"])
             and one["basis"] in FLOOR_BASES
             and is_count(one["n"])
         ):
             found.append("a floor is not {indicator, unit, value, basis, n} of a known indicator")
+            return None
+        unit = text_errors(f"the floor of {one['indicator']!r}", one, {"unit": MAX_WORD}, {"unit"})
+        if unit:
+            found += unit
             return None
         key = (one["indicator"], one["unit"])
         if key in table:
@@ -689,18 +756,20 @@ def _items(data, found, indicators, states, steps, floors, tier, blocks):
         for i in indicators
     }  # fmt: skip
     for item in listed:
-        if not isinstance(item, dict) or set(item) != ITEM_KEYS or not is_text(item["id"], MAX_ID):
+        if not isinstance(item, dict) or set(item) != ITEM_KEYS:
             found.append(f"an item is not {{{', '.join(sorted(ITEM_KEYS))}}}")
+            return []
+        if text_fault(item["id"], MAX_ID):
+            found.append(f"an item's `id` {text_fault(item['id'], MAX_ID)}")
             return []
         where = f"item {item['id']!r}"
         if item["id"] in seen:
             found.append(f"{where} is listed twice")
         seen.add(item["id"])
-        if not is_text(item["name"], 300):
-            found.append(f"{where}: `name` is not a text")
-        if not (is_optional(item["place"], 60) and is_optional(item["group"], MAX_LABEL)
-                and is_optional(item["unit"], MAX_WORD)):  # fmt: skip
-            found.append(f"{where}: `place`, `group` or `unit` is not a short text")
+        found += text_errors(where, item, {"name": 300})
+        texts = text_errors(where, item, {"place": 60, "group": MAX_LABEL, "unit": MAX_WORD}, {"place", "group", "unit"})
+        if texts:
+            found += texts
             return []
         tables = [item[k] for k in ("values", "classes", "directions", "bands")]
         if not all(isinstance(t, dict) and set(t) == set(indicators) for t in tables):
@@ -879,6 +948,7 @@ def _explanations(data, found, indicators, steps, items, tier):
             continue
         if not all(is_optional(v, MAX_ID) for v in about.values()):
             found.append(f"{where}: `about` names a step, an indicator and an item by their ids, or null")
+            found += text_errors(where, about, dict.fromkeys(about, MAX_ID), set(about), "about.")
             continue
         if all(v is None for v in about.values()):
             found.append(f"{where}: it is about something: a step, an indicator or an item")
@@ -893,8 +963,7 @@ def _explanations(data, found, indicators, steps, items, tier):
                 found.append(f"{where}: about an item the file does not list")
         if one["finding"] not in FINDINGS:
             found.append(f"{where}: `finding` is not one of {', '.join(FINDINGS)}")
-        if not is_text(one["text"], MAX_LONG):
-            found.append(f"{where}: `text` is not a text of at most {MAX_LONG} characters")
+        found += text_errors(where, one, {"text": MAX_LONG})
         if one["by"] is None:
             found.append(f"{where}: every explanation says who wrote it (`by`)")
         else:
@@ -904,11 +973,11 @@ def _explanations(data, found, indicators, steps, items, tier):
             isinstance(source, dict)
             and set(source) == {"link", "doc"}
             and is_link(source["link"])
-            and is_optional(source["doc"], 200)
         ):
             found.append(f"{where}: `source` is not {{link, doc}}")
-        if not is_optional(one["not_checked"]):
-            found.append(f"{where}: `not_checked` is not a text")
+        elif source is not None:
+            found += text_errors(where, source, {"doc": 200}, {"doc"}, "source.")
+        found += text_errors(where, one, {"not_checked": MAX_TEXT}, {"not_checked"})
 
 
 # ------------------------------------------------------------------------ the whole file
@@ -947,21 +1016,22 @@ def _errors(data, found: list[str]) -> list[str]:
         return [f"`tier` is not one of {', '.join(TIERS)}"]
     if data["audience"] not in AUDIENCES:
         return [f"`audience` is not one of {', '.join(AUDIENCES)}"]
-    if not is_text(data["title"], 120) or not is_optional(data["about"]):
-        found.append("`title` is not a short text, or `about` not a text")
+    found += text_errors("", data, {"title": 120, "about": MAX_TEXT, "made_by": 60}, {"about"})
     item = data["item"]
-    if not (isinstance(item, dict) and set(item) == {"one", "many"}
-            and all(is_text(w, 30) for w in item.values())):  # fmt: skip
+    if not (isinstance(item, dict) and set(item) == {"one", "many"}):
         found.append("`item` is not {one, many}")
+    else:
+        found += text_errors("", item, {"one": 30, "many": 30}, (), "item.")
     word = data.get("indicator")
-    if word is not None and not (isinstance(word, dict) and set(word) == {"one", "many"}
-                                 and all(is_text(w, 30) for w in word.values())):  # fmt: skip
+    if word is not None and not (isinstance(word, dict) and set(word) == {"one", "many"}):
         found.append("`indicator` is not {one, many}, or null")
-    if not is_text(data["made_by"], 60):
-        found.append("`made_by` is not a short text")
+    elif word is not None:
+        found += text_errors("", word, {"one": 30, "many": 30}, (), "indicator.")
     notes = data["notes"]
-    if not isinstance(notes, list) or len(notes) > MAX_NOTES or not all(map(is_text, notes)):
+    if not isinstance(notes, list) or len(notes) > MAX_NOTES:
         found.append(f"`notes` is not a list of at most {MAX_NOTES} texts")
+    else:
+        found += [f"note {k + 1} {text_fault(note)}" for k, note in enumerate(notes) if text_fault(note)]
     indicators = _indicators(data, found)
     states = _states(data, found, indicators)
     if not indicators or not states:

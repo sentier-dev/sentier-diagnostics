@@ -137,13 +137,14 @@ function body(scripts) {
     const node = new FakeNode('script');
     node.setAttribute('type', 'application/json');
     node.setAttribute('data-sd', name);
-    node.textContent = JSON.stringify(value);
+    // `{ text }` is written as it is: JSON that JSON.stringify would never write
+    node.textContent = value instanceof Text ? value.text : JSON.stringify(value);
     root.appendChild(node);
   }
   return root;
 }
 
-// `options`: {standalone, attributes, globals, fetch, protocol, scripts, hash, historyState}
+// `options`: {standalone, attributes, globals, fetch, protocol, scripts, hash, search, historyState}
 function page(data, breakdowns, options) {
   options = options || {};
   const scripts = options.scripts || {};
@@ -167,7 +168,7 @@ function page(data, breakdowns, options) {
   root.ownerDocument = document;
   const context = {
     document,
-    location: { hash: options.hash ? '#' + options.hash : '', search: '', pathname: '/index.html', protocol: options.protocol || 'file:' },
+    location: { hash: options.hash ? '#' + options.hash : '', search: options.search || '', pathname: '/index.html', protocol: options.protocol || 'file:' },
     // replaceState drops the "#"; each call is kept, with the state it was given
     history: {
       state: options.historyState === undefined ? null : options.historyState,
@@ -206,4 +207,7 @@ function page(data, breakdowns, options) {
   };
 }
 
-module.exports = { FakeNode, page, body };
+// a script's text as it is, for a page whose JSON is not what JSON.stringify writes
+class Text { constructor(text) { this.text = text; } }
+
+module.exports = { Text, FakeNode, page, body };

@@ -67,16 +67,49 @@
 
   function groupThousands(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
 
+  // a number as a power of ten, in the page's one style: "1.235e4", "−4.2e−4", never "e+";
+  // its trailing zeros dropped, or kept where a line reads its numbers in one precision
+  function powerText(v, digits, keep) {
+    var s = v.toExponential(digits);
+    return (keep ? s : s.replace(/\.?0+e/, 'e')).replace('e+', 'e').replace(/-/g, '−');
+  }
+
+  // a number as it is written, every digit, in the same style ("1e−7", "1e21")
+  function exactText(v) { return v === null || v === undefined ? 'missing' : String(v).replace('e+', 'e').replace(/-/g, '−'); }
+
+  // JSON read as the Python reads a file: a key written twice in one object is refused,
+  // where JSON.parse keeps the last of the two without a word. The text is parsed first,
+  // so what is not JSON fails as JSON.parse says, and the scan below walks a well-formed text.
+  function readJSON(text) {
+    var value = JSON.parse(text), open = [], i = 0;
+    while (i < text.length) {
+      var c = text.charAt(i), top = open[open.length - 1];
+      if (c === '"') {
+        var end = i + 1;
+        while (text.charAt(end) !== '"') end += text.charAt(end) === '\\' ? 2 : 1;
+        if (top && top.awaitsKey) {
+          var key = JSON.parse(text.slice(i, end + 1));
+          if (Object.prototype.hasOwnProperty.call(top.keys, key)) throw new Error('the key ' + JSON.stringify(key) + ' is written twice in one object');
+          top.keys[key] = true;
+          top.awaitsKey = false;
+        }
+        i = end;
+      } else if (c === '{') open.push({ keys: Object.create(null), awaitsKey: true });
+      else if (c === '[') open.push(null);
+      else if (c === '}' || c === ']') open.pop();
+      else if (c === ',' && top) top.awaitsKey = true;
+      i++;
+    }
+    return value;
+  }
+
   // a result as a reader reads it: four significant digits; never "0" for a value that is not 0
   function formatNumber(v) {
     if (v === null || v === undefined) return 'missing';
     if (v === 0) return '0';
-    var a = Math.abs(v);
-    // one style from 1e4 on: toPrecision(4) would write 12345 as "1.235e+4" itself
-    if (a >= 1e4 || a < 1e-3) {
-      return v.toExponential(3).replace(/\.?0+e/, 'e').replace('e+', 'e').replace(/-/g, '−');
-    }
-    var s = v.toPrecision(4);
+    var a = Math.abs(v), s = v.toPrecision(4);
+    // one style from 1e4 on, and for what rounds to it: toPrecision writes 9999.5 "1.000e+4"
+    if (a >= 1e4 || a < 1e-3 || s.indexOf('e') >= 0) return powerText(v, 3);
     if (s.indexOf('.') >= 0) s = s.replace(/0+$/, '').replace(/\.$/, '');
     return s.replace('-', '−');
   }
@@ -87,7 +120,8 @@
     var size = Math.abs(c);
     var text;
     if (size === 0) text = '0';
-    else if (size < 0.01) text = size.toExponential(1);
+    else if (size < 0.01) text = powerText(size, 1);
+    else if (Math.round(size) >= 1e4) text = formatNumber(size);
     else if (size >= 1000) text = groupThousands(Math.round(size));
     else text = size.toFixed(size >= 100 ? 0 : size >= 1 ? 1 : 2);
     return (c > 0 ? '+' : c < 0 ? '−' : '') + text + ' %';
@@ -98,7 +132,7 @@
   // decimal of a percent would print more digits than a float holds (1e18 % as nineteen).
   function shareText(part) {
     var v = part * 100, size = Math.abs(v);
-    var text = size === 0 ? '0' : size < 0.1 ? size.toExponential(1) : size < 1e4 ? size.toFixed(1) : formatNumber(size);
+    var text = size === 0 ? '0' : size < 0.1 ? powerText(size, 1) : size < 1e4 ? size.toFixed(1) : formatNumber(size);
     return (v > 0 ? '' : v < 0 ? '−' : '') + text + ' %';
   }
 
@@ -123,8 +157,7 @@
     var r = after / before;
     if (!isFinite(r) || r === 0) return ratioText(before, after);
     var s = r.toPrecision(3);
-    if (r < 0.01 || s.indexOf('e') >= 0) s = r.toExponential(2).replace(/\.?0+e/, 'e').replace('e+', 'e');
-    return s.replace(/-/g, '−');
+    return r < 0.01 || s.indexOf('e') >= 0 ? powerText(r, 2) : s;
   }
 
   // the 10th, 50th and 90th percentile in one precision: the smallest (three digits at
@@ -135,8 +168,10 @@
   function quantileTexts(qs) {
     var values = [qs.p10, qs.median, qs.p90];
     var one = function (v, digits) {
-      if (v !== 0 && (Math.abs(v) < 0.01 || Math.abs(v) >= 1e4)) return v.toExponential(digits - 1).replace(/\.?0+e/, 'e').replace('e+', 'e').replace(/-/g, '−');
-      return v.toPrecision(digits).replace(/-/g, '−');
+      var s = v.toPrecision(digits);
+      // toPrecision writes 1234.5 at three digits "1.23e+3" itself
+      if (v !== 0 && (Math.abs(v) < 0.01 || Math.abs(v) >= 1e4 || s.indexOf('e') >= 0)) return powerText(v, digits - 1, true);
+      return s.replace(/-/g, '−');
     };
     var pairs = [[0, 1], [1, 2], [0, 2]];
     var digitsFor = function (kept) {
@@ -374,8 +409,8 @@
   function cellView(before, after, cls, dir, band) {
     var view = { text: '', tone: 'none', strength: 0, noRatio: false, mark: '' };
     view.title = cls + (SAID[cls] ? ': ' + SAID[cls] : '') + '. Before ' +
-      (before === null ? 'missing' : String(before)) + ', after ' +
-      (after === null ? 'missing' : String(after)) + (dir ? '. Went ' + dir + '.' : '.');
+      exactText(before) + ', after ' +
+      exactText(after) + (dir ? '. Went ' + dir + '.' : '.');
     switch (cls) {
       case 'missing':
         view.text = before === null && after === null ? 'missing' : before === null ? 'missing before' : 'missing after';
@@ -424,7 +459,7 @@
       view.text = ratioShort(before, after);
       if (MOVES.indexOf(cls) >= 0 && view.text === '1.00') view.text = ratioText(before, after);
       if (cls === 'within noise') view.mark = '~';
-      view.title += ' After ÷ before: ' + String(after / before) + '.';
+      view.title += ' After ÷ before: ' + exactText(after / before) + '.';
     }
     return view;
   }
@@ -1251,7 +1286,7 @@
       if (k === D.steps.length) {
         node.appendChild(el('p', null, [el('strong', { text: 'The whole way: ' }), D.states[0].label + ' → ' + D.states[D.states.length - 1].label + '. ',
           el('span', { cls: 'sd-quiet', text: 'Each cell holds the last result divided by the first. Choose one step to see what one change did, or any steps to see what they did together; "Steps and the whole way" below splits the whole difference between them.' })]));
-        node.appendChild(el('p', { cls: 'sd-quiet', text: 'Tolerance ' + D.rule.total_tolerance + ', the largest of the steps. Noise ' + totalNoiseSaid() + '.' }));
+        node.appendChild(el('p', { cls: 'sd-quiet', text: 'Tolerance ' + exactText(D.rule.total_tolerance) + ', the largest of the steps. Noise ' + totalNoiseSaid() + '.' }));
         return;
       }
       if (isSet(k)) { renderSetSaid(node); return; }
@@ -1264,7 +1299,7 @@
       }
       if (!s.explained) node.appendChild(el('p', { cls: 'sd-error', text: 'Nothing explains this step.' }));
       node.appendChild(el('p', { cls: 'sd-claim' }, [el('span', { cls: 'sd-claim-label', text: 'Claim' })].concat(claimParts(s))));
-      node.appendChild(el('p', { cls: 'sd-quiet', text: 'Tolerance ' + s.tolerance.value + ' (' + s.tolerance.basis + '). Noise ' + stepNoiseSaid(k) + '.' }));
+      node.appendChild(el('p', { cls: 'sd-quiet', text: 'Tolerance ' + exactText(s.tolerance.value) + ' (' + s.tolerance.basis + '). Noise ' + stepNoiseSaid(k) + '.' }));
     }
 
     function renderSetSaid(node) {
@@ -1349,7 +1384,7 @@
           el('td', { cls: 'num', text: verdict('within noise') }),
           el('td', { cls: 'num', text: n(sumOver(s.id, function (b) { return b.missing.before + b.missing.both; })) }),
           el('td', { cls: 'num', text: n(sumOver(s.id, function (b) { return b.missing.after + b.missing.both; })) }),
-          el('td', { cls: 'num', text: String(s.tolerance.value), title: s.tolerance.basis + (s.tolerance.note ? ': ' + s.tolerance.note : '') }),
+          el('td', { cls: 'num', text: exactText(s.tolerance.value), title: s.tolerance.basis + (s.tolerance.note ? ': ' + s.tolerance.note : '') }),
           el('td', { text: noise })
         ]));
       });
@@ -1555,8 +1590,8 @@
           el('td', { text: one.row.name + (one.row.place ? ' (' + one.row.place + ')' : '') }),
           el('td', { text: indicatorName(one.ind) }),
           el('td', { text: clsAt(one.row, one.ind, k) }),
-          el('td', { cls: 'num', text: formatNumber(pair[0]), title: String(pair[0]) }),
-          el('td', { cls: 'num', text: formatNumber(pair[1]), title: String(pair[1]) }),
+          el('td', { cls: 'num', text: formatNumber(pair[0]), title: exactText(pair[0]) }),
+          el('td', { cls: 'num', text: formatNumber(pair[1]), title: exactText(pair[1]) }),
           valueCell(one.row, one.ind, k, false),
           el('td', { text: verdictOf(one.row, one.ind, k) || '—' })
         ]));
@@ -1763,7 +1798,7 @@
       var body = clear(q('rule-body'));
       body.appendChild(el('p', null, ['Every value is put into one class by one rule, in this order: missing, near zero, agrees, within noise (both only where the two share a sign), zero reference, zero result, sign change, beyond 10x, differs. A pair of one sign that crosses the floor and stays within ten times is classed by its ratio: it did not go to or from zero. ' +
         'Direction is up where the result after is larger as a signed number, down otherwise; colour follows the direction only. ' +
-        'Beyond 10x: one size more than ' + D.rule.beyond + ' times the other. The whole way is counted with a tolerance of ' + D.rule.total_tolerance + ', the largest of the steps, and noise ' + totalNoiseSaid() + '. ' +
+        'Beyond 10x: one size more than ' + exactText(D.rule.beyond) + ' times the other. The whole way is counted with a tolerance of ' + exactText(D.rule.total_tolerance) + ', the largest of the steps, and noise ' + totalNoiseSaid() + '. ' +
         'Noise belongs to a state: how far two builds of it differ. A step, a run of steps and the whole way are compared with the sum of the noise of their two ends, since rebuilding both moves the difference by up to the sum; a state inside a run adds nothing, as the pair holds none of its results. The published results are exact. ' +
         'Several steps chosen together are always a run: this page counts them with the same rule and the largest tolerance of their steps, from the result before the first chosen step and the result after the last; no verdict. ' +
         'The matrix shows the result after divided by the result before; the ratio and the strength of its colour are a display, and change no class.']));
@@ -1781,16 +1816,16 @@
       var tb = el('tbody');
       D.steps.forEach(function (s) {
         var noise = noiseText(s.noise, indicatorIds(), indWord(true)) + (s.noise.measured ? ': ' + Object.keys(s.noise.by).map(function (k) { return indicatorName(k) + ' ' + formatNumber(s.noise.by[k]); }).join(', ') : '');
-        tb.appendChild(el('tr', null, [el('td', { text: s.label }), el('td', { cls: 'num', text: String(s.tolerance.value) }), el('td', { text: s.tolerance.basis }), el('td', { text: s.tolerance.note || '' }), el('td', { text: noise })]));
+        tb.appendChild(el('tr', null, [el('td', { text: s.label }), el('td', { cls: 'num', text: exactText(s.tolerance.value) }), el('td', { text: s.tolerance.basis }), el('td', { text: s.tolerance.note || '' }), el('td', { text: noise })]));
       });
       stepsTable.appendChild(tb);
       body.appendChild(el('div', { cls: 'sd-wrap' }, [stepsTable]));
       body.appendChild(el('h4', { text: 'Floors' }));
-      body.appendChild(el('p', { cls: 'sd-quiet', text: 'One floor per ' + indWord(false) + ' and reference unit: ' + D.rule.floor_factor + ' times the median size of the results of ' + D.states[stateIndex(D.rule.floors_from)].label + ' in that unit, unless declared. Units are never pooled.' }));
+      body.appendChild(el('p', { cls: 'sd-quiet', text: 'One floor per ' + indWord(false) + ' and reference unit: ' + exactText(D.rule.floor_factor) + ' times the median size of the results of ' + D.states[stateIndex(D.rule.floors_from)].label + ' in that unit, unless declared. Units are never pooled.' }));
       var floors = el('table', null, [el('thead', null, [el('tr', null, [capital(indWord(false)), 'Unit', 'Floor', 'Basis', 'From results'].map(function (h) { return el('th', { scope: 'col', text: h }); }))])]);
       var fb = el('tbody');
       D.rule.floors.forEach(function (f) {
-        fb.appendChild(el('tr', null, [el('td', { text: indicatorName(f.indicator) }), el('td', { text: f.unit || 'unknown' }), el('td', { cls: 'num', text: formatNumber(f.value), title: String(f.value) }), el('td', { text: f.basis }), el('td', { cls: 'num', text: n(f.n) })]));
+        fb.appendChild(el('tr', null, [el('td', { text: indicatorName(f.indicator) }), el('td', { text: f.unit || 'unknown' }), el('td', { cls: 'num', text: formatNumber(f.value), title: exactText(f.value) }), el('td', { text: f.basis }), el('td', { cls: 'num', text: n(f.n) })]));
       });
       floors.appendChild(fb);
       body.appendChild(el('div', { cls: 'sd-wrap' }, [floors]));
@@ -1846,8 +1881,8 @@
         var share = split.state === 'split' ? shareText(split.shares[k]) : '—';
         tb.appendChild(el('tr', { cls: chosen.indexOf(k) >= 0 ? 'sd-in-run' : null }, [
           el('td', null, ['Step ' + stepNo(k) + ': ' + s.label, s.explained ? null : el('div', { cls: 'sd-error', text: 'nothing explains it' })]),
-          el('td', { cls: 'num', text: formatNumber(b), title: String(b) }),
-          el('td', { cls: 'num', text: formatNumber(a), title: String(a) }),
+          el('td', { cls: 'num', text: formatNumber(b), title: exactText(b) }),
+          el('td', { cls: 'num', text: formatNumber(a), title: exactText(a) }),
           valueCell(row, ind.id, k, false),
           el('td', { text: verdictOf(row, ind.id, k) || '—' }),
           el('td', { cls: 'num', text: share })
@@ -1855,8 +1890,8 @@
       });
       tb.appendChild(el('tr', null, [
         el('th', { scope: 'row', text: 'The whole way' }),
-        el('td', { cls: 'num', text: formatNumber(first), title: String(first) }),
-        el('td', { cls: 'num', text: formatNumber(last), title: String(last) }),
+        el('td', { cls: 'num', text: formatNumber(first), title: exactText(first) }),
+        el('td', { cls: 'num', text: formatNumber(last), title: exactText(last) }),
         valueCell(row, ind.id, D.steps.length, false),
         el('td', { text: '—' }),
         el('td', { cls: 'num', text: splitText(split), title: split.state === 'split' ? 'the shares above, added up in floating point: what rounding left of 100 %' : null })
@@ -1865,8 +1900,8 @@
         var pair = pairOf(row, ind.id, SET);
         tb.appendChild(el('tr', { cls: 'sd-in-run' }, [
           el('th', { scope: 'row', text: setWords(view.set) }),
-          el('td', { cls: 'num', text: formatNumber(pair[0]), title: String(pair[0]) }),
-          el('td', { cls: 'num', text: formatNumber(pair[1]), title: String(pair[1]) }),
+          el('td', { cls: 'num', text: formatNumber(pair[0]), title: exactText(pair[0]) }),
+          el('td', { cls: 'num', text: formatNumber(pair[1]), title: exactText(pair[1]) }),
           valueCell(row, ind.id, SET, false),
           el('td', { text: '—' }),
           el('td', { text: '' })
@@ -1917,8 +1952,15 @@
         if (B[name]) { drawOrRefuse(B[name]); return; }
         holder.appendChild(el('p', { cls: 'sd-quiet', text: 'The breakdown ' + name + ' is not with this page.' }));
         if (safeName(name) && /^https?:$/.test(win.location.protocol)) {
-          win.fetch(base + name).then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
-            .then(drawOrRefuse, function () { /* not read: the sentence above stays */ });
+          win.fetch(base + name).then(function (r) { if (!r.ok) throw new Error(); return r.text(); }).then(function (text) {
+            var data;
+            try { data = readJSON(text); } catch (error) {
+              clear(holder);
+              holder.appendChild(el('p', { cls: 'sd-error', text: 'The breakdown ' + name + ' cannot be read: ' + error.message + '. Not drawn.' }));
+              return;
+            }
+            drawOrRefuse(data);
+          }, function () { /* not read: the sentence above stays */ });
         }
       });
       markOpen();
@@ -2014,8 +2056,8 @@
         var line = function (label, kind, pair, strong) {
           var d = pair[1] - pair[0];
           return el('tr', null, [el(strong ? 'th' : 'td', { text: label }), el('td', { text: kind || '' }),
-            el('td', { cls: 'num', text: formatNumber(pair[0]), title: String(pair[0]) }),
-            el('td', { cls: 'num', text: formatNumber(pair[1]), title: String(pair[1]) }),
+            el('td', { cls: 'num', text: formatNumber(pair[0]), title: exactText(pair[0]) }),
+            el('td', { cls: 'num', text: formatNumber(pair[1]), title: exactText(pair[1]) }),
             el('td', { cls: 'num cell ' + (d > 0 ? 'tone-up' : d < 0 ? 'tone-down' : 'tone-none'), style: '--s:0.4', text: d === 0 ? '=' : (d > 0 ? '+' : '−') + formatNumber(Math.abs(d)) })]);
         };
         entry.parts.forEach(function (p) { tb.appendChild(line(p.label, p.kind, p.values, false)); });
@@ -2149,7 +2191,7 @@
       }).then(function (text) {
         if (text.length > MATRIX_MAX_BYTES) throw new Error(name + ' is larger than ' + groupThousands(MATRIX_MAX_BYTES) + ' bytes');
         var m;
-        try { m = JSON.parse(text); } catch (error) { throw new Error(name + ' is not JSON'); }
+        try { m = readJSON(text); } catch (error) { throw new Error(name + ' cannot be read: ' + error.message); }
         takeMatrix(m);
       }).catch(function (error) { refuseMatrix(error.message || (name + ' could not be read')); });
     }
@@ -2519,7 +2561,7 @@
     function readScript(name) {
       var node = q(name);
       if (!node || !node.textContent || !/\S/.test(node.textContent)) return undefined;
-      return JSON.parse(node.textContent);
+      return readJSON(node.textContent);
     }
 
     // The page's own colours follow the host's. A host that sets a light ink is a dark page:
@@ -2723,7 +2765,7 @@
         var reader = new win.FileReader();
         reader.onload = function () {
           var data;
-          try { data = JSON.parse(reader.result); } catch (error) { refuse('The file is not JSON: ' + error.message); return; }
+          try { data = readJSON(reader.result); } catch (error) { refuse('The file cannot be read: ' + error.message); return; }
           show(data, false);
         };
         reader.readAsText(file);
@@ -2734,15 +2776,17 @@
         var data = given.data || readScript('data');
         if (data === undefined) data = win.SENTIER_DIAGNOSTICS;
       } catch (error) {
-        refuse('The data of this page is not JSON: ' + error.message);
+        refuse('The data of this page cannot be read: ' + error.message);
         return;
       }
       if (data) { show(data, true); return; }
       var wanted = new win.URLSearchParams(win.location.search).get('file');
       if (wanted && safeName(wanted) && /\.json$/.test(wanted) && /^https?:$/.test(win.location.protocol)) {
-        win.fetch(base + wanted).then(function (r) { return r.json(); }).then(function (got) { show(got, false); }, function () {
-          refuse('Could not read ' + wanted + ' as JSON.');
-        });
+        win.fetch(base + wanted).then(function (r) { return r.text(); }).then(function (text) {
+          var got;
+          try { got = readJSON(text); } catch (error) { refuse(wanted + ' cannot be read: ' + error.message); return; }
+          show(got, false);
+        }, function () { refuse('Could not read ' + wanted + '.'); });
         return;
       }
       showLoad();
@@ -2777,7 +2821,7 @@
 
   var api = { expandValues: expandValues, formatNumber: formatNumber, percentText: percentText, shareText: shareText, ratioText: ratioText, ratioShort: ratioShort, noiseText: noiseText,
     sizeAtLeast: sizeAtLeast, cellView: cellView, ratioView: ratioView, severityKey: severityKey, compareKeys: compareKeys,
-    bandStep: bandStep, bandOf: bandOf, checkShape: checkShape, checkMatrix: checkMatrix, matrixRows: matrixRows,
+    bandStep: bandStep, bandOf: bandOf, readJSON: readJSON, checkShape: checkShape, checkMatrix: checkMatrix, matrixRows: matrixRows,
     safeLink: safeLink, safeName: safeName, splitOf: splitOf, splitText: splitText, distance: distance, quantileTexts: quantileTexts, RANK: RANK,
     judge: judge, runsOf: runsOf, runPair: runPair, noiseOfStates: noiseOfStates, endsKnown: endsKnown, statesCarryNoise: statesCarryNoise,
     luminance: luminance, schemeIsDark: schemeIsDark, mount: mount, mountAll: mountAll };

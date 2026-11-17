@@ -46,12 +46,45 @@ class Validator(unittest.TestCase):
     def test_the_example_is_valid(self):
         self.assertEqual(fileformat.errors(self.data), [])
 
+    def test_every_text_too_long_is_refused_and_a_free_text_names_its_limit(self):
+        """Issue 19: a title over 120 characters, a label over 80 and an item's name over 300
+        were refused without the limit. Each text of the example, made 5000 characters long, is
+        refused; each free text says its limit and its length. A word from a fixed list or a
+        reference to another part of the file is refused as what it is not."""
+        data = example.build()
+        free = {"title", "about", "made_by", "label", "note", "name", "short", "unit", "place", "group", "text", "doc",
+                "not_checked", "one", "many", "model", "run_by", "id", "commit", "release", "machine"}  # fmt: skip
+        lists = [data["notes"]] + [s["noise"]["between"] for s in data["states"] if (s.get("noise") or {}).get("between")]
+        named = 0
+        for parent, key in list(helpers.nodes(data)):
+            if not isinstance(parent[key], str):
+                continue
+            kept, parent[key] = parent[key], "x" * 5000
+            try:
+                found = fileformat.errors(data)
+            finally:
+                parent[key] = kept
+            with self.subTest(key=key, was=kept[:40]):
+                self.assertTrue(found)
+                if key in free or any(parent is one for one in lists) or (key == "kind" and parent in data["steps"]):
+                    named += 1
+                    self.assertTrue(any(re.search(r"is longer than \d+ characters \(5000\)$", e) for e in found), found[:3])
+        self.assertGreater(named, 60)
+        # a text the example holds as null, and each limit met exactly, which is allowed
+        said = fileformat.errors(helpers.mutated(data, lambda d: d["explanations"][0].update(not_checked="x" * 601)))
+        self.assertIn("explanation 1: `not_checked` is longer than 600 characters (601)", said)
+        exact = helpers.mutated(data, lambda d: d.update(title="x" * 120, made_by="x" * 60, notes=["x" * 600]))
+        exact["steps"][1].update(label="x" * 80, kind="x" * 40)
+        exact["items"][0]["name"] = "x" * 300
+        self.assertEqual(fileformat.errors(exact), [])
+
     def test_the_word_for_an_indicator_is_optional_and_checked(self):
         for word in ({"one": "impact category", "many": "impact categories"}, None):
             self.assertEqual(fileformat.errors(helpers.mutated(self.data, lambda d: d.update(indicator=word))), [])
         for wrong in ({"one": "category"}, {"one": "x", "many": "y", "few": "z"}, {"one": "", "many": "y"},
                       {"one": "x" * 31, "many": "y"}, "impact category", ["one", "many"]):  # fmt: skip
-            self.refuses(lambda d, w=wrong: d.update(indicator=w), "`indicator`")
+            self.refuses(lambda d, w=wrong: d.update(indicator=w), "`indicator")
+        self.refuses(lambda d: d.update(indicator={"one": "x" * 31, "many": "y"}), "`indicator.one` is longer than 30 characters (31)")
 
     def test_a_class_that_contradicts_the_rule(self):
         def change(d):
@@ -993,10 +1026,20 @@ class Chain(unittest.TestCase):
 
     def test_no_approval_hides_in_a_state_identity(self):
         """SPEC 8: a file carries no status and no approval, and `identity` is no way round it."""
-        for key in ("status", "accepted_by", "Approved", "approval"):
+        refused = ("status", "accepted_by", "Approved", "approval",
+                   # issue 19: what the first rule let through
+                   "signed_off", "reviewed_by", "verified", "validated", "\uff53\uff54\uff41\uff54\uff55\uff53", "st\u200batus",
+                   "peerReviewed", "sign-off", "QA", "ok", "lgtm", "checked_by", "rejected", "audit",
+                   "certified", "confirmed", "endorsed_by", "okay", "pass", "passed", "passes", "ack", "acked", "signed",
+                   "agreed", "pending", "isOk", "qaDone", "peerPassed")  # fmt: skip
+        said = lambda key: fileformat.errors(  # noqa: E731
+            helpers.mutated(example.build(), lambda d: d["states"][1]["identity"].update({key: "yes"})))
+        for key in refused:
             with self.subTest(key):
-                data = helpers.mutated(example.build(), lambda d, key=key: d["states"][1]["identity"].update({key: "yes"}))
-                self.assertTrue(any("identity" in e for e in fileformat.errors(data)))
+                self.assertTrue(any("`identity`" in e for e in said(key)))
+        for key in ("solver", "database_version", "brightway-flows", "checksum", "token", "package", "run"):
+            with self.subTest(key):
+                self.assertEqual(said(key), [])
 
     def test_a_key_written_twice_is_refused_when_read(self):
         with tempfile.TemporaryDirectory() as folder:

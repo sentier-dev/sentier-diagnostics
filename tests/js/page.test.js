@@ -110,6 +110,51 @@ test('one number style from 1e4 on, never the "e+" of toPrecision', () => {
   assert.equal(page.formatNumber(1e6), '1e6');
   assert.equal(page.formatNumber(-123456), '−1.235e5');
   assert.equal(page.formatNumber(0.00042), '4.2e−4');
+  // what rounds to 1e4 is written as 1e4 is (issue 19: "1.000e+4" for 9999.5)
+  assert.equal(page.formatNumber(9999.5), '1e4');
+  assert.equal(page.formatNumber(-99999.5), '−1e5');
+  assert.deepEqual(page.quantileTexts({ p10: 1234.5, median: 2000, p90: 3001 }), ['1.23e3', '2.00e3', '3.00e3']);
+  assert.equal(page.ratioShort(1, 999.6), '1e3');
+  assert.equal(page.percentText(1, 1.00001), '+1e−3 %');
+  assert.equal(page.shareText(0.0005), '5e−2 %');
+});
+
+test('the rule\'s numbers and every tooltip are written with every digit, in the page\'s style (issue 19)', () => {
+  const tight = example();
+  tight.steps[1].tolerance.value = 1e-7;
+  tight.rule.total_tolerance = 1e-7;
+  tight.rule.floor_factor = 1e-7;
+  const said = dom.page(tight);
+  const row = said.byId['steps-table'].childNodes.find((n) => n.tagName === 'TBODY').childNodes[1];
+  assert.ok(row.childNodes.some((td) => td.textContent === '1e−7'), 'the tolerance cell');
+  said.open('sd.step=fix-1');
+  assert.match(said.byId['step-said'].textContent, /Tolerance 1e−7 \(/);
+  said.open('sd.step=total');
+  assert.match(said.byId['step-said'].textContent, /Tolerance 1e−7, the largest of the steps/);
+  assert.match(said.text(), /a tolerance of 1e−7, the largest of the steps/);
+  assert.match(said.text(), /reference unit: 1e−7 times the median/);
+  // the example's toxicity results are near 1e−7: each tooltip says them in the same style
+  said.open('sd.item=p01');
+  assert.match(said.text(), /Before 2e−7, after 2\.0000002e−7/);
+  assert.ok(!/\de-\d/.test(said.text()), 'no number in the style of String()');
+});
+
+test('every number the page writes has the one style, over the whole range of the floats (issue 19)', () => {
+  const values = [9999.5, 99999.5, 999.95, 0.0099995, 0.00099995, 5e-324, Number.MAX_VALUE, 1e21, 123456789012345680000];
+  for (let e = -323; e <= 307; e++) for (const m of [1, 1.2345, 9.5, 9.9995, 9.99995]) values.push(m * 10 ** e);
+  const plain = /^\d+(\.\d+)?(e−?\d+)?$/;
+  const said = [];
+  for (const v of values) {
+    said.push(['formatNumber', v, page.formatNumber(v).replace(/^−/, '')], ['formatNumber', -v, page.formatNumber(-v).replace(/^−/, '')]);
+    said.push(['shareText', v, page.shareText(v / 100).replace(/ %$/, '')]);
+    said.push(['ratioShort', v, page.ratioShort(1, v)]);
+    const percent = page.percentText(1, 1 + v / 100).replace(/^[+−]/, '').replace(/ %$/, '');
+    if (v < 1e300) said.push(['percentText', v, /^\d \d{3}$/.test(percent) ? percent.replace(' ', '') : percent]);
+    if (isFinite(v * 3)) for (const q of page.quantileTexts({ p10: v, median: v * 1.5, p90: v * 3 })) said.push(['quantileTexts', v, q]);
+  }
+  const off = said.filter(([, , text]) => !plain.test(text));
+  assert.deepEqual(off.slice(0, 5), []);
+  assert.ok(said.length > 15000);
 });
 
 test('an item\'s whole difference is split by the steps, and the shares added up are what rounding left of 100 % (A18, issue 9)', () => {
@@ -320,7 +365,7 @@ test('the page refuses a breakdown for each reason the check has, and says which
 });
 
 test('a breakdown the page fetches is checked as one that came with it (issue 5)', async () => {
-  const served = (bd) => (url) => (bd ? Promise.resolve({ ok: true, json: () => Promise.resolve(bd) }) : Promise.resolve({ ok: false, status: 404 }));
+  const served = (bd) => (url) => (bd ? Promise.resolve({ ok: true, text: () => Promise.resolve(JSON.stringify(bd)) }) : Promise.resolve({ ok: false, status: 404 }));
   const opened = async (bd, comp) => {
     const d = example();
     const step = Object.keys(d.items.find((i) => i.id === 'p01').breakdowns)[0];
@@ -465,6 +510,45 @@ test('a matrix is fetched as JSON over http, and one of another file is not draw
   await new Promise((done) => setImmediate(done));
   assert.equal(gridRows(refused).length, 6);
   assert.match(refused.byId['matrix-said'].textContent, /not loaded: it is the matrix of another file/);
+});
+
+test('a key written twice in one object is refused wherever the page reads JSON, as the Python refuses it (issue 19)', async () => {
+  for (const text of ['{"a": 1, "a": 2}', '{"a\\u0062": 1, "ab": 2}', '{"a": 1, "b": {"c": 1, "c": 2}}', '[{"a": 1}, {"b": 1, "b": 2}]',
+    '{"__proto__": 1, "__proto__": 2}', '{"x": [], "x": {}}']) {
+    assert.throws(() => page.readJSON(text), /^Error: the key "[a-z_]+" is written twice in one object$/, text);
+  }
+  // the same key in two objects, a key's text inside a value, escapes inside a string
+  for (const text of ['{"a": {"b": 1}, "b": {"b": 2}}', '{"a": [{"x": 1}, {"x": 2}]}', '["a", "a"]', '{"a": "}\\",{\\"a\\": [", "b": 1}',
+    '{"": 1, "x": {"": 2}}', '{"a\\\\": 1, "a": 2}']) {
+    assert.equal(JSON.stringify(page.readJSON(text)), JSON.stringify(JSON.parse(text)), text);
+  }
+  assert.throws(() => page.readJSON('{"a": NaN}'), SyntaxError);
+  const twice = (value) => JSON.stringify(value).replace('"tier":', '"tier": "counts", "tier":');
+  const data = dom.page(undefined, undefined, { scripts: { data: new dom.Text(twice(example())) } });
+  assert.match(data.byId['load-error'].textContent, /The data of this page cannot be read: the key "tier" is written twice in one object/);
+  const served = (text) => () => Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(text) });
+  const matrix = dom.page(local(), undefined, { protocol: 'https:', fetch: served(JSON.stringify(full()).replace('"items":', '"items": [], "items":')) });
+  await new Promise((done) => setImmediate(done));
+  assert.match(matrix.byId['matrix-said'].textContent, /matrix\.json cannot be read: the key "items" is written twice/);
+  const d = example();
+  const step = Object.keys(d.items.find((i) => i.id === 'p01').breakdowns)[0];
+  d.items.find((i) => i.id === 'p01').breakdowns = { [step]: 'b.json' };
+  const breakdown = dom.page(d, undefined, { protocol: 'http:', fetch: served(JSON.stringify(wheat()).replace('"item":', '"item": "p02", "item":')) });
+  breakdown.open('sd.item=p01');
+  await new Promise((done) => setTimeout(done, 0));
+  assert.match(breakdown.byId['item-body'].seen().join(' '), /The breakdown b\.json cannot be read: the key "item" is written twice in one object\. Not drawn\./);
+  // a file picked, and one the address names
+  const reader = class { readAsText(file) { this.result = file.text; this.onload(); } };
+  const picked = (text) => {
+    const drawn = dom.page(undefined, undefined, { globals: { FileReader: reader } });
+    drawn.byId.file.dispatch('change', { target: { files: [{ text }] } });
+    return drawn;
+  };
+  assert.match(picked(twice(example())).byId['load-error'].textContent, /The file cannot be read: the key "tier" is written twice in one object/);
+  assert.equal(picked(JSON.stringify(example())).byId.load.hidden, true);
+  const asked = dom.page(undefined, undefined, { protocol: 'https:', search: '?file=d.json', fetch: served(twice(example())) });
+  await new Promise((done) => setImmediate(done));
+  assert.match(asked.byId['load-error'].textContent, /d\.json cannot be read: the key "tier" is written twice in one object/);
 });
 
 test('a grid cell is the ratio after ÷ before, coloured by its direction', () => {
@@ -2341,7 +2425,7 @@ test('a breakdown is held to its item\'s results, whether it came with the page 
   const bundled = dom.page(example(), { 'p01-fix-1.json': scaled() });
   bundled.open('sd.item=p01');
   assert.match(body(bundled), /The breakdown p01-fix-1\.json is not of this file: its total in Climate is not the product's result in repro: not drawn\./);
-  const served = (b) => () => Promise.resolve({ ok: true, json: () => Promise.resolve(b) });
+  const served = (b) => () => Promise.resolve({ ok: true, text: () => Promise.resolve(JSON.stringify(b)) });
   for (const [made, said] of [[scaled, /is not of this file: its total in Climate is not/], [broken, /does not add up: in Climate its parts are not its total after/], [empty, /The breakdown p01-fix-1\.json holds no indicators: not drawn\./]]) {
     const fetched = dom.page(example(), undefined, { protocol: 'https:', fetch: served(made()) });
     fetched.open('sd.item=p01');

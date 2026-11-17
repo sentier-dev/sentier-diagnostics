@@ -216,7 +216,8 @@ characters, labels 80, texts 600 and an explanation's text 2,000. A claim's list
 count of its own: it names distinct items of the chain, so a claim reaches no more items
 than the chain holds (`items_count.all`), and the 12 MB bound the rest. A chain may hold
 more items than a file lists, and a claim about all of them is still a list. The limits
-are in `fileformat.py`, and a refusal names the limit it met.
+are in `fileformat.py`, and a refusal names the limit it met; a text that is too long is
+refused with its limit and its own length.
 
 Thirty states is 29 steps. A chain is the built states in order; hundreds of fixes, chosen
 in any set, are a file of fixes measured on one base (section 16), not hundreds of states.
@@ -504,7 +505,9 @@ An explanation is text about a step, an indicator, an item, or a combination, wi
 An explanation is a claim: it never changes a count, a class or a verdict. A file carries
 no status, no "accepted by" and no approval of any kind (sentier-bafu-agribalyse ADR 0010):
 the validator refuses such keys, and refuses an entry of a state's `identity` whose name
-says status, accepted or approved, since an identity holds free names.
+says a status or an approval (accepted, approved, reviewed, verified, validated, signed
+off, ok, QA, ...), since an identity holds free names. A key there is printable ASCII, so
+that no such word hides behind a lookalike letter or an invisible one.
 
 ## 9. Breakdowns
 
@@ -702,6 +705,10 @@ rounded number stands as exact beside a longer one. Where six still read a perce
 median, it says "just under the median" or "just over the median" instead of two equal
 numbers, and the numbers left take the digits they need.
 
+Every number on the page is written in one style. From 1e4 on, and where it rounds to 1e4,
+a number is a power of ten (`1.235e4`, `4.2e−4`, `1.23e3` where three digits are all a
+line holds), never the `e+4` that JavaScript writes of its own accord.
+
 A card's title sorts the matrix by its indicator; a heading of the matrix marks its card.
 
 ### 10.4 Worst
@@ -811,8 +818,9 @@ review made by hand); each of its checks, broken on its own, names its own fault
 (`EachRuleOnItsOwn`), so that a check another one backs up cannot go missing unseen; it
 returns faults and never raises, whatever type a value has (a fuzz test of every value in
 the example, of a breakdown and of a fixes file, none of which falls back to a fault that
-names no place); a file is read strictly (no `NaN`, no key twice), and a table's numbers
-are plain ASCII decimals; `build` and `check` end in one line on ordinary mistakes, never
+names no place); a file is read strictly (no `NaN`, no key twice, by the page as by the
+Python), and a table's numbers are plain ASCII decimals; `build` and `check` end in one
+line on ordinary mistakes, never
 a traceback: every value of a description is of the kind the build reads, checked with its
 place before a table is opened (a fuzz test of every value of a description), and a value
 of another kind is refused, never read as something else (`"no"` as explained); the summary escapes the file's texts in
