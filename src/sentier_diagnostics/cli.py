@@ -1,7 +1,8 @@
 """The command `sentier-diagnostics`: check, build, summarise and show diagnostics files.
 
 sentier-diagnostics check FILE [FILE ...]      exit 1 if any file is not one a page shows
-                                               (a matrix beside a file is checked against it)
+                                               (a matrix beside a file is checked against it,
+                                               a fixes file against the file it names)
 sentier-diagnostics build DESCRIPTION --out FILE
 sentier-diagnostics summary FILE
 sentier-diagnostics page FILE --out FOLDER
@@ -14,7 +15,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import __version__, breakdown, chain, example, fileformat, from_tables, matrix, page, summary
+from . import __version__, breakdown, chain, example, fileformat, fixes, from_tables, matrix, page, summary
 
 
 def check(paths) -> int:
@@ -30,6 +31,15 @@ def check(paths) -> int:
             errors = breakdown.errors(data)
         elif isinstance(data, dict) and str(data.get("format", "")).startswith(matrix.FAMILY):
             errors = matrix.errors(data)  # against its file when the file is checked
+        elif isinstance(data, dict) and str(data.get("format", "")).startswith(fixes.FAMILY):
+            errors = fixes.errors(data)
+            size = Path(path).stat().st_size
+            if size > fixes.MAX_BYTES:
+                errors.append(f"{size} bytes, and a page loads {fixes.MAX_BYTES} at most")
+            if not errors:
+                errors = fixes.beside(data, Path(path).parent)
+            if not errors:
+                print(f"note {path}: {fixes.size_note(data)}")
         else:
             errors = fileformat.errors(data)
             size = Path(path).stat().st_size
@@ -68,7 +78,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="sentier-diagnostics", description=__doc__.splitlines()[0])
     parser.add_argument("--version", action="version", version=f"sentier-diagnostics {__version__}")
     commands = parser.add_subparsers(dest="command", required=True)
-    one = commands.add_parser("check", help="check diagnostics and breakdown files")
+    one = commands.add_parser("check", help="check diagnostics, breakdown, matrix and fixes files")
     one.add_argument("files", nargs="+", type=Path)
     one = commands.add_parser("build", help="build a diagnostics file from CSV tables")
     one.add_argument("description", type=Path)
