@@ -183,7 +183,7 @@ test('the drawer splits an item into each fix\'s effect, and the set\'s value is
   const d = drawn('an estimated sum', 'set=a,b&item=p1');
   const body = d.byId['item-body'].textContent;
   assert.match(body, /^What the fixes did/);
-  assert.match(body, /Fix A.*Fix B.*This set: the sum, estimated/);
+  assert.match(body, /Fix A.*Fix B.*This setthe sum, estimated/);
   assert.match(body, /Along the chain/);
 });
 

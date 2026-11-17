@@ -1724,7 +1724,7 @@
           parts.push(diff);
           var v = cellView(before, after, classify(before, after, m.floor[ind.id][k], fixById(y).tolerance.value, null), after !== null && before !== null && after !== before ? (after > before ? 'up' : 'down') : null, null);
           tb.appendChild(el('tr', null, [
-            el('th', { scope: 'row', text: fixById(y).label + (m.closures[y].length ? ' (on ' + fixLabels(m.closures[y]) + ')' : '') }),
+            el('th', { scope: 'row' }, [fixById(y).label, m.closures[y].length ? el('div', { cls: 'sd-quiet', text: 'on ' + fixLabels(m.closures[y]) }) : null]),
             el('td', { cls: 'num', text: formatNumber(before), title: String(before) }),
             el('td', { cls: 'num', text: formatNumber(after), title: String(after) }),
             el('td', { cls: 'cell tone-' + v.tone, text: v.text, title: v.title }),
@@ -1744,7 +1744,7 @@
           ]));
         }
         tb.appendChild(el('tr', { cls: 'sd-in-run' }, [
-          el('th', { scope: 'row', text: 'This set' + (stands[0] === 'sum' ? (C.label === ESTIMATED ? ': the sum, estimated' : ': the sum') : ': ' + (mine.length > 1 ? 'the build of ' + fixLabels(stands[1]) : 'that build')) }),
+          el('th', { scope: 'row' }, ['This set', el('div', { cls: 'sd-quiet', text: stands[0] === 'sum' ? (C.label === ESTIMATED ? 'the sum, estimated' : 'the sum') : mine.length > 1 ? 'the build of ' + fixLabels(stands[1]) : 'that build' })]),
           el('td', { cls: 'num', text: formatNumber(base), title: 'the base: ' + String(base) }),
           el('td', { cls: 'num', text: formatNumber(result), title: String(result) }),
           valueCell(row, ind.id, SET, false),
