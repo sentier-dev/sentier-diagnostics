@@ -122,6 +122,25 @@
     return s.replace(/-/g, '−');
   }
 
+  // the 10th, 50th and 90th percentile in as few digits as keep apart the ones that differ
+  // (three at least, six at most): "1.00, 1.00, 1.00" over values that moved would hide
+  // the spread a reader looks for
+  function quantileTexts(qs) {
+    var one = function (v, digits) {
+      if (v < 0.01 || v >= 1e4) return v.toExponential(digits - 1).replace(/\.?0+e/, 'e').replace('e+', 'e').replace(/-/g, '−');
+      return v.toPrecision(digits);
+    };
+    var values = [qs.p10, qs.median, qs.p90];
+    var out;
+    // two that differ and read the same
+    var blurred = function (i, j) { return values[i] !== values[j] && out[i] === out[j]; };
+    for (var digits = 3; digits <= 6; digits++) {
+      out = values.map(function (v) { return one(v, digits); });
+      if (!(blurred(0, 1) || blurred(1, 2) || blurred(0, 2))) break;
+    }
+    return out;
+  }
+
   // Steps whose differences add up to more than this many times the whole difference
   // cancel: their shares would be large and of both signs, and in floating point the
   // whole may be mostly rounding. The page says so instead of printing them.
@@ -729,39 +748,127 @@
       total.appendChild(tbody);
     }
 
+    // the bars of a distribution, left to right: across zero, down from far to near, the
+    // band around 1 (agrees, within noise), up from near to far, then the values with no
+    // ratio. [kind, key, tone]
+    function distBins(block) {
+      var bands = Object.keys(block.bands);
+      return [['class', 'sign change', 'aside']]
+        .concat(bands.filter(function (b) { return b.indexOf('down') === 0; }).map(function (b) { return ['band', b, 'down']; }))
+        .concat([['class', 'agrees', 'mid'], ['class', 'within noise', 'mid']])
+        .concat(bands.filter(function (b) { return b.indexOf('up') === 0; }).map(function (b) { return ['band', b, 'up']; }))
+        .concat(['zero reference', 'zero result', 'near zero', 'missing'].map(function (c) { return ['class', c, 'aside']; }));
+    }
+    // the words under a histogram, each under its run of bars
+    function axis(bins) {
+      var runs = [];
+      bins.forEach(function (b, i) {
+        var last = runs[runs.length - 1];
+        if (last && last.tone === b[2] && !(b[2] === 'aside' && i > 0 && bins[i - 1][2] !== 'aside')) last.n += 1;
+        else runs.push({ tone: b[2], n: 1, first: !runs.length });
+      });
+      var words = { down: '÷10 ← down', mid: '1', up: 'up → ×10' };
+      return el('div', { cls: 'sd-axis', 'aria-hidden': 'true' }, runs.map(function (run) {
+        var word = run.tone === 'aside' ? (run.first ? '±' : 'no ratio') : words[run.tone];
+        return el('span', { cls: 'sd-axis-' + run.tone, style: 'flex-grow:' + run.n, text: word });
+      }));
+    }
+    function distLegend() {
+      var node = clear(q('dist-legend'));
+      [['down', 'went down'], ['mid', 'agrees or within noise (the band around 1)'], ['up', 'went up'], ['aside', 'across zero, from or to zero, near zero, missing: no ratio']].forEach(function (k) {
+        node.appendChild(el('span', null, [el('span', { cls: 'sd-bin-key ' + k[0] }), k[1]]));
+      });
+    }
+    function binWords(bin) {
+      if (bin[0] === 'band') return bin[1];
+      return bin[1] + (SAID[bin[1]] ? ' (' + SAID[bin[1]] + ')' : '');
+    }
+
+    // after ÷ before at its 10th, 50th and 90th percentile, over the values of one indicator
+    // that have a ratio (the same sign on both sides, neither zero nor near it). Only from
+    // every item: the listed ones are the furthest apart, and would make a median of them
+    // say more than the whole holds.
+    function quantiles(indicator, k) {
+      var held = M || (D.items_count.listed === D.items_count.all && D.tier !== 'counts' ? LISTED : null);
+      if (!held) return null;
+      var found = [];
+      held.forEach(function (row) {
+        var cls = row.classes[indicator][k];
+        if (RATIO_CLASSES.indexOf(cls) < 0) return;
+        var pair = pairOf(row, indicator, k);
+        if (pair[0] === null || pair[1] === null || pair[0] === 0 || pair[1] === 0 || (pair[0] > 0) !== (pair[1] > 0)) return;
+        var r = pair[1] / pair[0];
+        if (isFinite(r)) found.push(r);
+      });
+      if (!found.length) return { n: 0 };
+      found.sort(function (a, b) { return a - b; });
+      var at = function (p) { // linear between the two nearest ranks
+        var x = p * (found.length - 1), lo = Math.floor(x), hi = Math.ceil(x);
+        return found[lo] + (found[hi] - found[lo]) * (x - lo);
+      };
+      return { n: found.length, p10: at(0.1), median: at(0.5), p90: at(0.9) };
+    }
+
+    // the card of the indicator the matrix is sorted by is marked, wherever the sort was chosen
+    function markChosenCard() {
+      var cards = q('dist-cards').childNodes;
+      for (var i = 0; i < cards.length; i++) {
+        var card = cards[i];
+        var chosen = card.getAttribute('data-indicator') === view.sort;
+        card.className = card.className.replace(/ sd-chosen/g, '') + (chosen ? ' sd-chosen' : '');
+        var button = card.childNodes[0].childNodes[0];
+        button.setAttribute('aria-pressed', chosen ? 'true' : 'false');
+      }
+    }
+
+    // one card per indicator, in the order of the matrix's columns: a histogram of the classes
+    // and bands of the comparison chosen above, each card on the scale of its own tallest bar
     function renderDistributions() {
       var comp = view.comp;
+      var k = stepIndex(comp);
       var blocks = comp === 'total' ? D.counts.total : D.counts.steps[comp];
-      var first = blocks[D.indicators[0].id];
-      var bands = Object.keys(first.bands);
-      var down = bands.filter(function (b) { return b.indexOf('down') === 0; });
-      var up = bands.filter(function (b) { return b.indexOf('up') === 0; });
-      var middle = ['agrees', 'within noise'];
-      var aside = ['zero reference', 'zero result', 'sign change', 'near zero', 'missing'];
-      var columns = down.map(function (b) { return ['band', b, 'down']; })
-        .concat(middle.map(function (c) { return ['class', c, '']; }))
-        .concat(up.map(function (b) { return ['band', b, 'up']; }))
-        .concat(aside.map(function (c) { return ['class', c, '']; }));
-      var table = clear(q('dist-table'));
-      var head = [el('th', { scope: 'col', text: capital(indWord(false)) })];
-      columns.forEach(function (c) {
-        var label = c[0] === 'band' ? (c[2] === 'up' ? '↑ ' : '↓ ') + bandStep(c[1]) : (SHORT[c[1]] || c[1]);
-        head.push(el('th', { scope: 'col', cls: 'num', text: label, title: c[1] + (SAID[c[1]] ? ': ' + SAID[c[1]] : '') }));
-      });
-      table.appendChild(el('thead', null, [el('tr', null, head)]));
-      var body = el('tbody');
-      D.indicators.forEach(function (ind) {
-        var block = blocks[ind.id];
-        var row = [el('th', { scope: 'row', text: indicatorName(ind.id) })];
-        columns.forEach(function (c) {
-          var count = c[0] === 'band' ? block.bands[c[1]] : block.classes[c[1]];
-          var share = block.pairs ? count / block.pairs : 0;
-          var bar = el('div', { cls: 'bar ' + c[2] }, [el('span', { style: 'height:' + (count ? Math.max(1, Math.round(share * 100)) : 0) + '%' })]);
-          row.push(el('td', { cls: 'bar-cell', title: c[1] + ': ' + count + ' of ' + block.pairs }, [bar, el('div', { cls: 'bar-n', text: groupThousands(count) })]));
+      var held = M || (D.items_count.listed === D.items_count.all && D.tier !== 'counts');
+      q('dist-said').textContent = 'How many ' + D.item.many + ' fall in each band of after ÷ before, in the comparison chosen above, one card per ' + indWord(false) +
+        ' in the order of the matrix: from across zero, through down by more than ten times, the band around 1 (dark), to up by more than ten times; then the values with no ratio. ' +
+        'Each card is drawn on the scale of its own tallest bar; a bar\'s title holds its count. ' +
+        (held ? 'The median and percentiles are of after ÷ before over every ' + D.item.one + ' with a ratio, in as many digits as keep apart the ones that differ. '
+          : 'The median and percentiles need every ' + D.item.one + ', and this page holds the ' + groupThousands(D.items_count.listed) + ' listed, the furthest apart: it gives none. ') +
+        'Choose a card to sort the matrix by that ' + indWord(false) + '.';
+      var box = clear(q('dist-cards'));
+      columns(comp).forEach(function (c) {
+        var ind = c.ind, block = blocks[ind.id];
+        var bins = distBins(block);
+        var counts = bins.map(function (b) { return (b[0] === 'band' ? block.bands[b[1]] : block.classes[b[1]]) || 0; });
+        var top = Math.max.apply(null, counts.concat([1]));
+        var said = bins.map(function (b, i) { return b[1] + ': ' + groupThousands(counts[i]); }).join('; ');
+        var bars = bins.map(function (b, i) {
+          return el('span', { cls: 'sd-bin ' + b[2] + (i && bins[i - 1][2] !== b[2] && (b[2] === 'aside' || bins[i - 1][2] === 'aside') ? ' sd-gap' : ''),
+            style: 'height:' + (counts[i] ? Math.max(2, 100 * counts[i] / top).toFixed(1) : 0) + '%',
+            title: binWords(b) + ': ' + groupThousands(counts[i]) + ' of ' + groupThousands(block.pairs) });
         });
-        body.appendChild(el('tr', null, row));
+        var qs = quantiles(ind.id, k);
+        var meta = c.moved ? groupThousands(c.moved) + ' of ' + groupThousands(block.pairs) + ' moved' : 'Nothing moved';
+        var said3 = qs && qs.n ? quantileTexts(qs) : null;
+        var stats = qs === null ? null : (said3
+          ? 'Median ' + said3[1] + ', 10th percentile ' + said3[0] + ', 90th ' + said3[2]
+          : 'No value with a ratio');
+        var button = el('button', { type: 'button', cls: 'sd-dist-pick', 'aria-pressed': view.sort === ind.id ? 'true' : 'false',
+          title: 'Sort the matrix by ' + ind.name }, [ind.name]);
+        button.addEventListener('click', function () {
+          view.sort = view.sort === ind.id ? 'worst' : ind.id;
+          view.limit = PAGE;
+          renderGrid();
+          markChosenCard();
+          var region = q('grid-region');
+          if (region && region.scrollIntoView) region.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        });
+        box.appendChild(el('div', { cls: 'sd-dist' + (c.moved ? '' : ' sd-still') + (view.sort === ind.id ? ' sd-chosen' : ''), 'data-indicator': ind.id }, [
+          el('h4', null, [button]),
+          el('div', { cls: 'sd-hist', role: 'img', 'aria-label': said }, bars),
+          axis(bins),
+          el('p', { cls: 'sd-dist-meta' }, [el('strong', { text: meta }), stats ? el('br') : null, stats])
+        ]));
       });
-      table.appendChild(body);
     }
 
     function sizeSaid() {
@@ -855,6 +962,7 @@
         view.sort = view.sort === key ? 'worst' : key;
         view.limit = PAGE;
         renderGrid();
+        markChosenCard();
       });
       return button;
     }
@@ -1285,7 +1393,7 @@
         renderExplanations();
         renderRule();
         legend(q('grid-legend'), true);
-        legend(q('dist-legend'), false);
+        distLegend();
         renderComparison();
         matrixSaid();
         route();
@@ -1434,7 +1542,7 @@
   var api = { formatNumber: formatNumber, percentText: percentText, shareText: shareText, ratioText: ratioText, ratioShort: ratioShort, noiseText: noiseText,
     sizeAtLeast: sizeAtLeast, cellView: cellView, ratioView: ratioView, severityKey: severityKey, compareKeys: compareKeys,
     bandStep: bandStep, bandOf: bandOf, checkShape: checkShape, checkMatrix: checkMatrix, matrixRows: matrixRows,
-    safeLink: safeLink, safeName: safeName, splitOf: splitOf, splitText: splitText, distance: distance, RANK: RANK,
+    safeLink: safeLink, safeName: safeName, splitOf: splitOf, splitText: splitText, distance: distance, quantileTexts: quantileTexts, RANK: RANK,
     mount: mount, mountAll: mountAll };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else if (typeof global.document !== 'undefined') {

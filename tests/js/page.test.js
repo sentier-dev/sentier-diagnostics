@@ -657,3 +657,73 @@ test('the arrow keys move between the chips', () => {
   drawn.byId.comparison.dispatch('keydown', { key: 'ArrowLeft' }); // nothing before the whole way
   assert.equal(chips(drawn)[0].getAttribute('aria-pressed'), 'true');
 });
+
+const cards = (drawn) => drawn.byId['dist-cards'].childNodes;
+
+test('a distribution card per indicator, in the order of the matrix, its bars the file\'s counts', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  for (const comp of ['total'].concat(data.steps.map((s) => s.id))) {
+    drawn.byId.comparison.querySelectorAll('button[data-comp="' + comp + '"]')[0].dispatch('click', {});
+    const heads = drawn.byId['grid-table'].querySelectorAll('th[scope="col"]').slice(2).map((th) => th.getAttribute('title'));
+    const ids = cards(drawn).map((card) => card.getAttribute('data-indicator'));
+    assert.equal(ids.length, data.indicators.length);
+    ids.forEach((id, k) => assert.ok(heads[k].indexOf(data.indicators.find((i) => i.id === id).name) === 0, comp + ' ' + k));
+    for (const card of cards(drawn)) {
+      const block = (comp === 'total' ? data.counts.total : data.counts.steps[comp])[card.getAttribute('data-indicator')];
+      const bars = card.childNodes[1].childNodes;
+      const sum = bars.reduce((s, bar) => s + Number(bar.getAttribute('title').match(/: ([\d,]+) of/)[1].replace(/,/g, '')), 0);
+      // every pair is in one bar: the bands split what moved and what agrees, the rest is a class
+      assert.equal(sum, block.pairs, comp + ' ' + card.getAttribute('data-indicator'));
+    }
+  }
+});
+
+test('a median of after ÷ before only from every item, never from the listed ones', () => {
+  const data = local();
+  const listed = dom.page(data);
+  for (const card of cards(listed)) assert.doesNotMatch(card.textContent, /Median/);
+  assert.match(listed.byId['dist-said'].textContent, /need every product/);
+  const loaded = dom.page(data, undefined, { globals: { SENTIER_DIAGNOSTICS_MATRIX: full() } });
+  const rows = page.matrixRows(full(), data);
+  const k = data.steps.length; // the whole way
+  const card = cards(loaded)[0];
+  const id = card.getAttribute('data-indicator');
+  const ratios = rows.filter((r) => ['agrees', 'within noise', 'differs', 'beyond 10x'].includes(r.classes[id][k]))
+    .map((r) => [r.values[id][0], r.values[id][r.values[id].length - 1]])
+    .filter(([a, b]) => a && b && (a > 0) === (b > 0)).map(([a, b]) => b / a).sort((a, b) => a - b);
+  const x = 0.5 * (ratios.length - 1), lo = Math.floor(x), hi = Math.ceil(x);
+  const median = ratios[lo] + (ratios[hi] - ratios[lo]) * (x - lo);
+  assert.ok(ratios.length > 0);
+  const shown = Number(card.textContent.match(/Median ([\d.e−]+)/)[1].replace('−', '-'));
+  assert.ok(Math.abs(shown - median) <= 5e-3 * Math.abs(median), shown + ' vs ' + median);
+});
+
+test('percentiles get the digits that keep apart the ones that differ', () => {
+  // a spread only the fifth digit shows
+  const text = page.quantileTexts({ p10: 0.99981, median: 1.0, p90: 1.00042 });
+  assert.notEqual(text[0], text[2]);
+  assert.deepEqual(text, ['0.99981', '1.0000', '1.0004']);
+  assert.deepEqual(page.quantileTexts({ p10: 0.5, median: 1, p90: 2 }), ['0.500', '1.00', '2.00']);
+  assert.deepEqual(page.quantileTexts({ p10: 1, median: 1, p90: 1 }), ['1.00', '1.00', '1.00']);
+});
+
+test('a card sorts the matrix by its indicator, and a heading marks its card', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  const card = cards(drawn)[1];
+  const id = card.getAttribute('data-indicator');
+  card.childNodes[0].childNodes[0].dispatch('click', {});
+  const sorted = drawn.byId['grid-table'].querySelectorAll('th[aria-sort]');
+  assert.equal(sorted.length, 1);
+  assert.ok(sorted[0].getAttribute('title').indexOf(data.indicators.find((i) => i.id === id).name) === 0);
+  assert.equal(cards(drawn)[1].childNodes[0].childNodes[0].getAttribute('aria-pressed'), 'true');
+  assert.match(cards(drawn)[1].className, /sd-chosen/);
+  // the heading of another indicator moves the mark to its card
+  const other = cards(drawn)[0].getAttribute('data-indicator');
+  const head = drawn.byId['grid-table'].querySelectorAll('th[scope="col"]').slice(2)
+    .find((th) => th.getAttribute('title').indexOf(data.indicators.find((i) => i.id === other).name) === 0);
+  head.childNodes[0].dispatch('click', {});
+  assert.equal(cards(drawn)[0].childNodes[0].childNodes[0].getAttribute('aria-pressed'), 'true');
+  assert.equal(cards(drawn)[1].childNodes[0].childNodes[0].getAttribute('aria-pressed'), 'false');
+});
