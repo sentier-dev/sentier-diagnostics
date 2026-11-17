@@ -545,7 +545,7 @@ def write(data: Mapping, path: Path) -> Path:
     if size > fileformat.MAX_BYTES:
         raise ValueError(
             f"the file would be {size} bytes, and a page holds {fileformat.MAX_BYTES} at most: "
-            "list fewer items (`listed`)"
+            + fileformat.smaller_by(data)
         )
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -209,11 +209,14 @@ published results and are null everywhere else.
 ### 4.4 Limits
 
 A page holds the whole file: 12 MB at most, which the writer reaches by listing fewer
-items (`listed`, 200 by default). Up to 100 indicators, 30 states, 5,000 listed items,
-500 explanations and 20 notes; a claim has up to 50 scope entries, and an entry may list as
-many items as a file may (5,000); a state's identity has up to 12 entries. Ids are up to
-100 characters, labels 80, texts 600 and an explanation's text 2,000. The limits are in
-`fileformat.py`, and a refusal names the limit it met.
+items (`listed`, 200 by default) or by leaving the claims' lists out (`claim_lists`). Up to
+100 indicators, 30 states, 5,000 listed items, 500 explanations and 20 notes; a claim has
+up to 50 scope entries; a state's identity has up to 12 entries. Ids are up to 100
+characters, labels 80, texts 600 and an explanation's text 2,000. A claim's list has no
+count of its own: it names distinct items of the chain, so a claim reaches no more items
+than the chain holds (`items_count.all`), and the 12 MB bound the rest. A chain may hold
+more items than a file lists, and a claim about all of them is still a list. The limits
+are in `fileformat.py`, and a refusal names the limit it met.
 
 Thirty states is 29 steps. A chain is the built states in order; hundreds of fixes, chosen
 in any set, are a file of fixes measured on one base (section 16), not hundreds of states.
@@ -391,9 +394,10 @@ A step may say what it moves. A claim is text, who wrote it (section 8), and a s
             "direction": "down", "largest": 0.3, "expect": "must"}]}
 ```
 
-- `indicators`: `"*"` or a list of ids. `items`: `"*"`, a list, or null where the list
-  stays with its writer. Every listed id is an item of the chain: `chain.build` refuses a
-  claim that names an item no state holds (a typo would otherwise be a claim about nothing).
+- `indicators`: `"*"` or a list of ids. `items`: `"*"`, a list of distinct ids, or null
+  where the list stays with its writer. Every listed id is an item of the chain:
+  `chain.build` refuses a claim that names an item no state holds (a typo would otherwise
+  be a claim about nothing), and the validator one whose `reach` is larger than the chain.
 - `reach`: how many items the claim's lists name together, `"*"` entries aside. Where every
   list is in the file the validator checks it; where a list stays private it is the only
   trace of that list. It is null where no entry lists items (every entry takes `"*"`, or

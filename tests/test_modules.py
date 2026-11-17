@@ -843,8 +843,47 @@ class Chain(unittest.TestCase):
             given = helpers.mutated(data, lambda d, scope=scope: d["steps"][0]["claim"].update(reach=7, scope=scope))
             self.assertTrue(any("no entry of it lists items" in e for e in fileformat.errors(given)), fileformat.errors(given))
         kept = helpers.mutated(data, lambda d: d["steps"][0]["claim"].update(
-            reach=7, scope=[{"indicators": "*", "items": None, "direction": "any", "largest": None, "expect": "may"}]))
+            reach=1, scope=[{"indicators": "*", "items": None, "direction": "any", "largest": None, "expect": "may"}]))
         self.assertFalse(any("reach" in e for e in fileformat.errors(kept)), fileformat.errors(kept))
+
+    def test_a_claim_lists_as_many_items_as_its_chain_holds(self):
+        # issue 36: a chain may hold more items than a file lists, and a claim about all of
+        # them is still a list: the chain and the 12 MB bound it, not the 5,000 of a file
+        n = fileformat.MAX_ITEMS + 1
+        names = [f"p{i:05d}" for i in range(n)]
+        before = {A: dict.fromkeys(names, 1.0)}
+        after = {A: dict.fromkeys(names, 1.0) | {names[0]: 2.0}}
+        data = helpers.two_states(before, after, claim=claims.claim("t", [claims.scope([A], names)]))
+        said = data["steps"][0]["claim"]
+        self.assertEqual((said["reach"], len(said["scope"][0]["items"]), data["items_count"]["all"]), (n, n, n))
+        self.assertEqual(fileformat.errors(data), [])
+
+        def scope(d):
+            return d["steps"][0]["claim"]["scope"][0]
+
+        twice = helpers.mutated(data, lambda d: scope(d)["items"].append(names[0]))
+        self.assertTrue(any("not a list of distinct ids" in e for e in fileformat.errors(twice)), fileformat.errors(twice))
+        # a claim names items of its chain: neither its lists nor a private list's size reach further
+        beyond = helpers.mutated(data, lambda d: (scope(d)["items"].append("q"), d["steps"][0]["claim"].update(reach=n + 1)))
+        self.assertTrue(any(f"its claim reaches {n + 1} items, and the chain holds {n}" in e
+                            for e in fileformat.errors(beyond)), fileformat.errors(beyond))  # fmt: skip
+        for reach, refused in ((n, False), (n + 1, True)):
+            kept = helpers.mutated(data, lambda d, reach=reach: (scope(d).update(items=None), d["steps"][0]["claim"].update(reach=reach)))
+            self.assertEqual(any("the chain holds" in e for e in fileformat.errors(kept)), refused, fileformat.errors(kept))
+
+    def test_the_validator_looks_an_item_up_in_a_claim_without_reading_its_list(self):
+        # issue 36: a list may name 200,000 items, and every listed item is judged against it
+        # in every indicator and step; a scan of the list for each would take hours
+        class Unread(list):
+            def __contains__(self, item):
+                raise AssertionError("a claim's list was scanned for an item")
+
+        data = example.build()
+        for one in data["steps"]:
+            for entry in (one["claim"] or {}).get("scope", ()):
+                if isinstance(entry["items"], list):
+                    entry["items"] = Unread(entry["items"])
+        self.assertEqual(fileformat.errors(data), [])
 
     def test_a_lone_surrogate_is_not_a_text(self):
         data = example.build()
@@ -884,6 +923,7 @@ class Chain(unittest.TestCase):
             with contextlib.redirect_stdout(out):
                 self.assertEqual(cli.check([path]), 1)
             self.assertIn("bytes", out.getvalue())
+            self.assertIn("leave the claims' lists out", out.getvalue())  # the example's claims list items
 
 
 class EachRuleOnItsOwn(unittest.TestCase):
@@ -988,6 +1028,11 @@ class EachRuleOnItsOwn(unittest.TestCase):
             finally:
                 fileformat.MAX_BYTES = original
         self.assertIn("a page holds 1000 at most", str(said.exception))
+        # issue 36: where claims list items, leaving their lists out is the other way down
+        self.assertIn("list fewer items (`listed`), or leave the claims' lists out (`claim_lists`)", str(said.exception))
+        bare = helpers.two_states({A: {"p": 1.0}}, {A: {"p": 2.0}})
+        self.assertEqual(fileformat.smaller_by(bare), "list fewer items (`listed`)")
+        self.assertEqual(fileformat.smaller_by(["not", "a", "file"]), "list fewer items (`listed`)")
 
 
 class SummaryCounts(unittest.TestCase):

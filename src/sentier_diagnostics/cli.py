@@ -45,7 +45,7 @@ def check(paths) -> int:
             size = Path(path).stat().st_size
             if size > fileformat.MAX_BYTES:
                 errors.append(
-                    f"{size} bytes, and a page holds {fileformat.MAX_BYTES} at most: list fewer items"
+                    f"{size} bytes, and a page holds {fileformat.MAX_BYTES} at most: " + fileformat.smaller_by(data)
                 )
             if not errors:
                 try:
