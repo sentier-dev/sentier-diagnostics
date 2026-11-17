@@ -805,10 +805,13 @@ values, items out of order, counts that do not add up, unknown keys and other fo
 disagree with the listed items (`CountsAgainstItems`, one test per edit sentier-bafu's
 review made by hand); each of its checks, broken on its own, names its own fault
 (`EachRuleOnItsOwn`), so that a check another one backs up cannot go missing unseen; it
-returns faults and never raises, whatever type a value has
-(a fuzz test of every value in the example); a file is read strictly (no `NaN`, no key
-twice), and a table's numbers are plain ASCII decimals; `build` and `check` end in one
-line on ordinary mistakes, never a traceback; the summary escapes the file's texts in
+returns faults and never raises, whatever type a value has (a fuzz test of every value in
+the example, of a breakdown and of a fixes file, none of which falls back to a fault that
+names no place); a file is read strictly (no `NaN`, no key twice), and a table's numbers
+are plain ASCII decimals; `build` and `check` end in one line on ordinary mistakes, never
+a traceback: every value of a description is of the kind the build reads, checked with its
+place before a table is opened (a fuzz test of every value of a description), and a value
+of another kind is refused, never read as something else (`"no"` as explained); the summary escapes the file's texts in
 Markdown; noise is taken beyond the floor, and a scope entry read from tables without
 `expect` may move; the page draws the example whole under Node with a small stand-in for
 the DOM (`tests/js/dom.js`), loads nothing from elsewhere and writes no markup from data;

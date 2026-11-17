@@ -538,6 +538,66 @@ class FromTables(unittest.TestCase):
             with self.assertRaises(ValueError):
                 from_tables.build(path)
 
+    def test_a_value_of_any_type_in_a_description_is_a_sentence(self):
+        """Every node of the fixture's description replaced by values of other types (issue
+        11): the build stops with a ValueError, never another exception, and so the command
+        says `error:` and exits 1. Fields the fixture leaves out are added first, so that
+        they are walked too."""
+        spec = json.loads((FIXTURES / "description.json").read_text(encoding="utf-8"))
+        spec["steps"][1].update(explained=True, about="a", link=None)
+        spec.update(listed=4, claim_lists=True, tier="items", floor_factor=0.01, indicator={"one": "a", "many": "b"})
+        with tempfile.TemporaryDirectory() as folder:
+            for name in ("items.csv", "published.csv", "repro.csv", "again.csv", "fixed.csv"):
+                (Path(folder) / name).write_text((FIXTURES / name).read_text(encoding="utf-8"), encoding="utf-8")
+            path = Path(folder) / "d.json"
+
+            def built(d):
+                path.write_text(json.dumps(d), encoding="utf-8")
+                try:
+                    from_tables.build(path)
+                except ValueError as error:
+                    return [str(error)]
+                return []
+
+            self.assertEqual(built(spec), [])
+            helpers.replaced_everywhere(self, spec, built)
+
+    def test_a_value_of_the_wrong_kind_is_not_read_as_another(self):
+        """What the build would have read as something else is refused, with its place: `"no"`
+        as explained, `[]` as no identity or as the default basis, an entry with a key no
+        entry takes as one that may move anything (issue 11)."""
+        def step(**more):
+            return {"steps": [{"id": "st", "label": "s", "kind": "fix", **more}]}
+
+        cases = {
+            "step 'st': `explained` is true or false": step(explained="no"),
+            "state 's1': `identity` is a table of texts, or null": {"states": [self.SMALL["states"][0], {**self.SMALL["states"][1], "identity": []}]},
+            "step 'st', `tolerance`: `basis` is a text or null": step(tolerance={"value": 0.01, "basis": []}),
+            "step 'st', scope entry 1: a key a description does not take there: a": step(claim={"text": "t", "scope": [{"a": 1}]}),
+            "step 'st', scope entry 1: `items` is \"*\", a list of ids or null": step(claim={"text": "t", "scope": [{"items": {}}]}),
+            "indicator 1: a key a description does not take there: colour": {"indicators": [{**self.SMALL["indicators"][0], "colour": "red"}]},
+            "step 'st', `tolerance`: `value` is a number": step(tolerance={"value": 10**400}),
+            "the description: `listed` is a whole number": {"listed": None},
+            "the description: `notes` is a list of texts": {"notes": None},
+        }  # fmt: skip
+        noise = "state 's1': a noise is {states: [a, b]} or {tables: [{label, results}, {label, results}]}, with a `note`"
+        for said_noise in ({"states": ["s0", "s1"], "note": 5}, {"states": ["s0", "s1"], "colour": "red"}):
+            cases[noise + " " + str(said_noise)] = {"states": [self.SMALL["states"][0], {**self.SMALL["states"][1], "noise": said_noise}]}
+        for said, changes in cases.items():
+            with self.subTest(said):
+                self.assertIn(said.split(" {'states'")[0], from_tables.description_errors(self.SMALL | changes))
+
+    def test_a_file_the_command_cannot_write_is_a_sentence(self):
+        """A place to write that cannot be written (its folder is a file) ends in `error:`
+        and exit 1, as a mistake in the description does."""
+        with tempfile.TemporaryDirectory() as folder:
+            blocked = Path(folder) / "a-file"
+            blocked.write_text("", encoding="utf-8")
+            with contextlib.redirect_stderr(io.StringIO()) as err:
+                code = cli.main(["build", str(FIXTURES / "description.json"), "--out", str(blocked / "d.json")])
+            self.assertEqual(code, 1)
+            self.assertTrue(err.getvalue().startswith("error: "), err.getvalue())
+
     def test_an_unknown_key_in_a_description(self):
         spec = json.loads((FIXTURES / "description.json").read_text(encoding="utf-8"))
         with tempfile.TemporaryDirectory() as folder:
