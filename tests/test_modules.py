@@ -606,10 +606,15 @@ class FromTables(unittest.TestCase):
         """Every node of the fixture's description replaced by values of other types (issue
         11): the build stops with a ValueError, never another exception, and so the command
         says `error:` and exits 1. Fields the fixture leaves out are added first, so that
-        they are walked too."""
+        they are walked too: a claim's `reach` (`true` was read as 1), a state's `about`, the
+        matrix, an explanation's link and doc."""
         spec = json.loads((FIXTURES / "description.json").read_text(encoding="utf-8"))
         spec["steps"][1].update(explained=True, about="a", link=None)
+        spec["steps"][1]["claim"]["reach"] = 1
+        spec["states"][1]["about"] = "a"
+        spec["explanations"][0].update(link="https://example.org/a", doc="a")
         spec.update(listed=4, claim_lists=True, tier="items", floor_factor=0.01, indicator={"one": "a", "many": "b"})
+        local = {**spec, "audience": "local", "matrix": "matrix.json"}  # only a local file names a matrix
         with tempfile.TemporaryDirectory() as folder:
             for name in ("items.csv", "published.csv", "repro.csv", "again.csv", "fixed.csv"):
                 (Path(folder) / name).write_text((FIXTURES / name).read_text(encoding="utf-8"), encoding="utf-8")
@@ -623,8 +628,9 @@ class FromTables(unittest.TestCase):
                     return [str(error)]
                 return []
 
-            self.assertEqual(built(spec), [])
-            helpers.replaced_everywhere(self, spec, built)
+            for walked in (spec, local):
+                self.assertEqual(built(walked), [])
+                helpers.replaced_everywhere(self, walked, built)
 
     def test_a_value_of_the_wrong_kind_is_not_read_as_another(self):
         """What the build would have read as something else is refused, with its place: `"no"`
@@ -650,6 +656,45 @@ class FromTables(unittest.TestCase):
         for said, changes in cases.items():
             with self.subTest(said):
                 self.assertIn(said.split(" {'states'")[0], from_tables.description_errors(self.SMALL | changes))
+
+    def test_no_count_number_or_flag_takes_a_value_python_reads_as_one(self):
+        """In Python `True == 1`, `1` is true and `1.0 == 1`, so a count, a number or a flag
+        given a value of another kind would be read as one (the review of issue 11: `reach:
+        true` was built, and read as 1). Each place refuses each such value, with its place."""
+        def st(**more):
+            return {"steps": [{"id": "st", "label": "s", "kind": "fix", **more}]}
+
+        def claim(**more):
+            return st(claim={"text": "t", **more})
+
+        def joined(**more):
+            return {"states": [{**self.SMALL["states"][0], "join": {"compared": 2, **more}}, self.SMALL["states"][1]]}
+
+        places = {
+            (True, False, 1.0, "1"): [
+                ("the description: `listed`", lambda v: {"listed": v}),
+                ("step 'st', its claim: `reach`", lambda v: claim(reach=v)),
+                ("state 's0', `join`: `compared`", lambda v: joined(compared=v)),
+                ("state 's0', `join`: `unmatched`", lambda v: joined(unmatched=v)),
+                ("state 's0', `join`: `ambiguous`", lambda v: joined(ambiguous=v)),
+            ],
+            (True, False, "0.5"): [
+                ("the description: `floor_factor`", lambda v: {"floor_factor": v}),
+                ("step 'st', `tolerance`: `value`", lambda v: st(tolerance={"value": v})),
+                ("step 'st', scope entry 1: `largest`", lambda v: claim(scope=[{"largest": v}])),
+            ],
+            (1, 0, "true", None): [
+                ("the description: `claim_lists`", lambda v: {"claim_lists": v}),
+                ("step 'st': `explained`", lambda v: st(explained=v)),
+            ],
+        }
+        self.assertEqual(from_tables.description_errors(self.SMALL), [])
+        for values, said in places.items():
+            for place, changed in said:
+                for value in values:
+                    with self.subTest(place=place, value=value):
+                        found = from_tables.description_errors(self.SMALL | changed(value))
+                        self.assertTrue(any(e.startswith(place + " is ") for e in found), found)
 
     def test_a_file_the_command_cannot_write_is_a_sentence(self):
         """A place to write that cannot be written (its folder is a file) ends in `error:`
