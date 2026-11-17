@@ -1064,8 +1064,10 @@ test('without every item no run is judged: said why, and one step and the whole 
 test('the page refuses a run whose steps its rule does not judge as the file does, and says where', () => {
   const data = local();
   const m = full();
-  // one item's class in step 1 rewritten: the page's rule no longer gives the file's
-  const at = 3;
+  // one item's class in step 1 rewritten: the page's rule no longer gives the file's. An item
+  // the file does not list: a listed one would be refused with the matrix, as not the file's
+  const at = m.items.findIndex((row, k) => k >= 3 && !data.items.some((item) => item.id === row[0]));
+  assert.ok(at >= 3, 'the local example has an item it does not list');
   const codes = m.classes[at].split('');
   codes[1] = codes[1] === '=' ? 'D' : '=';
   m.classes[at] = codes.join('');

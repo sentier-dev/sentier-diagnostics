@@ -51,11 +51,12 @@ def noise_text(noise: Mapping, names: Mapping[str, str], ends: int | None = None
             said.append(f"{name} identical" if size == 0 else
                         f"{name} {size * 100:.2g} %" + (" (large)" if size > chain.LARGE_NOISE else ""))  # fmt: skip
     absent = [name for key, name in names.items() if key not in noise["by"]]
+    nothing = "no result beyond the floor in both builds" if noise["between"] else "no result beyond the floor where it was measured"
     if noise["between"] is None:
         between = "noise of its two states" + (f", measured at {ends} of 2 ends" if ends is not None and ends < 2 else "")
     else:
         between = f"noise measured between {md(noise['between'][0])} and {md(noise['between'][1])}"
-    return between + ": " + (", ".join(said) or "no result beyond the floor in both builds") + (
+    return between + ": " + (", ".join(said) or nothing) + (
         "; " + ", ".join(absent) + " not measured" if absent else ""
     )
 
@@ -140,9 +141,13 @@ def text(data: Mapping) -> str:
     order = data["states"]
 
     def ends(first, last, noise):
-        """At how many of the two ends the noise was measured, the fewest over its indicators."""
+        """At how many of the two ends the noise was measured: the fewest over its indicators,
+        or, where it holds none (nothing beyond the floor), the ends that measured at all. The
+        published results count, being exact."""
         keys = noise["by"] or {}
-        return min((fileformat.ends_known(first, last, key) for key in keys), default=2)
+        if not keys:
+            return sum(1 for one in (first, last) if one["kind"] == "published" or one["noise"]["measured"])
+        return min(fileformat.ends_known(first, last, key) for key in keys)
 
     if by_state:
         for one in order:

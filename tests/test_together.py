@@ -16,7 +16,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from sentier_diagnostics import chain, example, fileformat, matrix, rule, together
+from sentier_diagnostics import chain, example, fileformat, matrix, rule, summary, together
 
 from . import helpers
 from .helpers import A, B
@@ -113,6 +113,33 @@ class StateNoise(unittest.TestCase):
         n = item(self.at_the_end, "n")
         self.assertEqual(n["classes"][A], [rule.DIFFERS, rule.AGREES, rule.AGREES, rule.AGREES, rule.WITHIN_NOISE])
         self.assertEqual(self.at_the_end["counts"][fileformat.TOTAL][A]["classes"][rule.WITHIN_NOISE], 1)
+
+    def test_an_end_is_known_for_the_indicators_it_measured_only(self):
+        # State 1 measured A, never B: for B, only the published results are a known end
+        first, second = self.data["states"][0], self.data["states"][1]
+        self.assertEqual(fileformat.ends_known(first, second, A), 2)
+        self.assertEqual(fileformat.ends_known(first, second, B), 1)
+        self.assertEqual(fileformat.ends_known(second, self.data["states"][2], B), 0)
+
+    def test_the_summary_says_at_how_many_ends_the_noise_was_measured(self):
+        lines = summary.text(self.data).splitlines()
+        rule_of = lambda sid: next(line for line in lines if line.startswith(f"- Step {sid}:"))  # noqa: E731
+        # step one: the published results (exact) and State 1 (measured); step two: State 1 and
+        # State 2 (not measured)
+        self.assertNotIn("measured at", rule_of("one"))
+        self.assertIn("noise of its two states, measured at 1 of 2 ends: A 3 % (large)", rule_of("two"))
+        both, _ = five_states(noise={"s1": {A: 0.03}, "s2": {A: 0.01}})
+        two = next(line for line in summary.text(both).splitlines() if line.startswith("- Step two:"))
+        self.assertNotIn("measured at", two)
+
+    def test_an_end_that_measured_nothing_beyond_the_floor_is_still_one_end(self):
+        # State 1 built twice, no result beyond the floor in both builds: measured, with no size
+        data, _ = five_states(noise={"s1": {A: None}})
+        self.assertEqual(data["states"][1]["noise"]["by"], {})
+        two = next(line for line in summary.text(data).splitlines() if line.startswith("- Step two:"))
+        self.assertIn("measured at 1 of 2 ends: no result beyond the floor where it was measured", two)
+        self.assertNotIn("both builds", two)
+        self.assertEqual(fileformat.errors(data), [])
 
     def test_the_published_results_are_exact(self):
         published = self.data["states"][0]
