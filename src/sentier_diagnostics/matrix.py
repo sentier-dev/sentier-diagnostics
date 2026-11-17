@@ -63,6 +63,7 @@ VERDICT_CODES = {
     claims.OFF_CLAIM: "o",
     claims.NOT_CLAIMED: "n",
     claims.NOT_MOVED: "c",
+    claims.OPEN: "j",
     claims.NOISE: "~",
     claims.UNCHANGED: "=",
     claims.NOT_JUDGED: "?",
@@ -408,7 +409,7 @@ def _against(m: Mapping, data: Mapping) -> list[str]:
                             f"{where}, {indicator}, {steps[k]['id']}: written {said!r}, the claim gives {again!r}"
                         ]
                 block["verdicts"][said] += 1
-                worth = worth or said == claims.NOT_MOVED
+                worth = worth or said in claims.TO_LOOK_AT
             # attribution, as `chain.build` makes it
             one = attributed[indicator]
             if any(not s["explained"] and kinds[j] in rule.MOVES for j, s in enumerate(steps)):

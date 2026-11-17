@@ -314,14 +314,14 @@
    "explained": true,
    "link": null,
    "claim": {
-    "text": "Items whose supply chain reaches the changed links may move in water use; maize must.",
+    "text": "Items whose supply chain reaches the changed links may move in water use; maize and barley must.",
     "by": {
      "kind": "code",
      "name": "reach of the changed links",
      "model": null,
      "run_by": null
     },
-    "reach": 4,
+    "reach": 5,
     "scope": [
      {
       "indicators": [
@@ -342,7 +342,8 @@
        "x:water"
       ],
       "items": [
-       "p02"
+       "p02",
+       "p03"
       ],
       "direction": "up",
       "largest": 0.5,
@@ -409,6 +410,7 @@
       "off claim": 0,
       "not claimed": 0,
       "claimed, not moved": 0,
+      "claimed, not judged": 0,
       "within noise": 0,
       "unchanged": 10,
       "not judged": 0
@@ -455,6 +457,7 @@
       "off claim": 0,
       "not claimed": 0,
       "claimed, not moved": 0,
+      "claimed, not judged": 0,
       "within noise": 0,
       "unchanged": 9,
       "not judged": 1
@@ -501,6 +504,7 @@
       "off claim": 0,
       "not claimed": 1,
       "claimed, not moved": 0,
+      "claimed, not judged": 0,
       "within noise": 0,
       "unchanged": 7,
       "not judged": 2
@@ -549,6 +553,7 @@
       "off claim": 1,
       "not claimed": 1,
       "claimed, not moved": 0,
+      "claimed, not judged": 0,
       "within noise": 0,
       "unchanged": 7,
       "not judged": 0
@@ -595,6 +600,7 @@
       "off claim": 0,
       "not claimed": 0,
       "claimed, not moved": 0,
+      "claimed, not judged": 0,
       "within noise": 0,
       "unchanged": 10,
       "not judged": 0
@@ -641,6 +647,7 @@
       "off claim": 0,
       "not claimed": 0,
       "claimed, not moved": 0,
+      "claimed, not judged": 0,
       "within noise": 0,
       "unchanged": 8,
       "not judged": 2
@@ -805,6 +812,7 @@
       "off claim": 0,
       "not claimed": 2,
       "claimed, not moved": 0,
+      "claimed, not judged": 0,
       "within noise": 0,
       "unchanged": 7,
       "not judged": 1
@@ -851,9 +859,10 @@
       "off claim": 0,
       "not claimed": 0,
       "claimed, not moved": 1,
+      "claimed, not judged": 1,
       "within noise": 1,
       "unchanged": 6,
-      "not judged": 1
+      "not judged": 0
      },
      "closer": 0,
      "further": 1
@@ -897,6 +906,7 @@
       "off claim": 0,
       "not claimed": 2,
       "claimed, not moved": 0,
+      "claimed, not judged": 0,
       "within noise": 0,
       "unchanged": 7,
       "not judged": 1
@@ -1064,7 +1074,7 @@
   {"id": "p07", "name": "Heat from wood chips", "place": "CH", "group": "energy", "unit": "MJ", "values": {"x:climate": [0.03, 0.03, 0.03, 0.03, 0.0], "x:water": [0.0004, 0.0004, 0.0004, 0.0004, 0.0004], "x:tox": [3e-09, 3e-09, 3e-09, 3e-09, 3e-09]}, "classes": {"x:climate": ["agrees", "agrees", "agrees", "zero result", "zero result"], "x:water": ["agrees", "agrees", "agrees", "agrees", "agrees"], "x:tox": ["agrees", "agrees", "agrees", "agrees", "agrees"]}, "directions": {"x:climate": [null, null, null, "down", "down"], "x:water": [null, null, null, null, null], "x:tox": [null, null, null, null, null]}, "bands": {"x:climate": [null, null, null, null, null], "x:water": [null, null, null, null, null], "x:tox": [null, null, null, null, null]}, "verdicts": {"x:climate": ["unchanged", "unchanged", null, "not claimed"], "x:water": ["unchanged", "unchanged", null, "unchanged"], "x:tox": ["unchanged", "unchanged", null, "unchanged"]}, "breakdowns": null},
   {"id": "p10", "name": "Tomato, greenhouse", "place": "NL", "group": "crops", "unit": "kg", "values": {"x:climate": [1.3, 1.3, 1.3, 1.3, 1.3], "x:water": [0.02, 0.02, 0.02, 0.02, 0.5], "x:tox": [2.1e-07, 2.3e-07, 2.3e-07, 2.3e-07, 2.3e-07]}, "classes": {"x:climate": ["agrees", "agrees", "agrees", "agrees", "agrees"], "x:water": ["agrees", "agrees", "agrees", "beyond 10x", "beyond 10x"], "x:tox": ["differs", "agrees", "agrees", "agrees", "differs"]}, "directions": {"x:climate": [null, null, null, null, null], "x:water": [null, null, null, "up", "up"], "x:tox": ["up", null, null, null, "up"]}, "bands": {"x:climate": [null, null, null, null, null], "x:water": [null, null, null, "up, factor over 10", "up, factor over 10"], "x:tox": ["up, factor 1-1.1", null, null, null, "up, factor 1-1.1"]}, "verdicts": {"x:climate": ["unchanged", "unchanged", null, "unchanged"], "x:water": ["unchanged", "unchanged", null, "as claimed"], "x:tox": ["not claimed", "unchanged", null, "unchanged"]}, "breakdowns": null},
   {"id": "p05", "name": "Rice", "place": "IT", "group": "crops", "unit": "kg", "values": {"x:climate": [1.9, 1.9, 0.95, 0.95, 0.95], "x:water": [3.4, 3.4, 3.4, 3.4, 3.4], "x:tox": [1e-12, 1e-12, 1e-12, 1e-12, 3e-12]}, "classes": {"x:climate": ["agrees", "differs", "agrees", "agrees", "differs"], "x:water": ["agrees", "agrees", "agrees", "agrees", "agrees"], "x:tox": ["near zero", "near zero", "near zero", "near zero", "near zero"]}, "directions": {"x:climate": [null, "down", null, null, "down"], "x:water": [null, null, null, null, null], "x:tox": [null, null, null, null, null]}, "bands": {"x:climate": [null, "down, factor 1.25-2", null, null, "down, factor 1.25-2"], "x:water": [null, null, null, null, null], "x:tox": [null, null, null, null, null]}, "verdicts": {"x:climate": ["unchanged", "off claim", null, "unchanged"], "x:water": ["unchanged", "unchanged", null, "unchanged"], "x:tox": ["not judged", "not judged", null, "not judged"]}, "breakdowns": null},
-  {"id": "p03", "name": "Barley", "place": "DE", "group": "crops", "unit": "kg", "values": {"x:climate": [0.48, 0.47999, 0.575988, 0.575988, 0.575988], "x:water": [1.1, 1.1, 1.1, null, 1.3], "x:tox": [1.9e-07, 1.9e-07, 1.9e-07, 1.9e-07, 1.9e-07]}, "classes": {"x:climate": ["agrees", "differs", "agrees", "agrees", "differs"], "x:water": ["agrees", "agrees", "missing", "missing", "differs"], "x:tox": ["agrees", "agrees", "agrees", "agrees", "agrees"]}, "directions": {"x:climate": [null, "up", null, null, "up"], "x:water": [null, null, null, null, "up"], "x:tox": [null, null, null, null, null]}, "bands": {"x:climate": [null, "up, factor 1.1-1.25", null, null, "up, factor 1.1-1.25"], "x:water": [null, null, null, null, "up, factor 1.1-1.25"], "x:tox": [null, null, null, null, null]}, "verdicts": {"x:climate": ["unchanged", "not claimed", null, "unchanged"], "x:water": ["unchanged", "unchanged", null, "not judged"], "x:tox": ["unchanged", "unchanged", null, "unchanged"]}, "breakdowns": null}
+  {"id": "p03", "name": "Barley", "place": "DE", "group": "crops", "unit": "kg", "values": {"x:climate": [0.48, 0.47999, 0.575988, 0.575988, 0.575988], "x:water": [1.1, 1.1, 1.1, null, 1.3], "x:tox": [1.9e-07, 1.9e-07, 1.9e-07, 1.9e-07, 1.9e-07]}, "classes": {"x:climate": ["agrees", "differs", "agrees", "agrees", "differs"], "x:water": ["agrees", "agrees", "missing", "missing", "differs"], "x:tox": ["agrees", "agrees", "agrees", "agrees", "agrees"]}, "directions": {"x:climate": [null, "up", null, null, "up"], "x:water": [null, null, null, null, "up"], "x:tox": [null, null, null, null, null]}, "bands": {"x:climate": [null, "up, factor 1.1-1.25", null, null, "up, factor 1.1-1.25"], "x:water": [null, null, null, null, "up, factor 1.1-1.25"], "x:tox": [null, null, null, null, null]}, "verdicts": {"x:climate": ["unchanged", "not claimed", null, "unchanged"], "x:water": ["unchanged", "unchanged", null, "claimed, not judged"], "x:tox": ["unchanged", "unchanged", null, "unchanged"]}, "breakdowns": null}
  ],
  "items_count": {
   "all": 10,

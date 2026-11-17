@@ -80,8 +80,8 @@ EXPLANATION_KEYS = {"about", "finding", "text", "by", "source", "not_checked"}
 
 #: The verdicts a pair of each class can have.
 ALLOWED_VERDICTS = {
-    rule.MISSING: {claims.NOT_JUDGED},
-    rule.NEAR_ZERO: {claims.NOT_JUDGED, claims.NOT_MOVED},
+    rule.MISSING: {claims.NOT_JUDGED, claims.OPEN},
+    rule.NEAR_ZERO: {claims.NOT_JUDGED, claims.OPEN},
     rule.AGREES: {claims.UNCHANGED, claims.NOT_MOVED},
     rule.WITHIN_NOISE: {claims.NOISE, claims.NOT_MOVED},
     **{kind: {claims.AS_CLAIMED, claims.OFF_CLAIM, claims.NOT_CLAIMED} for kind in rule.MOVES},
@@ -782,7 +782,7 @@ def _items(data, found, indicators, states, steps, floors, tier, blocks):
                 if not isinstance(said_verdict, str) or said_verdict not in ALLOWED_VERDICTS[kinds[at]]:
                     found.append(f"{where}, {indicator}, {name}: {kinds[at]!r} cannot be {said_verdict!r}")
                     return []
-                worth = worth or said_verdict == claims.NOT_MOVED
+                worth = worth or said_verdict in claims.TO_LOOK_AT
                 if claims.judgeable(step_claim):
                     covering = [
                         e for e in claims.entries_for(step_claim, indicator)
@@ -853,7 +853,7 @@ def _items(data, found, indicators, states, steps, floors, tier, blocks):
 
 
 #: The verdicts only a pair worth a look can have.
-_LOUD_VERDICTS = frozenset({claims.AS_CLAIMED, claims.OFF_CLAIM, claims.NOT_CLAIMED, claims.NOT_MOVED})
+_LOUD_VERDICTS = frozenset({claims.AS_CLAIMED, *claims.TO_LOOK_AT})
 
 
 def _add(tally: dict, key: tuple) -> None:

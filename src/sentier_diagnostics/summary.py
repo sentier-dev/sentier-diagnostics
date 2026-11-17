@@ -96,8 +96,8 @@ def text(data: Mapping) -> str:
         )
     )
     out += ["", "## Steps", "",
-            "| Step | Kind | Explained | Values moved | Missing before | Missing after | As claimed | Off claim | Not claimed | Claimed, not moved |",
-            "|---|---|---|---:|---:|---:|---:|---:|---:|---:|"]  # fmt: skip
+            "| Step | Kind | Explained | Values moved | Missing before | Missing after | As claimed | Off claim | Not claimed | Claimed, not moved | Claimed, not judged |",
+            "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|"]  # fmt: skip
     for number, step in enumerate(data["steps"], fileformat.first_step(data)):
         blocks = data["counts"]["steps"][step["id"]].values()
         moved = sum(b["classes"][k] for b in blocks for k in rule.MOVES)
@@ -106,10 +106,10 @@ def text(data: Mapping) -> str:
         gone_after = sum(b["missing"]["after"] + b["missing"]["both"] for b in blocks)
         if step["claim"]:
             verdicts = [sum(b["verdicts"][v] for b in blocks) for v in
-                        (claims.AS_CLAIMED, claims.OFF_CLAIM, claims.NOT_CLAIMED, claims.NOT_MOVED)]  # fmt: skip
+                        (claims.AS_CLAIMED, claims.OFF_CLAIM, claims.NOT_CLAIMED, claims.NOT_MOVED, claims.OPEN)]  # fmt: skip
             said = [_n(v) for v in verdicts]
         else:
-            said = ["no claim", "", "", ""]
+            said = ["no claim", "", "", "", ""]
         out.append(
             f"| {number}. {labels[step['id']]} | {md(step['kind'])} | {'yes' if step['explained'] else '**no: nothing explains it**'} "
             f"| {_n(moved)} | {_n(gone_before)} | {_n(gone_after)} | " + " | ".join(said) + " |"

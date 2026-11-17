@@ -672,11 +672,9 @@ def _block(base: _Base, ind: str, changed: Mapping[int, float | None], tolerance
         must_items = set() if every else {base.index[i] for listed in musts for i in listed}
         for kind in (rule.AGREES, rule.NEAR_ZERO, rule.MISSING):
             untouched = tally[kind] - sum(1 for k in changed if kind_of(k) == kind)
-            if kind == rule.MISSING:
-                verdicts[claims.NOT_JUDGED] += untouched
-                continue
             held = untouched if every else sum(1 for k in must_items if kind_of(k) == kind and k not in changed)
-            verdicts[claims.NOT_MOVED] += held
+            # under a `must`: one that agrees did not move, one missing or near zero is left open
+            verdicts[claims.NOT_MOVED if kind == rule.AGREES else claims.OPEN] += held
             verdicts[claims.UNCHANGED if kind == rule.AGREES else claims.NOT_JUDGED] += untouched - held
     return {"pairs": len(values), "classes": classes, "missing": missing, "directions": ways, "bands": bands,
             "verdicts": verdicts, "closer": None, "further": None}  # fmt: skip

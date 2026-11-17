@@ -18,18 +18,26 @@ result before lies within the floor (a zero reference) cannot be within it.
 
 Each pair of a step with a claim gets one verdict, tried in this order:
 
-    not judged           it is missing: nothing can be said of it
-    claimed, not moved   an entry says it must move, and it agrees, is within noise or is
-                         near zero: it did not move beyond the tolerance, the noise or the floor
+    claimed, not judged  an entry says it must move, and it is missing or near zero: whether
+                         it moved cannot be said, and the claim is left open
+    not judged           it is missing or near zero, and no entry says it must move
+    claimed, not moved   an entry says it must move, and it agrees or is within noise: it did
+                         not move beyond the tolerance or the noise
     unchanged            it agrees, and no entry says it must move
     within noise         it moved by no more than two builds of one state differ
-    not judged           it is near zero, and no entry says it must move
     not claimed          it moved, and no entry covers it
-    as claimed           it moved, an entry covers it, in that entry's direction and size
-    off claim            it moved, entries cover it, and none in its direction and size
+    as claimed           it moved, and it fits every `must` entry that covers it (or, where
+                         none does, one of the `may` entries): their direction and size
+    off claim            it moved, and it does not
 
-Where `must` entries cover a moved pair, it is held against them only: a `may` entry
-beside them cannot excuse a move the `must` entries do not allow.
+Where `must` entries cover a moved pair, it is held against them only, and against all of
+them: each says what the pair must do, so a move up does not meet `must down` because a
+`must any` or a `may any` beside it allows it. `may` entries say what may move: one that
+fits is enough.
+
+A claim is judged where it was made, with its lists in hand; `chain.build` refuses an entry
+whose list is not (`items: null`), since such an entry would cover nothing and a `must`
+would be met by default. A file may still leave its lists out (`published`).
 
 A scope that a program worked out (every item whose supply chain reaches the change)
 says what *may* move: it can be exceeded, never unmet. Its entries carry `"may"`.
@@ -50,11 +58,12 @@ AS_CLAIMED = "as claimed"
 OFF_CLAIM = "off claim"
 NOT_CLAIMED = "not claimed"
 NOT_MOVED = "claimed, not moved"
+OPEN = "claimed, not judged"
 NOT_JUDGED = "not judged"
 #: The verdicts, in the order a page lists them.
-VERDICTS = (AS_CLAIMED, OFF_CLAIM, NOT_CLAIMED, NOT_MOVED, NOISE, UNCHANGED, NOT_JUDGED)
-#: The verdicts a reviewer has to look at.
-TO_LOOK_AT = frozenset({OFF_CLAIM, NOT_CLAIMED, NOT_MOVED})
+VERDICTS = (AS_CLAIMED, OFF_CLAIM, NOT_CLAIMED, NOT_MOVED, OPEN, NOISE, UNCHANGED, NOT_JUDGED)
+#: The verdicts a reviewer has to look at: each makes its item worth a look.
+TO_LOOK_AT = frozenset({OFF_CLAIM, NOT_CLAIMED, NOT_MOVED, OPEN})
 
 MUST, MAY = "must", "may"
 EXPECTS = (MUST, MAY)
@@ -148,6 +157,8 @@ def fits(entry: Mapping, before: float, after: float, way: str | None, kind: str
 
 #: The classes of a pair that did not move beyond the tolerance, the noise or the floor.
 STILL = frozenset({rule.AGREES, rule.WITHIN_NOISE, rule.NEAR_ZERO})
+#: The classes of a pair of which no verdict can say whether it moved.
+UNJUDGEABLE = frozenset({rule.MISSING, rule.NEAR_ZERO})
 
 
 def verdict(kind: str, before, after, way: str | None, covering: list[Mapping]) -> str:
@@ -158,22 +169,25 @@ def verdict(kind: str, before, after, way: str | None, covering: list[Mapping]) 
     ('as claimed', 'off claim')
     >>> verdict("agrees", 4.0, 4.0, None, [down]), verdict("agrees", 4.0, 4.0, None, [down | {"expect": "may"}])
     ('claimed, not moved', 'unchanged')
-    >>> verdict("differs", 1.0, 2.0, "up", []), verdict("near zero", 0.0, 0.0, None, [down])
-    ('not claimed', 'claimed, not moved')
-    >>> verdict("missing", None, 1.0, None, [down]), verdict("differs", 4.0, 5.0, "up", [down, scope(["x"], {"a"})])
-    ('not judged', 'off claim')
+    >>> verdict("differs", 1.0, 2.0, "up", []), verdict("near zero", 1e-9, 1e-12, None, [down])
+    ('not claimed', 'claimed, not judged')
+    >>> verdict("missing", None, 1.0, None, [down]), verdict("missing", None, 1.0, None, [])
+    ('claimed, not judged', 'not judged')
+    >>> verdict("differs", 4.0, 5.0, "up", [down, scope(["x"], {"a"})])
+    'off claim'
+    >>> verdict("differs", 1.0, 5.0, "up", [down, scope(expect="must")])  # all of the `must` entries
+    'off claim'
     """
-    if kind == rule.MISSING:
-        return NOT_JUDGED
     musts = [e for e in covering if e["expect"] == MUST]
+    if kind in UNJUDGEABLE:
+        return OPEN if musts else NOT_JUDGED
     if kind in STILL:
-        if musts:
-            return NOT_MOVED
-        return {rule.AGREES: UNCHANGED, rule.WITHIN_NOISE: NOISE}.get(kind, NOT_JUDGED)
+        return NOT_MOVED if musts else {rule.AGREES: UNCHANGED, rule.WITHIN_NOISE: NOISE}[kind]
     if not covering:
         return NOT_CLAIMED
-    held_to = musts or covering
-    return AS_CLAIMED if any(fits(e, before, after, way, kind) for e in held_to) else OFF_CLAIM
+    if musts:
+        return AS_CLAIMED if all(fits(e, before, after, way, kind) for e in musts) else OFF_CLAIM
+    return AS_CLAIMED if any(fits(e, before, after, way, kind) for e in covering) else OFF_CLAIM
 
 
 def entries_for(found: Mapping | None, indicator: str) -> list[Mapping]:

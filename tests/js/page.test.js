@@ -155,16 +155,35 @@ test('the steps table prints the file\'s counts of what moved, never a recount f
   const data = example();
   const moves = ['differs', 'beyond 10x', 'zero reference', 'zero result', 'sign change'];
   const drawn = dom.page(data);
-  const rows = drawn.byId['steps-table'].all().filter((n) => n.tagName === 'TR').slice(1);
+  const all = drawn.byId['steps-table'].all().filter((n) => n.tagName === 'TR');
+  const head = all[0].childNodes.map((th) => th.textContent);
+  const rows = all.slice(1);
+  const cell = (row, name) => { assert.ok(head.includes(name), name); return row.childNodes[head.indexOf(name)].textContent; };
   data.steps.forEach((s, k) => {
     const said = Object.values(data.counts.steps[s.id]).reduce((a, b) => a + moves.reduce((m, c) => m + b.classes[c], 0), 0);
-    assert.equal(rows[k].childNodes[5].textContent, String(said), s.id);
+    assert.equal(cell(rows[k], 'Moved'), String(said), s.id);
     const side = (name) => Object.values(data.counts.steps[s.id]).reduce((a, b) => a + b.missing[name] + b.missing.both, 0);
-    assert.equal(rows[k].childNodes[13].textContent, String(side('before')), s.id + ': missing before');
-    assert.equal(rows[k].childNodes[14].textContent, String(side('after')), s.id + ': missing after');
+    assert.equal(cell(rows[k], 'Missing before'), String(side('before')), s.id + ': missing before');
+    assert.equal(cell(rows[k], 'Missing after'), String(side('after')), s.id + ': missing after');
+    // every verdict worth a look has its column, with the file's count (issue 3: "claimed, not judged")
+    for (const v of ['as claimed', 'off claim', 'not claimed', 'claimed, not moved', 'claimed, not judged', 'within noise']) {
+      const name = v[0].toUpperCase() + v.slice(1);
+      const total = s.claim ? String(Object.values(data.counts.steps[s.id]).reduce((a, b) => a + b.verdicts[v], 0)) : '—';
+      assert.equal(cell(rows[k], name), total, s.id + ': ' + v);
+    }
   });
-  assert.notEqual(rows.map((r) => r.childNodes[13].textContent).join(), rows.map((r) => r.childNodes[14].textContent).join(),
+  assert.notEqual(rows.map((r) => cell(r, 'Missing before')).join(), rows.map((r) => cell(r, 'Missing after')).join(),
     'the example has a step with missing values on one side only');
+  assert.ok(rows.some((r) => !['0', '—'].includes(cell(r, 'Claimed, not judged'))), 'the example leaves a claim open');
+  // each verdict column reads its own count: the example has as many open as not moved, so
+  // one value is moved from unchanged to open in a copy
+  const apart = example();
+  const water = apart.counts.steps['mapping-2']['x:water'].verdicts;
+  water.unchanged -= 1; water['claimed, not judged'] += 1;
+  const at = apart.steps.findIndex((s) => s.id === 'mapping-2');
+  const apartRows = dom.page(apart).byId['steps-table'].all().filter((n) => n.tagName === 'TR').slice(1);
+  assert.equal(cell(apartRows[at], 'Claimed, not judged'), '2');
+  assert.equal(cell(apartRows[at], 'Claimed, not moved'), '1');
 });
 
 test('a share is signed against the whole difference, whichever way it goes (A18)', () => {
@@ -639,12 +658,25 @@ test('choosing a step says its claim and what the claim found, under the chips, 
   const said = drawn.byId['step-said'].textContent;
   assert.ok(said.includes(step.claim.text), said);
   // what the claim found, from the file's own counts
-  const look = ['off claim', 'not claimed', 'claimed, not moved'];
+  const look = ['off claim', 'not claimed', 'claimed, not moved', 'claimed, not judged'];
   const found = look.filter((v) => Object.values(data.counts.steps[step.id]).some((b) => b.verdicts[v]));
   if (found.length) found.forEach((v) => assert.ok(said.includes(v), v));
   else assert.match(said, /as claimed/);
   assert.equal(drawn.context.location.hash, 'sd.step=' + encodeURIComponent(step.id));
   assert.equal(chips(drawn)[k + 1].getAttribute('aria-pressed'), 'true');
+});
+
+test('a claim left open is marked in the grid and named in the legend (issue 3)', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  const k = data.steps.findIndex((s) => s.id === 'mapping-2');
+  chips(drawn)[k + 1].dispatch('click', {});
+  const marks = (id) => gridRows(drawn).find((tr) => tr.getAttribute('data-item') === id)
+    .all().filter((s) => /verdict-look/.test(s.className || '')).map((s) => s.title || s.getAttribute('title'));
+  assert.deepEqual(marks('p03'), ['claimed, not judged'], 'Barley, missing before the step its claim says must move it');
+  assert.deepEqual(marks('p02'), ['claimed, not moved']);
+  assert.match(drawn.text(), /◇ claimed, not judged/);
+  assert.match(drawn.byId['step-said'].textContent, /1 value claimed, not judged ◇/);
 });
 
 test('the matrix shows first the indicators in which the chosen comparison moved most', () => {
@@ -798,7 +830,7 @@ test('the claim line names every verdict on a move, "as claimed" first, in words
   chips(drawn)[k + 1].dispatch('click', {});
   const said = drawn.byId['step-said'].textContent;
   const total = (v) => Object.values(data.counts.steps[step.id]).reduce((a, b) => a + b.verdicts[v], 0);
-  for (const v of ['as claimed', 'off claim', 'not claimed', 'claimed, not moved']) {
+  for (const v of ['as claimed', 'off claim', 'not claimed', 'claimed, not moved', 'claimed, not judged']) {
     const word = v === 'as claimed' ? 'moved as claimed' : v;
     if (total(v)) assert.ok(said.includes(total(v) + ' value' + (total(v) === 1 ? '' : 's') + ' ' + word), v + ': ' + said);
     else assert.ok(!said.includes(word), v);

@@ -26,6 +26,8 @@ What it must show, at least once each:
     off claim         Rice, climate, fix-1: down 50 %, further than the claim's 30 %
     not claimed       Barley, climate, fix-1; Tomato, toxicity, step 0
     claimed, not moved  Maize, water, mapping-2: the claim says it must move
+    claimed, not judged Barley, water, mapping-2: the claim says it must move, and it is
+                      missing before the step
     within noise      Oats, water, mapping-2
     not judged        Rye: missing; Rice, toxicity: near zero
 
@@ -156,10 +158,10 @@ def steps() -> list[dict]:
             about="Five items take another background dataset.",
             claim=claims.claim(
                 "Items whose supply chain reaches the changed links may move in water use; "
-                "maize must.",
+                "maize and barley must.",
                 [
                     claims.scope([WATER], {"p02", "p04", "p07", "p10"}, expect=claims.MAY),
-                    claims.scope([WATER], {"p02"}, "up", 0.5, claims.MUST),
+                    claims.scope([WATER], {"p02", "p03"}, "up", 0.5, claims.MUST),
                 ],
                 by=claims.origin("code", "reach of the changed links"),
             ),

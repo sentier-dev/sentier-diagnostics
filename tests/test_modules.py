@@ -13,7 +13,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from sentier_diagnostics import breakdown, chain, claims, cli, example, fileformat, from_tables, page, rule, summary, tables
+from sentier_diagnostics import breakdown, chain, claims, cli, example, fileformat, from_tables, matrix, page, rule, summary, tables
 
 from . import helpers
 from .helpers import A, B
@@ -599,6 +599,19 @@ class Summary(unittest.TestCase):
         row = next(line for line in summary.text(data).splitlines() if line.startswith("| 0. "))
         self.assertEqual(row.split(" | ")[4:6], ["1", "1"])
 
+    def test_each_verdict_worth_a_look_has_its_column(self):
+        # two pairs left open (one missing, one near zero), one not moved, none of the others
+        claim = helpers.claim_down({"p", "q", "z"})
+        data = helpers.two_states({A: {"p": None, "q": 1.0, "z": 0.0, "f": 1.0}, B: dict.fromkeys("pqzf", 1.0)},
+                                  {A: {"p": 1.0, "q": 1.0, "z": 0.0, "f": 1.0}, B: dict.fromkeys("pqzf", 1.0)},
+                                  claim=claim)  # fmt: skip
+        lines = summary.text(data).splitlines()
+        head = next(line for line in lines if line.startswith("| Step |")).strip("| ").split(" | ")
+        row = next(line for line in lines if line.startswith("| 0. ")).strip("| ").split(" | ")
+        said = dict(zip(head, row))
+        self.assertEqual([said[k] for k in ("As claimed", "Off claim", "Not claimed", "Claimed, not moved", "Claimed, not judged")],
+                         ["0", "0", "0", "1", "2"])  # fmt: skip
+
     def test_the_noise_says_its_size(self):
         said = summary.text(example.build())
         self.assertIn("Water 2.4 %", said)
@@ -651,15 +664,52 @@ class Verdicts(unittest.TestCase):
         way = rule.direction(before, after, kind)
         return claims.verdict(kind, before, after, way, entries)
 
-    def test_a_must_that_did_not_move_beyond_the_noise_or_the_floor_is_unmet(self):
+    def test_a_must_that_did_not_move_beyond_the_noise_is_unmet(self):
         must = claims.scope([A], {"p"}, "down", None, claims.MUST)
         may = claims.scope([A], {"p"}, "down", None, claims.MAY)
-        for kind in (rule.AGREES, rule.WITHIN_NOISE, rule.NEAR_ZERO):
+        for kind in (rule.AGREES, rule.WITHIN_NOISE):
             with self.subTest(kind):
                 self.assertEqual(self.verdict(kind, 1.0, 1.0, [must]), claims.NOT_MOVED)
+        self.assertEqual(self.verdict(rule.AGREES, 1.0, 1.0, [may]), claims.UNCHANGED)
         self.assertEqual(self.verdict(rule.WITHIN_NOISE, 1.0, 1.0, [may]), claims.NOISE)
-        self.assertEqual(self.verdict(rule.NEAR_ZERO, 0.0, 0.0, [may]), claims.NOT_JUDGED)
-        self.assertEqual(self.verdict(rule.MISSING, None, 1.0, [must]), claims.NOT_JUDGED)
+
+    def test_a_must_on_a_pair_that_cannot_be_judged_is_left_open(self):
+        # issue 3: 1e-9 -> 1e-12 below the floor did move; whether as claimed cannot be said
+        must = claims.scope([A], {"p"}, "down", None, claims.MUST)
+        may = claims.scope([A], {"p"}, "down", None, claims.MAY)
+        self.assertEqual(self.verdict(rule.NEAR_ZERO, 1e-9, 1e-12, [must]), claims.OPEN)
+        self.assertEqual(self.verdict(rule.MISSING, None, 1.0, [must]), claims.OPEN)
+        self.assertEqual(self.verdict(rule.MISSING, 1.0, None, [must, may]), claims.OPEN)
+        self.assertEqual(self.verdict(rule.NEAR_ZERO, 1e-9, 1e-12, [may]), claims.NOT_JUDGED)
+        self.assertEqual(self.verdict(rule.MISSING, None, 1.0, [may]), claims.NOT_JUDGED)
+        self.assertEqual(self.verdict(rule.MISSING, None, None, []), claims.NOT_JUDGED)
+        self.assertIn(claims.OPEN, claims.TO_LOOK_AT)
+
+    def test_several_must_entries_must_all_fit(self):
+        # issue 12: `must any` beside `must down, 10 % at most` does not let 1.0 -> 5.0 pass
+        anything = claims.scope("*", "*", "any", None, claims.MUST)
+        down_a_little = claims.scope([A], {"p"}, "down", 0.1, claims.MUST)
+        both = [anything, down_a_little]
+        self.assertEqual(self.verdict(rule.BEYOND, 1.0, 5.0, both), claims.OFF_CLAIM)
+        self.assertEqual(self.verdict(rule.DIFFERS, 1.0, 0.5, both), claims.OFF_CLAIM)
+        self.assertEqual(self.verdict(rule.DIFFERS, 1.0, 0.95, both), claims.AS_CLAIMED)
+        self.assertEqual(self.verdict(rule.DIFFERS, 1.0, 0.95, [*both, claims.scope([A], {"p"}, "up", None, claims.MUST)]),
+                         claims.OFF_CLAIM)  # fmt: skip
+        # `may` entries: one that fits is enough
+        mays = [claims.scope([A], {"p"}, "up"), claims.scope([A], {"p"}, "down", 0.1)]
+        self.assertEqual(self.verdict(rule.DIFFERS, 1.0, 0.95, mays), claims.AS_CLAIMED)
+        self.assertEqual(self.verdict(rule.DIFFERS, 1.0, 1.5, mays), claims.AS_CLAIMED)
+
+    def test_build_refuses_an_entry_whose_list_is_not_in_hand(self):
+        # issue 3: such an entry covers nothing, and a `must` would be met by default
+        for expect in (claims.MUST, claims.MAY):
+            with self.subTest(expect), self.assertRaisesRegex(ValueError, "no list of items in hand"):
+                helpers.two_states({A: {"p": 1.0}}, {A: {"p": 1.0}},
+                                   claim=claims.claim("t", [claims.scope([A], None, "down", None, expect)]))  # fmt: skip
+        # the list given and kept out of the file is the way to keep it private
+        data = helpers.two_states({A: {"p": 1.0}}, {A: {"p": 1.0}}, claim=helpers.claim_down({"p"}), claim_lists=False)
+        self.assertEqual(data["steps"][0]["claim"]["scope"][0]["items"], None)
+        self.assertEqual(data["counts"]["steps"][data["steps"][0]["id"]][A]["verdicts"][claims.NOT_MOVED], 1)
 
     def test_a_must_is_judged_on_its_own_where_entries_overlap(self):
         must_down = claims.scope([A], {"p"}, "down", None, claims.MUST)
@@ -679,11 +729,25 @@ class Verdicts(unittest.TestCase):
             helpers.two_states({A: {"p": 1.0}}, {A: {"p": 2.0}}, claim=helpers.claim_down({"p", "typo"}))
 
     def test_a_must_on_a_near_zero_pair_is_listed_and_valid(self):
-        data = helpers.two_states({A: {"p": 1.0, "q": 1.0, "z": 0.0}}, {A: {"p": 1.0, "q": 2.0, "z": 0.0}},
-                                  claim=helpers.claim_down({"z"}))  # fmt: skip
+        # z is near zero and quiet in both indicators: only its open claim makes it worth a look
+        before = {A: {"p": 1.0, "q": 1.0, "z": 0.0}, B: {"p": 1.0, "q": 1.0, "z": 1.0}}
+        after = {A: {"p": 1.0, "q": 2.0, "z": 0.0}, B: {"p": 1.0, "q": 1.0, "z": 1.0}}
+        data, full = chain.build_with_matrix(
+            "Two states", indicators=helpers.INDICATORS,
+            states=[chain.state("s0", "Before"), chain.state("s1", "After")],
+            steps=[chain.step("one", "One step", kind="fix", claim=helpers.claim_down({"z"}))],
+            values={"s0": before, "s1": after}, units=dict.fromkeys("pqz", "kg"),
+        )  # fmt: skip
         self.assertEqual(fileformat.errors(data), [])
+        self.assertEqual(matrix.against(full, data), [])
+        self.assertEqual([i["id"] for i in data["items"]], ["q", "z"], "p is quiet; z is listed for its claim alone")
         z = next(i for i in data["items"] if i["id"] == "z")
-        self.assertEqual(z["verdicts"][A], [claims.NOT_MOVED])
+        self.assertEqual(z["verdicts"][A], [claims.OPEN])
+        self.assertEqual(data["counts"]["steps"]["one"][A]["verdicts"][claims.OPEN], 1)
+        # the validator counts it from the listed items: a file that leaves it out of its counts is refused
+        hidden = helpers.mutated(data, lambda d: (d["counts"]["steps"]["one"][A]["verdicts"].__setitem__(claims.OPEN, 0),
+                                                  d["counts"]["steps"]["one"][A]["verdicts"].__setitem__(claims.NOT_JUDGED, 1)))
+        self.assertTrue(any("claimed, not judged" in e for e in fileformat.errors(hidden)), fileformat.errors(hidden))
 
     def test_reach_is_the_size_of_the_lists_beside_a_star(self):
         found = claims.published(claims.claim("t", [claims.scope([A], {"p", "q"}), claims.scope([B])]), keep_items=False)

@@ -194,7 +194,7 @@ many were left out. A file that disagrees with its own rule is refused, not show
 
 It also **works the counts out again from the listed items.** Only a pair worth a look
 adds to the classes that moved, to missing (by side), to directions, bands, the verdicts
-"as claimed", "off claim", "not claimed" and "claimed, not moved", to `closer` and
+"as claimed", "off claim", "not claimed", "claimed, not moved" and "claimed, not judged", to `closer` and
 `further`, and to the attribution; and every item with such a pair is worth a look. So
 where nothing worth a look is left out (`not_listed` 0), these counts must equal what the
 listed items hold, and where some are left out, no count may be smaller than what the
@@ -246,8 +246,8 @@ matrix small. A `"="` that stands first in an indicator or after a missing resul
 refused. The class codes are `=` agrees, `~` within noise, `0` near zero, `-`
 missing, and for a pair that moved its class in upper case up and lower case down: `D`
 differs, `B` beyond 10x, `R` zero reference, `T` zero result, `S` sign change. The verdict
-codes are `a` as claimed, `o` off claim, `n` not claimed, `c` claimed, not moved, `~` within
-noise, `=` unchanged, `?` not judged. A matrix holds no band: it follows from the results.
+codes are `a` as claimed, `o` off claim, `n` not claimed, `c` claimed, not moved, `j`
+claimed, not judged, `~` within noise, `=` unchanged, `?` not judged. A matrix holds no band: it follows from the results.
 
 `matrix.errors(m)` checks the shape and never raises. `matrix.against(m, data)` works every
 code out again with the file's floors, tolerances and noise (and every verdict where the
@@ -412,18 +412,29 @@ that holds is the verdict:
 
 | Verdict | When |
 |---|---|
-| not judged | it is missing: nothing can be said of it |
-| claimed, not moved | a `must` entry covers it, and it agrees, is within noise or is near zero: it did not move beyond the tolerance, the noise or the floor |
+| claimed, not judged | a `must` entry covers it, and it is missing or near zero: whether it moved cannot be said, and the claim stays open |
+| not judged | it is missing or near zero, and no `must` entry covers it |
+| claimed, not moved | a `must` entry covers it, and it agrees or is within noise: it did not move beyond the tolerance or the noise |
 | unchanged | it agrees |
 | within noise | it differs by no more than the noise |
-| not judged | it is near zero |
 | not claimed | it moved, and no entry covers it |
-| as claimed | it moved, and an entry it is held to fits its direction and size |
-| off claim | it moved, and no entry it is held to fits |
+| as claimed | it moved, and it fits every `must` entry that covers it; where none does, one of the `may` entries |
+| off claim | it moved, and it does not |
 
-A pair that moved is held to the `must` entries that cover it, and only where none does to
-the `may` entries. So a `may any` entry beside a `must down` entry cannot make a move up
-"as claimed": the `must` entry says which way the pair must go.
+A near-zero pair under `must` is not "not moved": 1e-9 → 1e-12 below the floor did move,
+by a ratio the floor says nothing about. It is "claimed, not judged", counted and marked
+on the page like the other verdicts worth a look, so that a `must` left open is never read
+as met.
+
+A pair that moved is held to the `must` entries that cover it, all of them, and only where
+none does to the `may` entries, any one of which is enough. Each `must` entry says what the
+pair must do, so a move up does not meet `must down` because a `must any` or a `may any`
+beside it allows it, and a move by a factor of five does not meet `must down, by 10 % at
+most` because `must any` allows any size.
+
+`chain.build` refuses an entry whose list of items is not in hand (`items: null`): it would
+cover nothing, and a `must` would be met by default. A list a writer may not publish is
+given to `build` and left out of the file with `claim_lists=False`.
 
 A claim's list may stay private (`claim_lists=False`): the verdicts are worked out by the
 writer, kept in the file and marked on the page as not checkable from the file.

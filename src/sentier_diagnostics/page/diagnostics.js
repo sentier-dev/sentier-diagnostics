@@ -30,8 +30,8 @@
   var STRENGTH = { '1-1.1': 0.25, '1.1-1.25': 0.45, '1.25-2': 0.65, '2-10': 0.85, 'over 10': 1 };
   // the ends of the bands, as rule.SIZE_STEPS: the distance (|log10| of the factor) at which each ends
   var SIZE_STEPS = [[Math.log10(1.1), '1-1.1'], [Math.log10(1.25), '1.1-1.25'], [Math.log10(2), '1.25-2'], [1, '2-10']];
-  var LOOK = ['off claim', 'not claimed', 'claimed, not moved'];
-  var LOOK_MARK = { 'off claim': '◐', 'not claimed': '■', 'claimed, not moved': '○' };
+  var LOOK = ['off claim', 'not claimed', 'claimed, not moved', 'claimed, not judged'];
+  var LOOK_MARK = { 'off claim': '◐', 'not claimed': '■', 'claimed, not moved': '○', 'claimed, not judged': '◇' };
   var SAID = {
     'agrees': 'the two results differ by no more than the tolerance',
     'within noise': 'they differ by no more than two builds of one state do',
@@ -56,7 +56,7 @@
   };
   var VERDICT_CODES = {
     'a': 'as claimed', 'o': 'off claim', 'n': 'not claimed', 'c': 'claimed, not moved',
-    '~': 'within noise', '=': 'unchanged', '?': 'not judged'
+    'j': 'claimed, not judged', '~': 'within noise', '=': 'unchanged', '?': 'not judged'
   };
   var NO_CLAIM = '.';
   // what a column's heading sorts by, in the words of its title (furthestKey)
@@ -871,7 +871,7 @@
       keys.forEach(function (k) {
         node.appendChild(el('span', { title: k[3] }, [el('span', { cls: 'key ' + k[0], style: '--s:0.7', text: k[1] }), k[2]]));
       });
-      node.appendChild(el('span', { title: 'verdicts worth a look' }, ['■ not claimed ◐ off claim ○ claimed, not moved']));
+      node.appendChild(el('span', { title: 'verdicts worth a look' }, ['■ not claimed ◐ off claim ○ claimed, not moved ◇ claimed, not judged']));
     }
 
     // the file's own word for an item, in the page's own sentences
@@ -1288,7 +1288,7 @@
 
     function renderSteps() {
       var table = clear(q('steps-table'));
-      var head = ['#', 'Step', 'Kind', 'Explained', 'Claim', 'Moved', 'Up', 'Down', 'As claimed', 'Off claim', 'Not claimed', 'Claimed, not moved', 'Within noise', 'Missing before', 'Missing after', 'Tolerance', 'Noise'];
+      var head = ['#', 'Step', 'Kind', 'Explained', 'Claim', 'Moved', 'Up', 'Down', 'As claimed', 'Off claim', 'Not claimed', 'Claimed, not moved', 'Claimed, not judged', 'Within noise', 'Missing before', 'Missing after', 'Tolerance', 'Noise'];
       table.appendChild(el('thead', null, [el('tr', null, head.map(function (h) { return el('th', { scope: 'col', text: h }); }))]));
       var body = el('tbody');
       D.steps.forEach(function (s, k) {
@@ -1315,6 +1315,7 @@
           el('td', { cls: 'num', text: verdict('off claim') }),
           el('td', { cls: 'num', text: verdict('not claimed') }),
           el('td', { cls: 'num', text: verdict('claimed, not moved') }),
+          el('td', { cls: 'num', text: verdict('claimed, not judged') }),
           el('td', { cls: 'num', text: verdict('within noise') }),
           el('td', { cls: 'num', text: n(sumOver(s.id, function (b) { return b.missing.before + b.missing.both; })) }),
           el('td', { cls: 'num', text: n(sumOver(s.id, function (b) { return b.missing.after + b.missing.both; })) }),
