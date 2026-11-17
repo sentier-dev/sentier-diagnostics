@@ -28,10 +28,12 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from . import rule
-from .fileformat import MAX_INDICATORS, MAX_WORD, is_count, is_optional, is_text
+from .fileformat import MAX_ID, MAX_INDICATORS, MAX_WORD, is_count, is_text, text_errors
 
 FORMAT = "sentier-diagnostics-breakdown/1"
 MAX_PARTS = 200
+#: The longest label of a part: a process's name, with its place.
+MAX_PART_LABEL = 300
 #: How closely the parts and the rest must add up to the total, relative to the largest
 #: of the sizes involved: the sum of many products in floating point.
 CLOSURE = 1e-9
@@ -48,29 +50,31 @@ def errors(data) -> list[str]:
     if not isinstance(data, dict) or data.get("format") != FORMAT:
         return [f"not a breakdown of format {FORMAT}"]
     found = [f"a key this format does not know: {k}" for k in sorted(set(data) - {"format", "item", "from", "to", "indicators"})]
-    if not all(is_text(data.get(k), 100) for k in ("item", "from", "to")):
-        found.append("a breakdown names its item and the two states it compares")
+    named = {k: data.get(k) for k in ("item", "from", "to")}
+    found += [f"a breakdown names its item and the two states it compares: {e}"
+              for e in text_errors("", named, dict.fromkeys(named, MAX_ID))]  # fmt: skip
     indicators = data.get("indicators")
     if not isinstance(indicators, dict) or not 0 < len(indicators) <= MAX_INDICATORS:
         return [*found, f"`indicators` is not a table of 1 to {MAX_INDICATORS}"]
     for key, entry in indicators.items():
         where = f"indicator {key!r}"
-        if not is_text(key, 100) or not isinstance(entry, dict) or set(entry) != {"unit", "total", "parts", "rest", "parts_not_listed"}:
+        if not is_text(key, MAX_ID) or not isinstance(entry, dict) or set(entry) != {"unit", "total", "parts", "rest", "parts_not_listed"}:
             found.append(f"{where}: not {{unit, total, parts, rest, parts_not_listed}}")
             continue
         pairs = [entry["total"], entry["rest"]]
-        if not is_optional(entry["unit"], MAX_WORD) or not is_count(entry["parts_not_listed"]):
-            found.append(f"{where}: `unit` is a short text and `parts_not_listed` a count")
+        found += text_errors(where, entry, {"unit": MAX_WORD}, {"unit"})
+        if not is_count(entry["parts_not_listed"]):
+            found.append(f"{where}: `parts_not_listed` is not a count")
         parts = entry["parts"]
         if not isinstance(parts, list) or len(parts) > MAX_PARTS:
             found.append(f"{where}: `parts` is not a list of at most {MAX_PARTS}")
             continue
-        for part in parts:
-            if not (isinstance(part, dict) and set(part) == {"label", "kind", "values"}
-                    and is_text(part["label"], 300) and is_optional(part["kind"], MAX_WORD)):  # fmt: skip
-                found.append(f"{where}: a part is not {{label, kind, values}}")
-                break
-            pairs.append(part["values"])
+        if not all(isinstance(part, dict) and set(part) == {"label", "kind", "values"} for part in parts):
+            found.append(f"{where}: a part is not {{label, kind, values}}")
+            continue  # its sums cannot be read
+        for n, part in enumerate(parts):
+            found += text_errors(f"{where}, part {n}", part, {"label": MAX_PART_LABEL, "kind": MAX_WORD}, {"kind"})
+        pairs += [part["values"] for part in parts]
         if not all(isinstance(p, list) and len(p) == 2 and all(rule.is_value(v) for v in p) for p in pairs):
             found.append(f"{where}: a total, rest or part is not [before, after] in finite numbers")
             continue

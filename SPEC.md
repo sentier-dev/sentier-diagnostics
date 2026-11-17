@@ -216,7 +216,8 @@ characters, labels 80, texts 600 and an explanation's text 2,000. A claim's list
 count of its own: it names distinct items of the chain, so a claim reaches no more items
 than the chain holds (`items_count.all`), and the 12 MB bound the rest. A chain may hold
 more items than a file lists, and a claim about all of them is still a list. The limits
-are in `fileformat.py`, and a refusal names the limit it met.
+are in `fileformat.py`, and a refusal names the limit it met; a text that is too long is
+refused with its limit and its own length.
 
 Thirty states is 29 steps. A chain is the built states in order; hundreds of fixes, chosen
 in any set, are a file of fixes measured on one base (section 16), not hundreds of states.
@@ -506,14 +507,19 @@ An explanation is text about a step, an indicator, an item, or a combination, wi
 An explanation is a claim: it never changes a count, a class or a verdict. A file carries
 no status, no "accepted by" and no approval of any kind (sentier-bafu-agribalyse ADR 0010):
 the validator refuses such keys, and refuses an entry of a state's `identity` whose name
-says status, accepted or approved, since an identity holds free names.
+says a status or an approval (accepted, approved, reviewed, verified, validated, signed
+off, ok, QA, ...), since an identity holds free names. A key there is printable ASCII, so
+that no such word hides behind a lookalike letter or an invisible one. The list of such
+words deters and cannot be complete; the values of `identity`, free names, are not read.
 
 ## 9. Breakdowns
 
 A breakdown says what one item's result is made of, before and after one step: format
 `sentier-diagnostics-breakdown/1`, one file per item and step, named in the item's
 `breakdowns`. Per indicator: `total` (before, after), `parts` (label, kind, before,
-after), `rest` and `parts_not_listed`.
+after), `rest` and `parts_not_listed`. Up to 200 parts are listed per indicator; a part's
+label is up to 300 characters and its kind up to 40, and the item and the two states are
+ids. A refusal names the part, the field and the text's own length.
 
 - Parts are chosen by the **larger of their two sides**, so a part that appears only after
   the step is listed.
@@ -709,6 +715,14 @@ rounded number stands as exact beside a longer one. Where six still read a perce
 median, it says "just under the median" or "just over the median" instead of two equal
 numbers, and the numbers left take the digits they need.
 
+Every number on the page is written in one style. From 1e4 on, and where it rounds to 1e4,
+a number is a power of ten (`1.235e4`, `4.2e−4`, `1.23e3` where three digits are all a
+line holds), never the `e+4` that JavaScript writes of its own accord. Each style is chosen
+by the number as it is written, so that one that rounds across a threshold reads as the
+numbers beyond it do (99.96 % as `+100 %`, 999.6 % as `+1 000 %`). A number said to be
+above a bound (a large noise, steps that cancel) reads above it: at five or six digits where
+four round it onto the bound (`1.00001 %`), and as "just over 1 %" where six still do.
+
 A card's title sorts the matrix by its indicator; a heading of the matrix marks its card.
 
 ### 10.4 Worst
@@ -770,7 +784,12 @@ Every explanation with its origin badge; the rule with its tolerances, noise, fl
 notes.
 
 Counts are also printed as Markdown by `sentier-diagnostics summary FILE`, for a pull
-request or a reader without JavaScript.
+request or a reader without JavaScript. Each text of the file shows there as written and
+makes nothing of its own: no column, emphasis, link, list, rule, code or heading in
+Markdown, and on GitHub no mention, issue reference, emoji or maths (a word joiner, which
+shows as nothing, breaks those). A commit's hash is left whole: GitHub links it to that
+commit of the repository, a target the file cannot choose. Its numbers are written in the
+page's style (section 10.3): a tolerance of 1e-5 as `0.00001`, a noise of 120 % as `120 %`.
 
 ## 11. Acceptance cases
 
@@ -818,11 +837,15 @@ values, items out of order, counts that do not add up, unknown keys and other fo
 disagree with the listed items (`CountsAgainstItems`, one test per edit sentier-bafu's
 review made by hand); each of its checks, broken on its own, names its own fault
 (`EachRuleOnItsOwn`), so that a check another one backs up cannot go missing unseen; it
-returns faults and never raises, whatever type a value has
-(a fuzz test of every value in the example); a file is read strictly (no `NaN`, no key
-twice), and a table's numbers are plain ASCII decimals; `build` and `check` end in one
-line on ordinary mistakes, never a traceback; the summary escapes the file's texts in
-Markdown; noise is taken beyond the floor, and a scope entry read from tables without
+returns faults and never raises, whatever type a value has (a fuzz test of every value in
+the example, of a breakdown and of a fixes file, none of which falls back to a fault that
+names no place); a file is read strictly (no `NaN`, no key twice, by the page as by the
+Python), and a table's numbers are plain ASCII decimals; `build` and `check` end in one
+line on ordinary mistakes, never
+a traceback: every value of a description is of the kind the build reads, checked with its
+place before a table is opened (a fuzz test of every value of a description), and a value
+of another kind is refused, never read as something else (`"no"` as explained); the summary escapes the file's texts in
+Markdown at every place it writes one (each case rendered by GitHub's Markdown API); noise is taken beyond the floor, and a scope entry read from tables without
 `expect` may move; the page draws the example whole under Node with a small stand-in for
 the DOM (`tests/js/dom.js`), loads nothing from elsewhere and writes no markup from data;
 the page takes the matrix the Python writes and refuses one of another file, loads it as a

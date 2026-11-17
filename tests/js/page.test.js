@@ -110,6 +110,89 @@ test('one number style from 1e4 on, never the "e+" of toPrecision', () => {
   assert.equal(page.formatNumber(1e6), '1e6');
   assert.equal(page.formatNumber(-123456), '−1.235e5');
   assert.equal(page.formatNumber(0.00042), '4.2e−4');
+  // what rounds to 1e4 is written as 1e4 is (issue 19: "1.000e+4" for 9999.5)
+  assert.equal(page.formatNumber(9999.5), '1e4');
+  assert.equal(page.formatNumber(-99999.5), '−1e5');
+  assert.deepEqual(page.quantileTexts({ p10: 1234.5, median: 2000, p90: 3001 }), ['1.23e3', '2.00e3', '3.00e3']);
+  assert.equal(page.ratioShort(1, 999.6), '1e3');
+  assert.equal(page.percentText(1, 1.00001), '+1e−3 %');
+  assert.equal(page.shareText(0.0005), '5e−2 %');
+});
+
+test('the rule\'s numbers and every tooltip are written with every digit, in the page\'s style (issue 19)', () => {
+  const tight = example();
+  tight.steps[1].tolerance.value = 1e-7;
+  tight.rule.total_tolerance = 1e-7;
+  tight.rule.floor_factor = 1e-7;
+  const said = dom.page(tight);
+  const row = said.byId['steps-table'].childNodes.find((n) => n.tagName === 'TBODY').childNodes[1];
+  assert.ok(row.childNodes.some((td) => td.textContent === '1e−7'), 'the tolerance cell');
+  said.open('sd.step=fix-1');
+  assert.match(said.byId['step-said'].textContent, /Tolerance 1e−7 \(/);
+  said.open('sd.step=total');
+  assert.match(said.byId['step-said'].textContent, /Tolerance 1e−7, the largest of the steps/);
+  assert.match(said.text(), /a tolerance of 1e−7, the largest of the steps/);
+  assert.match(said.text(), /reference unit: 1e−7 times the median/);
+  // the example's toxicity results are near 1e−7: each tooltip says them in the same style
+  said.open('sd.item=p01');
+  assert.match(said.text(), /Before 2e−7, after 2\.0000002e−7/);
+  assert.ok(!/\de-\d/.test(said.text()), 'no number in the style of String()');
+});
+
+test('a number that rounds across a threshold of its style is written as the numbers beyond it (issue 19)', () => {
+  // each pair: a number just short of a threshold that rounds onto it, and the threshold itself
+  const same = (write, near, at) => assert.equal(write(...near), write(...at), `${write.name}(${near}) and (${at})`);
+  same(page.formatNumber, [9999.5], [1e4]);
+  same(page.formatNumber, [0.00099996], [0.001]);
+  same(page.formatNumber, [-0.00099996], [-0.001]);
+  for (const [near, at] of [[199.96, 200], [1099.6, 1100], [100.996, 101], [100.00996, 100.01], [10099.6, 10100]]) {
+    same(page.percentText, [100, near], [100, at]);
+    same(page.percentText, [100, 200 - near], [100, 200 - at]);
+  }
+  same(page.shareText, [99.99996], [100]);
+  same(page.shareText, [0.000999], [0.001]);
+  same(page.ratioShort, [1, 0.009996], [1, 0.01]);
+  // 1.001 − 1 is 0.000999999999999889 in floats: the ratio still reads 1.001, and a difference
+  // that four digits keep under 0.001 is still written as one (reviews of 9a11c09, 2d0d545)
+  assert.equal(page.ratioText(1, 1.001), '1.001');
+  assert.equal(page.ratioText(1, 0.999), '0.999');
+  assert.equal(page.ratioText(1, 1.0009995), '1 + 9.995e−4');
+  assert.equal(page.ratioText(1, 0.9990005), '1 − 9.995e−4');
+  same(page.ratioShort, [1, 999.6], [1, 1000]);
+  const all = (v) => ({ p10: v, median: v, p90: v });
+  assert.deepEqual(page.quantileTexts(all(0.0099996)), page.quantileTexts(all(0.01)));
+  assert.deepEqual(page.quantileTexts(all(-0.0099996)), page.quantileTexts(all(-0.01)));
+  // and the texts themselves: grouped from 1 000 on, whole from 100 on, one decimal from 1 on
+  assert.deepEqual([[100, 1099.6], [100, 199.96], [100, 100.996], [100, 100.00996]].map((p) => page.percentText(...p)),
+    ['+1 000 %', '+100 %', '+1.0 %', '+0.01 %']);
+  assert.equal(page.shareText(99.99996), '1e4 %');
+});
+
+test('a number written with every digit has the page\'s style however large it is (issue 19)', () => {
+  // String() writes "1e+21" from 1e21 on: the tooltips of the largest results
+  assert.equal(page.exactText(1e21), '1e21');
+  assert.equal(page.exactText(-1.5e300), '−1.5e300');
+  assert.equal(page.exactText(1e-7), '1e−7');
+  assert.equal(page.exactText(123.456), '123.456');
+  assert.equal(page.exactText(null), 'missing');
+});
+
+test('every number the page writes has the one style, over the whole range of the floats (issue 19)', () => {
+  const values = [9999.5, 99999.5, 999.95, 0.0099995, 0.00099995, 5e-324, Number.MAX_VALUE, 1e21, 123456789012345680000];
+  for (let e = -323; e <= 307; e++) for (const m of [1, 1.2345, 9.5, 9.9995, 9.99995]) values.push(m * 10 ** e);
+  const plain = /^\d+(\.\d+)?(e−?\d+)?$/;
+  const said = [];
+  for (const v of values) {
+    said.push(['formatNumber', v, page.formatNumber(v).replace(/^−/, '')], ['formatNumber', -v, page.formatNumber(-v).replace(/^−/, '')]);
+    said.push(['shareText', v, page.shareText(v / 100).replace(/ %$/, '')]);
+    said.push(['ratioShort', v, page.ratioShort(1, v)]);
+    const percent = page.percentText(1, 1 + v / 100).replace(/^[+−]/, '').replace(/ %$/, '');
+    if (v < 1e300) said.push(['percentText', v, /^\d \d{3}$/.test(percent) ? percent.replace(' ', '') : percent]);
+    if (isFinite(v * 3)) for (const q of page.quantileTexts({ p10: v, median: v * 1.5, p90: v * 3 })) said.push(['quantileTexts', v, q]);
+  }
+  const off = said.filter(([, , text]) => !plain.test(text));
+  assert.deepEqual(off.slice(0, 5), []);
+  assert.ok(said.length > 15000);
 });
 
 test('an item\'s whole difference is split by the steps, and the shares added up are what rounding left of 100 % (A18, issue 9)', () => {
@@ -242,13 +325,170 @@ test('a text by a model is drawn as a claim nobody checked (A9)', () => {
   assert.ok(model.seen().join(' ').includes('A claim, not checked by a person'));
 });
 
+// the string literals of a script, its comments left out
+const stringsOf = (source) => {
+  const found = [];
+  for (let i = 0; i < source.length; i++) {
+    const c = source[i];
+    if (c === '/' && source[i + 1] === '/') { i = source.indexOf('\n', i); if (i < 0) break; }
+    else if (c === '/' && source[i + 1] === '*') { i = source.indexOf('*/', i + 2) + 1; if (i <= 0) break; }
+    else if (c === "'" || c === '"' || c === '`') {
+      let j = i + 1, text = '';
+      while (j < source.length && source[j] !== c) { if (source[j] === '\\') { text += source[j + 1]; j += 2; } else text += source[j++]; }
+      found.push(text);
+      i = j;
+    }
+  }
+  return found;
+};
+
 test('nothing drawn calls a move better or worse (A22)', () => {
+  // what the script draws, in each view; the page's own words are read in the written page
+  // (`test_a22_the_reference_is_neutral_after_step_0`)
   const drawn = dom.page(example(), { 'p01-fix-1.json': wheat() });
-  drawn.open('sd.item=p01');
-  const html = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'sentier_diagnostics', 'page', 'body.html'), 'utf8')
-    .replace(/<[^>]*>/g, ' ');
-  const text = (drawn.text() + '\n' + html).toLowerCase();
+  const seen = [drawn.text()];
+  for (const view of ['sd.item=p01', 'sd.step=fix-1', 'sd.step=step-0&sd.item=p02']) { drawn.open(view); seen.push(drawn.text()); }
+  const text = seen.join('\n').toLowerCase();
+  assert.ok(text.includes('the whole way') && text.includes('what it is made of'), 'the views were drawn');
   for (const word of ['better', 'worse', 'improve', 'closer']) assert.ok(!text.includes(word), word);
+  // and what it draws only in a branch these views do not reach ("Every part is listed."
+  // shows only where no part is left out): every string the script holds
+  const strings = stringsOf(fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'sentier_diagnostics', 'page', 'diagnostics.js'), 'utf8'));
+  assert.ok(strings.includes('Every part is listed. ') && strings.includes('nothing explains it'), 'the script\'s strings were read');
+  assert.deepEqual(strings.filter((t) => t.includes('\n')), [], 'each string ends on its own line: the script was read in step');
+  for (const word of ['better', 'worse', 'improve', 'closer']) assert.deepEqual(strings.filter((t) => t.toLowerCase().includes(word)), [], word);
+});
+
+// a drawn table as its rows, each cell's text under its column's name
+const tableRows = (table) => {
+  const part = (tag) => table.childNodes.find((n) => n.tagName === tag);
+  const head = part('THEAD').childNodes[0].childNodes.map((th) => th.textContent);
+  return part('TBODY').childNodes.map((tr) => Object.fromEntries(tr.childNodes.map((cell, i) => [head[i], cell.textContent])));
+};
+const within = (node) => [node, ...node.childNodes.flatMap(within)];
+
+test('the item view draws each result in its own row and column, and each part of a breakdown on its own line (issue 14)', () => {
+  const d = example();
+  const drawn = dom.page(d, { 'p01-fix-1.json': wheat() });
+  drawn.open('sd.item=p01');
+  const item = d.items.find((i) => i.id === 'p01');
+  const tables = within(drawn.byId['item-body']).filter((n) => n.tagName === 'TABLE');
+  let checked = 0;
+  for (const ind of d.indicators) {
+    const values = item.values[ind.id];
+    const rows = tableRows(tables.find((t) => t.getAttribute('data-indicator') === ind.id));
+    d.steps.forEach((s, k) => {
+      assert.equal(rows[k].Before, page.formatNumber(values[k]), `${ind.id} ${s.id} before`);
+      assert.equal(rows[k].After, page.formatNumber(values[k + 1]), `${ind.id} ${s.id} after`);
+      assert.equal(rows[k].Verdict, item.verdicts[ind.id][k] || '—', `${ind.id} ${s.id} verdict`);
+      checked += values[k] !== values[k + 1];
+    });
+    assert.equal(rows[d.steps.length].Before, page.formatNumber(values[0]));
+    assert.equal(rows[d.steps.length].After, page.formatNumber(values[values.length - 1]));
+    assert.equal(rows[d.steps.length].Verdict, '—', 'the whole way has no claim');
+  }
+  assert.ok(checked >= 2, 'some results moved, so before and after differ');
+  assert.ok(Object.values(item.verdicts).flat().some((v) => v && v !== 'unchanged'), 'a verdict other than unchanged is drawn');
+  const parts = tables.filter((t) => tableRows(t).length && 'Part' in tableRows(t)[0]);
+  const bd = wheat();
+  assert.equal(parts.length, Object.keys(bd.indicators).length);
+  Object.values(bd.indicators).forEach((entry, i) => {
+    const rows = tableRows(parts[i]);
+    const lines = [...entry.parts.map((p) => [p.label, p.kind || '', p.values]), [null, '', entry.rest], ['Total', '', entry.total]];
+    assert.equal(rows.length, lines.length);
+    lines.forEach(([label, kind, pair], k) => {
+      if (label !== null) assert.equal(rows[k].Part, label);
+      assert.equal(rows[k].Kind, kind);
+      assert.equal(rows[k].Before, page.formatNumber(pair[0]), `${rows[k].Part} before`);
+      assert.equal(rows[k].After, page.formatNumber(pair[1]), `${rows[k].Part} after`);
+      // the change is after less before, with its sign
+      const change = pair[1] - pair[0];
+      assert.equal(rows[k].Change, change === 0 ? '=' : (change > 0 ? '+' : '−') + page.formatNumber(Math.abs(change)), `${rows[k].Part} change`);
+    });
+    assert.ok(entry.parts.some((p) => p.values[0] !== p.values[1]));
+  });
+});
+
+test('the whole way and the steps are drawn with each count in its own column (issue 14)', () => {
+  const d = example();
+  const drawn = dom.page(d);
+  const n = (x) => String(x).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  const label = (id) => d.steps.find((s) => s.id === id).label;
+  const whole = tableRows(drawn.byId['total-table']);
+  assert.equal(whole.length, d.indicators.length);
+  d.indicators.forEach((ind, k) => {
+    const row = whole[k], block = d.counts.total[ind.id], att = d.attribution[ind.id];
+    for (const [cls, count] of Object.entries(block.classes)) assert.equal(row[cls], n(count), `${ind.id} ${cls}`);
+    assert.equal(row.Up, n(block.directions.up), ind.id);
+    assert.equal(row.Down, n(block.directions.down), ind.id);
+    const ranked = Object.entries(att.dominant).filter(([, c]) => c).sort((a, b) => b[1] - a[1]).map(([id, c]) => `${label(id)} (${c})`);
+    assert.equal(row['Largest step'], ranked.join(', ') || 'none', ind.id);
+    assert.equal(row['Spread over steps'], n(att.spread));
+    assert.equal(row['Not attributable'], n(att.not_attributable));
+    assert.equal(row['Moved by what nothing explains'], n(att.unexplained_moved));
+  });
+  assert.ok(d.indicators.some((ind) => d.counts.total[ind.id].directions.up !== d.counts.total[ind.id].directions.down));
+  assert.ok(d.indicators.some((ind) => Object.values(d.attribution[ind.id].dominant).filter(Boolean).length > 1), 'a ranking of two steps');
+  const steps = tableRows(drawn.byId['steps-table']);
+  d.steps.forEach((s, k) => {
+    const sum = (f) => n(Object.values(d.counts.steps[s.id]).reduce((a, b) => a + f(b), 0));
+    assert.equal(steps[k].Up, sum((b) => b.directions.up), s.id);
+    assert.equal(steps[k].Down, sum((b) => b.directions.down), s.id);
+    assert.equal(steps[k].Explained, s.explained ? 'yes' : 'no: nothing explains it', s.id);
+  });
+  assert.ok(d.steps.some((s) => s.explained) && d.steps.some((s) => !s.explained), 'steps of both kinds');
+});
+
+test('the page takes each edge it shares with the Python where the Python does: ten times, a zero, a large noise (issue 15)', () => {
+  // steps cancel beyond ten times the whole difference, not at it
+  const ten = page.splitOf([1, 6.5, 2], [true, true], 'differs');
+  assert.equal(ten.factor, 10);
+  assert.ok(!page.splitText(ten).includes('cancel'), page.splitText(ten));
+  assert.match(page.splitText(page.splitOf([1, 6.75, 2], [true, true], 'differs')), /the steps cancel: their differences add up to 10\.5 times/);
+  // a result of exactly 0 is "0"; one within the floor, of either sign, is "≈ 0"
+  assert.equal(page.cellView(0, 5, 'zero reference', 'up').text, 'from 0');
+  assert.equal(page.cellView(-1e-12, 5, 'zero reference', 'up').text, 'from ≈ 0');
+  assert.equal(page.cellView(5, 0, 'zero result', 'down').text, 'to 0');
+  assert.equal(page.cellView(5, -1e-12, 'zero result', 'down').text, 'to ≈ 0');
+  // a noise of exactly 1 % is not large (chain.LARGE_NOISE)
+  const noise = (size) => page.noiseText({ measured: true, between: ['a', 'b'], by: { x: size }, note: null }, ['x']);
+  assert.ok(!noise(0.01).includes('large'), noise(0.01));
+  // a noise called large never reads as 1 % itself: it takes the digits that show it is
+  // over, and where six do not, it is "just over 1 %" (review of 9a11c09)
+  assert.match(noise(0.010000000000000002), /large: just over 1 %$/);
+  assert.match(noise(0.0100001), /large: up to 1\.00001 %$/);
+  assert.match(noise(0.0104), /large: up to 1\.04 %$/);
+  assert.match(noise(0.0100016), /large: up to 1\.0002 %$/); // five digits where they do
+  // and where a step's noise is the sum of its two states'
+  const said = (sizes) => {
+    const d = example();
+    d.states.filter((s) => s.noise && s.noise.measured).forEach((s, k) => { s.noise.by = { [d.indicators[0].id]: sizes[k] }; });
+    const drawn = dom.page(d);
+    drawn.open('sd.step=rebuilt');
+    return drawn.byId['step-said'].textContent;
+  };
+  assert.match(said([0.005, 0.005]), /the sum of its two ends'/);
+  assert.ok(!said([0.005, 0.005]).includes('large'), said([0.005, 0.005]));
+  assert.match(said([0.005, 0.0051]), /large: up to 1\.01 %/);
+  assert.match(said([0.005, 0.0050001]), /large: up to 1\.00001 %\./);
+  assert.match(said([0.005, 0.0050000001]), /large: just over 1 %\./);
+  // steps said to cancel never add up to "10 times", the bound itself
+  const cancel = (factor) => page.splitText({ state: 'split', shares: [1], sum: 1, unexplained: null, factor, bound: 0 });
+  assert.match(cancel(10.001), /add up to 10\.001 times/);
+  assert.match(cancel(10.0000001), /add up to just over 10 times/);
+  assert.ok(!cancel(10).includes('cancel'), cancel(10));
+});
+
+
+test('a class the page does not know sorts after every class it knows, and keys compare as Python compares tuples (issue 15)', () => {
+  const known = Math.max(...Object.values(page.RANK));
+  assert.ok(page.severityKey(1, 2, 'a class of a later format')[0] > known);
+  assert.ok(page.severityKey(null, 2, 'a class of a later format')[0] > known);
+  // part by part, then the shorter first: [1] < [1, 0], as (1,) < (1, 0) in Python
+  assert.ok(page.compareKeys([1], [1, 0]) < 0);
+  assert.ok(page.compareKeys([1, 0], [1]) > 0);
+  assert.equal(page.compareKeys([1, -2], [1, -2]), 0);
+  assert.ok(page.compareKeys([0, 5], [1]) < 0);
 });
 
 test('the item view splits only what can be split and draws the breakdown of its own step', () => {
@@ -285,6 +525,67 @@ test('a breakdown of the right step and another item is not drawn under it (issu
   drawn.open('sd.item=p05');
   const body = drawn.byId['item-body'].seen().join(' ');
   assert.ok(body.includes('is of another product or another step: not drawn'), body.slice(-300));
+});
+
+test('the page refuses a breakdown for each reason the check has, and says which (issue 5)', () => {
+  // each case changes one thing of wheat's breakdown of its step, or where it is named
+  const data = example();
+  const step = Object.keys(data.items.find((i) => i.id === 'p01').breakdowns)[0];
+  const shown = (bd, comp = step) => {
+    const d = example();
+    d.items.find((i) => i.id === 'p01').breakdowns = { [comp]: 'b.json' };
+    const drawn = dom.page(d, { 'b.json': bd });
+    drawn.open('sd.item=p01');
+    return drawn.byId['item-body'].seen().join(' ');
+  };
+  const indicator = Object.keys(wheat().indicators)[0];
+  const other = (b) => data.states.map((s) => s.id).find((id) => id !== b.from && id !== b.to);
+  const cases = [
+    ['is not a breakdown', (b) => { b.format = 'sentier-diagnostics-breakdown/2'; }],
+    // the item's own breakdown, named for the whole way: its states are not the whole way's
+    ['is of another product or another step', null, 'total'],
+    // one of the three it names changed alone: another item, or a step that ends or starts elsewhere
+    ['is of another product or another step', (b) => { b.item = 'p02'; }],
+    ['is of another product or another step', (b) => { b.to = other(b); }],
+    ['is of another product or another step', (b) => { b.from = other(b); }],
+    ['holds no indicators', (b) => { b.indicators = {}; }],
+    ['names an indicator this file does not hold, x:nowhere', (b) => { b.indicators['x:nowhere'] = b.indicators[indicator]; delete b.indicators[indicator]; }],
+    ['is not of the shape of a breakdown in', (b) => { b.indicators[indicator].parts[0].values = [1]; }],
+    ['is not of the shape of a breakdown in', (b) => { b.indicators[indicator].total = [b.indicators[indicator].total[0]]; }],
+    ['is not of the shape of a breakdown in', (b) => { b.indicators[indicator].rest = [b.indicators[indicator].rest[0], 'x']; }],
+    ['is not of the shape of a breakdown in', (b) => { b.indicators[indicator].parts = {}; }],
+    ['is not of the shape of a breakdown in', (b) => { b.indicators[indicator] = null; }],
+    ['does not add up', (b) => { b.indicators[indicator].rest[0] += 1; }],
+    ['is not of this file', (b) => { const e = b.indicators[indicator]; e.total[1] += 1; e.rest[1] += 1; }],
+  ];
+  assert.ok(shown(wheat()).includes('What it is made of') && !/not drawn/.test(shown(wheat())), 'the breakdown itself is drawn');
+  for (const [said, change, comp] of cases) {
+    const bd = wheat();
+    if (change) change(bd);
+    const body = shown(bd, comp);
+    assert.ok(body.includes('The breakdown b.json ' + said), said + ' | ' + body.slice(-240));
+    assert.ok(body.includes(': not drawn.'), said);
+  }
+});
+
+test('a breakdown the page fetches is checked as one that came with it (issue 5)', async () => {
+  const served = (bd) => (url) => (bd ? Promise.resolve({ ok: true, text: () => Promise.resolve(JSON.stringify(bd)) }) : Promise.resolve({ ok: false, status: 404 }));
+  const opened = async (bd, comp) => {
+    const d = example();
+    const step = Object.keys(d.items.find((i) => i.id === 'p01').breakdowns)[0];
+    d.items.find((i) => i.id === 'p01').breakdowns = { [comp || step]: 'b.json' };
+    const drawn = dom.page(d, undefined, { protocol: 'http:', fetch: served(bd) });
+    drawn.open('sd.item=p01');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    return drawn.byId['item-body'].seen().join(' ');
+  };
+  const right = await opened(wheat());
+  assert.ok(!right.includes('not drawn') && !right.includes('is not with this page'), right.slice(-240));
+  assert.ok(right.includes('What it is made of'));
+  const other = await opened(wheat(), 'total');
+  assert.ok(other.includes('The breakdown b.json is of another product or another step: not drawn.'), other.slice(-240));
+  const gone = await opened(null);
+  assert.ok(gone.includes('The breakdown b.json is not with this page.'), gone.slice(-240));
 });
 
 test('a file the page cannot draw draws nothing', () => {
@@ -432,6 +733,47 @@ test('a matrix over http is held to its size in bytes, and refused when it is no
   assert.match(await fetched(Buffer.from('{"format": ')), /matrix\.json is not JSON/);
   assert.match(await fetched(Buffer.from([0x7b, 0xff, 0x7d])), /matrix\.json is not UTF-8 text/);
   assert.match(await fetched(null, 404), /matrix\.json could not be read \(404\)/);
+});
+
+test('a key written twice in one object is refused wherever the page reads JSON, as the Python refuses it (issue 19)', async () => {
+  for (const text of ['{"a": 1, "a": 2}', '{"a\\u0062": 1, "ab": 2}', '{"a": 1, "b": {"c": 1, "c": 2}}', '[{"a": 1}, {"b": 1, "b": 2}]',
+    '{"__proto__": 1, "__proto__": 2}', '{"x": [], "x": {}}']) {
+    assert.throws(() => page.readJSON(text), /^Error: the key "[a-z_]+" is written twice in one object$/, text);
+  }
+  // the same key in two objects, a key's text inside a value, escapes inside a string
+  for (const text of ['{"a": {"b": 1}, "b": {"b": 2}}', '{"a": [{"x": 1}, {"x": 2}]}', '["a", "a"]', '{"a": "}\\",{\\"a\\": [", "b": 1}',
+    '{"": 1, "x": {"": 2}}', '{"a\\\\": 1, "a": 2}']) {
+    assert.equal(JSON.stringify(page.readJSON(text)), JSON.stringify(JSON.parse(text)), text);
+  }
+  assert.throws(() => page.readJSON('{"a": NaN}'), SyntaxError);
+  const twice = (value) => JSON.stringify(value).replace('"tier":', '"tier": "counts", "tier":');
+  const data = dom.page(undefined, undefined, { scripts: { data: new dom.Text(twice(example())) } });
+  assert.match(data.byId['load-error'].textContent, /The data of this page cannot be read: the key "tier" is written twice in one object/);
+  // served as a response serves it: its text, or its bytes (a matrix, held to its size in bytes)
+  const served = (text) => () => Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(text),
+    arrayBuffer: () => Promise.resolve(bytesOf(Buffer.from(text))) });
+  const matrix = dom.page(local(), undefined, { protocol: 'https:', fetch: served(JSON.stringify(full()).replace('"items":', '"items": [], "items":')) });
+  await new Promise((done) => setImmediate(done));
+  assert.match(matrix.byId['matrix-said'].textContent, /matrix\.json cannot be read: the key "items" is written twice/);
+  const d = example();
+  const step = Object.keys(d.items.find((i) => i.id === 'p01').breakdowns)[0];
+  d.items.find((i) => i.id === 'p01').breakdowns = { [step]: 'b.json' };
+  const breakdown = dom.page(d, undefined, { protocol: 'http:', fetch: served(JSON.stringify(wheat()).replace('"item":', '"item": "p02", "item":')) });
+  breakdown.open('sd.item=p01');
+  await new Promise((done) => setTimeout(done, 0));
+  assert.match(breakdown.byId['item-body'].seen().join(' '), /The breakdown b\.json cannot be read: the key "item" is written twice in one object\. Not drawn\./);
+  // a file picked, and one the address names
+  const reader = class { readAsText(file) { this.result = file.text; this.onload(); } };
+  const picked = (text) => {
+    const drawn = dom.page(undefined, undefined, { globals: { FileReader: reader } });
+    drawn.byId.file.dispatch('change', { target: { files: [{ text }] } });
+    return drawn;
+  };
+  assert.match(picked(twice(example())).byId['load-error'].textContent, /The file cannot be read: the key "tier" is written twice in one object/);
+  assert.equal(picked(JSON.stringify(example())).byId.load.hidden, true);
+  const asked = dom.page(undefined, undefined, { protocol: 'https:', search: '?file=d.json', fetch: served(twice(example())) });
+  await new Promise((done) => setImmediate(done));
+  assert.match(asked.byId['load-error'].textContent, /d\.json cannot be read: the key "tier" is written twice in one object/);
 });
 
 test('a grid cell is the ratio after ÷ before, coloured by its direction', () => {
@@ -2309,7 +2651,7 @@ test('a breakdown is held to its item\'s results, whether it came with the page 
   const bundled = dom.page(example(), { 'p01-fix-1.json': scaled() });
   bundled.open('sd.item=p01');
   assert.match(body(bundled), /The breakdown p01-fix-1\.json is not of this file: its total in Climate is not the product's result in repro: not drawn\./);
-  const served = (b) => () => Promise.resolve({ ok: true, json: () => Promise.resolve(b) });
+  const served = (b) => () => Promise.resolve({ ok: true, text: () => Promise.resolve(JSON.stringify(b)) });
   for (const [made, said] of [[scaled, /is not of this file: its total in Climate is not/], [broken, /does not add up: in Climate its parts are not its total after/], [empty, /The breakdown p01-fix-1\.json holds no indicators: not drawn\./]]) {
     const fetched = dom.page(example(), undefined, { protocol: 'https:', fetch: served(made()) });
     fetched.open('sd.item=p01');

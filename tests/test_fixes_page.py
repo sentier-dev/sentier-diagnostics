@@ -153,6 +153,21 @@ def a_pair_inside_a_build():
     return f, data, full
 
 
+def below_zero():
+    """Values below zero, as a credit or an uptake gives them. The base holds p1 at -1.0 and
+    p2 at -2.0 in A; x moves p1 to -1.2, y moves p1 to -0.9 and p2 to -2.5. A page writes each
+    with "\u2212", never with an ASCII minus, and hovered too."""
+    s1 = {A: {"p1": -1.0, "p2": -2.0, "p3": 3.0, "p4": 0.0}, B: {"p1": 3.0, "p2": 5.0, "p3": 7.0, "p4": 1.0}}
+    data, full = chain_and_matrix(last=s1)
+    f = fixes.build(
+        "Values below zero", data=data, full=full, base="s1",
+        fixes=[fixes.fix("x", "Fix x", kind="amount"), fixes.fix("y", "Fix y", kind="mapping")],
+        results={"x": {A: {"p1": -1.2}}, "y": {A: {"p1": -0.9, "p2": -2.5}}},
+        interactions=checked_pairs(),
+    )  # fmt: skip
+    return f, data, full
+
+
 def files() -> dict[str, dict]:
     """The made-up files, each checked clean."""
     pair_and_built = made(noise_a=measured(1e-3), noise_b=measured(2e-3), release=True,
@@ -185,7 +200,7 @@ def pages() -> dict[str, dict]:
     interactions were not checked and whose set was not built, so that their sum is estimated;
     a built set that is a state of the chain; and the files above that a page draws
     differently: no sum, covers in order, sized pairs, a published base, a fix within its noise,
-    a pair inside a build."""
+    a pair inside a build; and values below zero."""
     found = {
         "fixes that need others": with_requires(),
         "an estimated sum": made(interactions="unchecked", built=False),
@@ -196,6 +211,7 @@ def pages() -> dict[str, dict]:
         "from the published results": from_published(),
         "a fix within its noise": within_noise(),
         "a pair inside a build": a_pair_inside_a_build(),
+        "values below zero": below_zero(),
     }
     return {name: {"data": data, "matrix": full, "fixes": f} for name, (f, data, full) in found.items()}
 

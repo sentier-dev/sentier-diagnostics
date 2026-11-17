@@ -10,6 +10,8 @@ import io
 import json
 import math
 import re
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -46,12 +48,45 @@ class Validator(unittest.TestCase):
     def test_the_example_is_valid(self):
         self.assertEqual(fileformat.errors(self.data), [])
 
+    def test_every_text_too_long_is_refused_and_a_free_text_names_its_limit(self):
+        """Issue 19: a title over 120 characters, a label over 80 and an item's name over 300
+        were refused without the limit. Each text of the example, made 5000 characters long, is
+        refused; each free text says its limit and its length. A word from a fixed list or a
+        reference to another part of the file is refused as what it is not."""
+        data = example.build()
+        free = {"title", "about", "made_by", "label", "note", "name", "short", "unit", "place", "group", "text", "doc",
+                "not_checked", "one", "many", "model", "run_by", "id", "commit", "release", "machine"}  # fmt: skip
+        lists = [data["notes"]] + [s["noise"]["between"] for s in data["states"] if (s.get("noise") or {}).get("between")]
+        named = 0
+        for parent, key in list(helpers.nodes(data)):
+            if not isinstance(parent[key], str):
+                continue
+            kept, parent[key] = parent[key], "x" * 5000
+            try:
+                found = fileformat.errors(data)
+            finally:
+                parent[key] = kept
+            with self.subTest(key=key, was=kept[:40]):
+                self.assertTrue(found)
+                if key in free or any(parent is one for one in lists) or (key == "kind" and parent in data["steps"]):
+                    named += 1
+                    self.assertTrue(any(re.search(r"is longer than \d+ characters \(5000\)$", e) for e in found), found[:3])
+        self.assertGreater(named, 60)
+        # a text the example holds as null, and each limit met exactly, which is allowed
+        said = fileformat.errors(helpers.mutated(data, lambda d: d["explanations"][0].update(not_checked="x" * 601)))
+        self.assertIn("explanation 1: `not_checked` is longer than 600 characters (601)", said)
+        exact = helpers.mutated(data, lambda d: d.update(title="x" * 120, made_by="x" * 60, notes=["x" * 600]))
+        exact["steps"][1].update(label="x" * 80, kind="x" * 40)
+        exact["items"][0]["name"] = "x" * 300
+        self.assertEqual(fileformat.errors(exact), [])
+
     def test_the_word_for_an_indicator_is_optional_and_checked(self):
         for word in ({"one": "impact category", "many": "impact categories"}, None):
             self.assertEqual(fileformat.errors(helpers.mutated(self.data, lambda d: d.update(indicator=word))), [])
         for wrong in ({"one": "category"}, {"one": "x", "many": "y", "few": "z"}, {"one": "", "many": "y"},
                       {"one": "x" * 31, "many": "y"}, "impact category", ["one", "many"]):  # fmt: skip
-            self.refuses(lambda d, w=wrong: d.update(indicator=w), "`indicator`")
+            self.refuses(lambda d, w=wrong: d.update(indicator=w), "`indicator")
+        self.refuses(lambda d: d.update(indicator={"one": "x" * 31, "many": "y"}), "`indicator.one` is longer than 30 characters (31)")
 
     def test_a_class_that_contradicts_the_rule(self):
         def change(d):
@@ -105,34 +140,10 @@ class Validator(unittest.TestCase):
     def test_values_of_any_type_are_faults_and_never_raise(self):
         """Every node of the example replaced by values of other types: the check returns
         faults that name a place, and never raises or stops without one (issue 4)."""
-        odd = ([], {}, [[]], {"a": 1}, "x", -1, 1.5, True, None, 10**400, [None])
         data = json.loads(json.dumps(self.data))
         data["items"] = data["items"][:5]  # five items hold every kind of node, and the explained ones
         data["items_count"].update(listed=5, not_listed=data["items_count"]["qualifying"] - 5)
-
-        def nodes(node, at=()):
-            if isinstance(node, dict):
-                for key, value in node.items():
-                    yield node, key
-                    yield from nodes(value)
-            elif isinstance(node, list):  # the first, second and last of a list stand for the rest
-                for key in sorted({0, 1, len(node) - 1} & set(range(len(node)))):
-                    yield node, key
-                    yield from nodes(node[key])
-
-        stopped = []
-        for parent, key in list(nodes(data)):
-            kept = parent[key]
-            for value in odd:
-                parent[key] = value
-                try:
-                    found = fileformat.errors(data)
-                except Exception as error:  # noqa: BLE001 - the test is that nothing raises
-                    self.fail(f"{key!r} = {value!r}: {type(error).__name__}: {error}")
-                self.assertIsInstance(found, list)
-                stopped += [(key, value) for e in found if e.startswith(fileformat.STOPPED)]
-            parent[key] = kept
-        self.assertEqual(stopped, [])
+        helpers.replaced_everywhere(self, data, fileformat.errors, stopped=fileformat.STOPPED)
         self.assertEqual(fileformat.errors(data), [])
 
     def test_a_claim_list_in_a_file_of_counts(self):
@@ -286,6 +297,47 @@ class Breakdowns(unittest.TestCase):
         self.assertEqual(entry["parts_not_listed"], 2)
         self.assertEqual(entry["rest"], [1.0, 1.0])
         self.assertEqual(entry["total"], [2.0, 4.0])
+
+    def test_values_of_any_type_are_faults_and_never_raise(self):
+        """Every node of a breakdown replaced by values of other types (issue 4): a part that
+        is not a part (`1`) is a fault, not a TypeError in the sums."""
+        good = breakdown.build("p", "s0", "s1", {A: ("kg", [("a", "kind", 0.2, 0.1), ("b", None, 0.3, 0.3), ("c", None, 0.01, 0.0)])}, top=2)
+        helpers.replaced_everywhere(self, good, breakdown.errors)
+        self.assertEqual(breakdown.errors(good), [])
+        for parts in ([1], [{"label": "a", "kind": None, "values": [1.0, 1.0]}, None]):
+            bad = helpers.mutated(good, lambda d, p=parts: d["indicators"][A].update(parts=p))
+            self.assertIn(f"indicator {A!r}: a part is not {{label, kind, values}}", breakdown.errors(bad))
+
+    def test_each_text_of_a_breakdown_is_a_fault_with_its_part_and_its_length(self):
+        """Issue 4: a part's label and kind, the item and states it names and an indicator's
+        unit, each taken at its limit and one past it, and of other kinds."""
+        good = breakdown.build("p", "s0", "s1", {A: ("kg", [("a", "kind", 0.2, 0.1), ("b", None, 0.3, 0.3)])})
+        at = lambda field, value, part=1: helpers.mutated(good, lambda d: d["indicators"][A]["parts"][part].update({field: value}))  # noqa: E731
+        self.assertEqual(breakdown.errors(at("label", "x" * breakdown.MAX_PART_LABEL)), [])
+        self.assertEqual(breakdown.MAX_PART_LABEL, 300)  # SPEC 9
+        self.assertEqual(breakdown.errors(at("kind", "k" * 40)), [])
+        where = f"indicator {A!r}, part 1"
+        for field, value, said in (
+            ("label", "x" * 301, "`label` is longer than 300 characters (301)"),
+            ("label", 5, "`label` is not a text"),
+            ("label", "", "`label` is empty"),
+            ("label", "a\nb", "`label` holds a control character, such as a line break or a tab"),
+            ("kind", 7, "`kind` is not a text"),
+            ("kind", "k" * 41, "`kind` is longer than 40 characters (41)"),
+        ):
+            with self.subTest(field=field, value=value):
+                self.assertEqual(breakdown.errors(at(field, value)), [f"{where}: {said}"])
+        unit = helpers.mutated(good, lambda d: d["indicators"][A].update(unit="u" * 41))
+        self.assertEqual(breakdown.errors(unit), [f"indicator {A!r}: `unit` is longer than 40 characters (41)"])
+        for value in (-1, 1.5, True, "0", None):
+            with self.subTest(parts_not_listed=value):
+                bad = helpers.mutated(good, lambda d, v=value: d["indicators"][A].update(parts_not_listed=v))
+                self.assertEqual(breakdown.errors(bad), [f"indicator {A!r}: `parts_not_listed` is not a count"])
+        for key, value in (("item", "p" * 101), ("from", ""), ("to", 3)):
+            with self.subTest(key):
+                found = breakdown.errors(helpers.mutated(good, lambda d, k=key, v=value: d.update({k: v})))
+                self.assertEqual(len(found), 1, found)
+                self.assertTrue(found[0].startswith(f"a breakdown names its item and the two states it compares: `{key}` "), found)
 
     def test_a_rest_without_parts_left_out(self):
         good = breakdown.build("p", "s0", "s1", {A: ("kg", [("a", None, 1.0, 2.0)])})
@@ -552,6 +604,111 @@ class FromTables(unittest.TestCase):
             with self.assertRaises(ValueError):
                 from_tables.build(path)
 
+    def test_a_value_of_any_type_in_a_description_is_a_sentence(self):
+        """Every node of the fixture's description replaced by values of other types (issue
+        11): the build stops with a ValueError, never another exception, and so the command
+        says `error:` and exits 1. Fields the fixture leaves out are added first, so that
+        they are walked too: a claim's `reach` (`true` was read as 1), a state's `about`, the
+        matrix, an explanation's link and doc."""
+        spec = json.loads((FIXTURES / "description.json").read_text(encoding="utf-8"))
+        spec["steps"][1].update(explained=True, about="a", link=None)
+        spec["steps"][1]["claim"]["reach"] = 1
+        spec["states"][1]["about"] = "a"
+        spec["explanations"][0].update(link="https://example.org/a", doc="a")
+        spec.update(listed=4, claim_lists=True, tier="items", floor_factor=0.01, indicator={"one": "a", "many": "b"})
+        local = {**spec, "audience": "local", "matrix": "matrix.json"}  # only a local file names a matrix
+        with tempfile.TemporaryDirectory() as folder:
+            for name in ("items.csv", "published.csv", "repro.csv", "again.csv", "fixed.csv"):
+                (Path(folder) / name).write_text((FIXTURES / name).read_text(encoding="utf-8"), encoding="utf-8")
+            path = Path(folder) / "d.json"
+
+            def built(d):
+                path.write_text(json.dumps(d), encoding="utf-8")
+                try:
+                    from_tables.build(path)
+                except ValueError as error:
+                    return [str(error)]
+                return []
+
+            for walked in (spec, local):
+                self.assertEqual(built(walked), [])
+                helpers.replaced_everywhere(self, walked, built)
+
+    def test_a_value_of_the_wrong_kind_is_not_read_as_another(self):
+        """What the build would have read as something else is refused, with its place: `"no"`
+        as explained, `[]` as no identity or as the default basis, an entry with a key no
+        entry takes as one that may move anything (issue 11)."""
+        def step(**more):
+            return {"steps": [{"id": "st", "label": "s", "kind": "fix", **more}]}
+
+        cases = {
+            "step 'st': `explained` is true or false": step(explained="no"),
+            "state 's1': `identity` is a table of texts, or null": {"states": [self.SMALL["states"][0], {**self.SMALL["states"][1], "identity": []}]},
+            "step 'st', `tolerance`: `basis` is a text or null": step(tolerance={"value": 0.01, "basis": []}),
+            "step 'st', scope entry 1: a key a description does not take there: a": step(claim={"text": "t", "scope": [{"a": 1}]}),
+            "step 'st', scope entry 1: `items` is \"*\", a list of ids or null": step(claim={"text": "t", "scope": [{"items": {}}]}),
+            "indicator 1: a key a description does not take there: colour": {"indicators": [{**self.SMALL["indicators"][0], "colour": "red"}]},
+            "step 'st', `tolerance`: `value` is a number": step(tolerance={"value": 10**400}),
+            "the description: `listed` is a whole number": {"listed": None},
+            "the description: `notes` is a list of texts": {"notes": None},
+        }  # fmt: skip
+        noise = "state 's1': a noise is {states: [a, b]} or {tables: [{label, results}, {label, results}]}, with a `note`"
+        for said_noise in ({"states": ["s0", "s1"], "note": 5}, {"states": ["s0", "s1"], "colour": "red"}):
+            cases[noise + " " + str(said_noise)] = {"states": [self.SMALL["states"][0], {**self.SMALL["states"][1], "noise": said_noise}]}
+        for said, changes in cases.items():
+            with self.subTest(said):
+                self.assertIn(said.split(" {'states'")[0], from_tables.description_errors(self.SMALL | changes))
+
+    def test_no_count_number_or_flag_takes_a_value_python_reads_as_one(self):
+        """In Python `True == 1`, `1` is true and `1.0 == 1`, so a count, a number or a flag
+        given a value of another kind would be read as one (the review of issue 11: `reach:
+        true` was built, and read as 1). Each place refuses each such value, with its place."""
+        def st(**more):
+            return {"steps": [{"id": "st", "label": "s", "kind": "fix", **more}]}
+
+        def claim(**more):
+            return st(claim={"text": "t", **more})
+
+        def joined(**more):
+            return {"states": [{**self.SMALL["states"][0], "join": {"compared": 2, **more}}, self.SMALL["states"][1]]}
+
+        places = {
+            (True, False, 1.0, "1"): [
+                ("the description: `listed`", lambda v: {"listed": v}),
+                ("step 'st', its claim: `reach`", lambda v: claim(reach=v)),
+                ("state 's0', `join`: `compared`", lambda v: joined(compared=v)),
+                ("state 's0', `join`: `unmatched`", lambda v: joined(unmatched=v)),
+                ("state 's0', `join`: `ambiguous`", lambda v: joined(ambiguous=v)),
+            ],
+            (True, False, "0.5"): [
+                ("the description: `floor_factor`", lambda v: {"floor_factor": v}),
+                ("step 'st', `tolerance`: `value`", lambda v: st(tolerance={"value": v})),
+                ("step 'st', scope entry 1: `largest`", lambda v: claim(scope=[{"largest": v}])),
+            ],
+            (1, 0, "true", None): [
+                ("the description: `claim_lists`", lambda v: {"claim_lists": v}),
+                ("step 'st': `explained`", lambda v: st(explained=v)),
+            ],
+        }
+        self.assertEqual(from_tables.description_errors(self.SMALL), [])
+        for values, said in places.items():
+            for place, changed in said:
+                for value in values:
+                    with self.subTest(place=place, value=value):
+                        found = from_tables.description_errors(self.SMALL | changed(value))
+                        self.assertTrue(any(e.startswith(place + " is ") for e in found), found)
+
+    def test_a_file_the_command_cannot_write_is_a_sentence(self):
+        """A place to write that cannot be written (its folder is a file) ends in `error:`
+        and exit 1, as a mistake in the description does."""
+        with tempfile.TemporaryDirectory() as folder:
+            blocked = Path(folder) / "a-file"
+            blocked.write_text("", encoding="utf-8")
+            with contextlib.redirect_stderr(io.StringIO()) as err:
+                code = cli.main(["build", str(FIXTURES / "description.json"), "--out", str(blocked / "d.json")])
+            self.assertEqual(code, 1)
+            self.assertTrue(err.getvalue().startswith("error: "), err.getvalue())
+
     def test_an_unknown_key_in_a_description(self):
         spec = json.loads((FIXTURES / "description.json").read_text(encoding="utf-8"))
         with tempfile.TemporaryDirectory() as folder:
@@ -705,6 +862,94 @@ class Summary(unittest.TestCase):
         unescaped = lambda line: len(re.findall(r"(?<!\\)\|", line))  # noqa: E731
         self.assertEqual(unescaped(row), unescaped(header))
 
+    def test_every_text_is_escaped_in_every_place_the_summary_writes_it(self):
+        """Each text of the file gets its own mark, `*tN*`; written without `md` at any one
+        place, the mark shows raw there (issue 17: removing `md` from 9 of its 14 places
+        failed no test)."""
+        data = example.build()
+        marks = iter(range(100))
+        mark = lambda: f"- *t{next(marks)}* @x"  # noqa: E731
+        data["title"], data["about"], data["notes"] = mark(), mark(), [mark(), mark()]
+        data["indicator"] = {"one": mark(), "many": mark()}
+        data["item"]["many"] = mark()
+        data["indicators"][0]["short"] = mark()
+        data["indicators"][1]["short"], data["indicators"][1]["name"] = None, mark()
+        for state in data["states"]:
+            state["label"] = mark()
+        data["states"][0]["join"]["note"] = mark()
+        noisy = next(s for s in data["states"] if (s.get("noise") or {}).get("between"))
+        noisy["noise"]["between"] = [mark(), mark()]
+        for step in data["steps"]:
+            step["label"], step["kind"] = mark(), f"*k{next(marks)}*"
+        self.assertEqual(fileformat.errors(data), [])
+        said = summary.text(data)
+        for n in range(next(marks)):
+            with self.subTest(n):
+                raw = next(f"*{p}{n}*" for p in "tk" if f"*{p}{n}*" in json.dumps(data))
+                self.assertNotIn(raw, said)
+                self.assertIn(summary.md(raw), said)
+        # each place: a state's label in the states, the join, both ends, the rule and the floors
+        published = summary.md(data["states"][0]["label"])
+        for place in ("States: " + published, "Read into " + published, f"The whole way: {published} → ",
+                      f"- {published}: exact", "median size in " + published):  # fmt: skip
+            self.assertIn(place, said)
+
+    def test_a_text_shows_as_written_and_makes_nothing_of_its_own(self):
+        """What GitHub makes of a text pasted into a pull request: a list, a rule, code, a
+        link, an emoji, an issue, a mention, maths. Each case below was rendered by GitHub's
+        Markdown API (`gh api markdown`, mode gfm) on 17 November 2026, at the start of a
+        line, after `- `, after `# ` and in a table cell: each showed as written and made
+        nothing, a commit's hash aside, which GitHub links to that commit."""
+        j, s = "⁠", " "
+        cases = {
+            "---": "\\---", "===": "\\===", "- a": "\\- a", "+ a": "\\+ a", "* a": "\\* a",
+            "1. a": "1\\. a", "12) a": "12\\) a", "2026 was": "2026 was", "    code": s * 4 + "code",
+            "https://a.org": f"https:{j}//a.org", "www.a.org": f"www{j}.a.org", "WWW.A.org": f"WWW{j}.A.org",
+            "mailto:a@b.org": f"mailto:{j}a@{j}b.org", ":warning:": f":{j}warning:{j}",
+            "#1": f"\\#{j}1", "GH-1": f"GH{j}-1", "o/r/issues/1": f"o/r/issues/{j}1", "@team": f"@{j}team",
+            "$x$": f"{j}\\$x{j}\\$", "a|b": "a\\|b", "&amp;": "\\&amp;", "<b>": "\\<b\\>",
+            "high-level": "high-level", "a857d60": "a857d60",
+            # nine digits still start a list, ten do not; two tildes strike through
+            "123456789. a": "123456789\\. a", "1234567890. a": "1234567890. a", "~~a~~": "\\~\\~a\\~\\~",
+        }  # fmt: skip
+        shown = lambda md: re.sub(r"\\(.)", r"\1", md.replace(j, "")).replace(s, " ")  # noqa: E731
+        for text, md in cases.items():
+            with self.subTest(text):
+                self.assertEqual(summary.md(text), md)
+                self.assertEqual(shown(summary.md(text)), text)
+
+    def test_the_summary_writes_a_number_as_the_page_does(self):
+        """The summary wrote a noise of 120 % as `1.2e+02 %`, 1e-5 % as `1e-05 %`, and a
+        tolerance of 1e-5 as `1e-05` where the page writes `0.00001` (review of 9a11c09).
+        Its writers are held to the page's own, run over the whole range of the floats."""
+        data = example.build()
+        data["rule"].update(total_tolerance=1e-5, floor_factor=1e-5)
+        said = summary.text(data)
+        self.assertIn("tolerance 0.00001 (default)", said)
+        self.assertIn("The whole way: tolerance 0.00001;", said)
+        self.assertIn("0.00001 of the median size", said)
+        self.assertNotRegex(said, r"\de[-+]\d")
+        # a checked file holds no number that is not finite: one is refused, never written "0"
+        for value in (math.inf, -math.inf, math.nan):
+            with self.assertRaises(ValueError):
+                summary._exact(value)
+            with self.assertRaises(ValueError):
+                summary._short(value, 4)
+        node = shutil.which("node")
+        if node is None:
+            self.skipTest("node is not installed")
+        values = [9999.5, 99999.5, 999.95, 0.0099995, 0.00099995, 5e-324, 1.7976931348623157e308, 1e21,
+                  1234.5, -1234.5, 0.1 + 0.2, -2.5e-9, 1e-6, 9.999999e-7, -0.00099996, 0.0]  # fmt: skip
+        values += [m * 10.0**e for e in range(-323, 308) for m in (1, 1.2345, 9.5, 9.9995, 9.99995)]
+        values = [v for v in values if math.isfinite(v)]
+        script = ("const p = require(process.argv[1]); const v = JSON.parse(require('fs').readFileSync(0, 'utf8'));"
+                  "process.stdout.write(JSON.stringify(v.map((x) => [p.exactText(x), p.formatNumber(x)])))")  # fmt: skip
+        run = subprocess.run([node, "-e", script, str(Path(page.__file__).parent / "page" / "diagnostics.js")],
+                             input=json.dumps(values), capture_output=True, text=True, check=True)  # fmt: skip
+        for value, (exact, short) in zip(values, json.loads(run.stdout)):
+            self.assertEqual(summary._exact(value), exact, value)
+            self.assertEqual(summary._short(value, 4), short, value)
+
 
 class Verdicts(unittest.TestCase):
     """How a pair is held against its claim (SPEC 6; issues 3, 12 and 16)."""
@@ -712,6 +957,15 @@ class Verdicts(unittest.TestCase):
     def verdict(self, kind, before, after, entries):
         way = rule.direction(before, after, kind)
         return claims.verdict(kind, before, after, way, entries)
+
+    def test_where_a_must_covers_a_pair_its_may_entries_are_not_held(self):
+        """SPEC 6: a pair that moved is held to the `must` entries that cover it, and only where
+        none does to the `may` entries (a mutation holding it to every entry went unnoticed)."""
+        must_down = claims.scope([A], {"p"}, "down", None, claims.MUST)
+        may_up = claims.scope([A], {"p"}, "up", None, claims.MAY)
+        self.assertEqual(self.verdict(rule.DIFFERS, 2.0, 1.0, [must_down, may_up]), claims.AS_CLAIMED)
+        self.assertEqual(self.verdict(rule.DIFFERS, 2.0, 1.0, [may_up, must_down]), claims.AS_CLAIMED)
+        self.assertEqual(self.verdict(rule.DIFFERS, 2.0, 1.0, [may_up]), claims.OFF_CLAIM)
 
     def test_a_must_that_did_not_move_beyond_the_noise_is_unmet(self):
         must = claims.scope([A], {"p"}, "down", None, claims.MUST)
@@ -886,6 +1140,68 @@ class Chain(unittest.TestCase):
                     entry["items"] = Unread(entry["items"])
         self.assertEqual(fileformat.errors(data), [])
 
+    def test_a_fault_of_a_listed_item_is_said_once(self):
+        """An item whose place, group or unit is wrong is still listed: the explanations about
+        the items are not also said to be about an item the file does not list (they were,
+        where the check of the items stopped). One about an item that is not listed still is."""
+        for field, value in (("place", "x" * 61), ("group", ["g"]), ("unit", 5)):
+            with self.subTest(field):
+                data = helpers.mutated(example.build(), lambda d, f=field, v=value: next(
+                    i for i in d["items"] if i["id"] == "p01").update({f: v}))
+                found = fileformat.errors(data)
+                self.assertEqual(len(found), 1, found)
+                self.assertTrue(found[0].startswith(f"item 'p01': `{field}` "), found)
+        stopped = helpers.mutated(example.build(), lambda d: (
+            next(i for i in d["items"] if i["id"] == "p01").update(unit=5),
+            next(e for e in d["explanations"] if e["about"]["item"] == "p05")["about"].update(item="p99")))
+        self.assertEqual(sorted(e.split(":")[-1] for e in fileformat.errors(stopped)),
+                         [" `unit` is not a text", " about an item the file does not list"])
+
+    def test_where_the_check_of_the_items_stops_it_still_knows_the_items_it_read(self):
+        """A place or group fault does not stop the check of the items: a unit fault on a later
+        item is said too. Where the check stops (an item that is not a table, a count of items
+        that cannot be read), no explanation about a listed item is said to be about an item
+        the file does not list, and a count that cannot be read is said once, not once per
+        block of counts (review of 9a11c09)."""
+        data = example.build()
+        first, last = data["items"][0]["id"], data["items"][-1]["id"]
+        explained = {e["about"]["item"] for e in data["explanations"] if e["about"].get("item")}
+        self.assertTrue(explained - {first, last})
+        for field, value in (("place", "x" * 61), ("group", ["g"])):
+            with self.subTest(field):
+                found = fileformat.errors(helpers.mutated(data, lambda d, f=field, v=value: (
+                    d["items"][0].update({f: v}), d["items"][-1].update(unit=5))))
+                self.assertEqual([e.split(":")[0] for e in found], [f"item {first!r}", f"item {last!r}"], found)
+        # each fault that stops the check, on an item no explanation is about: the explanations
+        # about the other listed items are not said to be about an item the file does not list
+        # (review of 2d0d545). In a file of counts no explanation is held to the listed items.
+        broken = next(k for k, i in enumerate(data["items"]) if 0 < k and i["id"] not in explained)
+        ind = data["indicators"][0]["id"]
+        item = lambda d: d["items"][broken]  # noqa: E731
+        stops = {
+            "`items` is not a list of the": lambda d: d["items"].pop(broken),
+            "an item is not {": lambda d: d["items"].__setitem__(broken, 5),
+            "an item's `id` ": lambda d: item(d).update(id=5),
+            "`unit` is not a text": lambda d: item(d).update(unit=5),
+            "results, classes, directions and bands are given": lambda d: item(d).update(values={}),
+            "verdicts are given for every indicator": lambda d: item(d).update(verdicts=None),
+            "the results are not one finite number": lambda d: item(d)["values"].update({ind: [1.0]}),
+            "classes, directions and bands are one per step": lambda d: item(d)["classes"].update({ind: []}),
+            "the file holds no floor for unit": lambda d: item(d).update(unit="zz"),
+            "verdicts are one per step": lambda d: item(d)["verdicts"].update({ind: []}),
+            "the rule gives": lambda d: item(d)["classes"][ind].__setitem__(1, "differs"),
+            "cannot be 'nonsense'": lambda d: item(d)["verdicts"][ind].__setitem__(1, "nonsense"),
+            "the claim gives 'unchanged'": lambda d: item(d)["verdicts"][ind].__setitem__(1, "claimed, not moved"),
+        }  # fmt: skip
+        for fault, change in stops.items():
+            with self.subTest(fault):
+                found = fileformat.errors(helpers.mutated(data, change))
+                self.assertTrue(any(fault in e for e in found), found)
+                self.assertFalse([e for e in found if "does not list" in e], found)
+        # a count of items that cannot be read
+        found = fileformat.errors(helpers.mutated(data, lambda d: d.update(items_count=5)))
+        self.assertEqual(found, ["`items_count` is not {all, qualifying, listed, not_listed} in counts"])
+
     def test_a_lone_surrogate_is_not_a_text(self):
         data = example.build()
         data["title"] = "half \ud800 a character"
@@ -893,10 +1209,30 @@ class Chain(unittest.TestCase):
 
     def test_no_approval_hides_in_a_state_identity(self):
         """SPEC 8: a file carries no status and no approval, and `identity` is no way round it."""
-        for key in ("status", "accepted_by", "Approved", "approval"):
+        refused = ("status", "accepted_by", "Approved", "approval",
+                   # issue 19: what the first rule let through
+                   "signed_off", "reviewed_by", "verified", "validated", "\uff53\uff54\uff41\uff54\uff55\uff53", "st\u200batus",
+                   "peerReviewed", "sign-off", "QA", "ok", "lgtm", "checked_by", "rejected", "audit",
+                   "certified", "confirmed", "endorsed_by", "okay", "pass", "passed", "passes", "ack", "acked", "signed",
+                   "agreed", "pending", "isOk", "qaDone", "peerPassed",
+                   # and what the review of the fix found still let through
+                   "authorized_by", "authorised", "vetted_by", "acknowledged_by", "attested", "cleared_by", "sanctioned",
+                   "signature", "verdict", "decision", "decided_by", "granted", "ratified", "vet", "vetting",
+                   "peerVetted", "unCleared",
+                   # and the review of 2d0d545: a sign-off across two words, and three more words
+                   "presigned_off", "cosigned", "countersigned", "okayed")  # fmt: skip
+        said = lambda key: fileformat.errors(  # noqa: E731
+            helpers.mutated(example.build(), lambda d: d["states"][1]["identity"].update({key: "yes"})))
+        for key in refused:
             with self.subTest(key):
-                data = helpers.mutated(example.build(), lambda d, key=key: d["states"][1]["identity"].update({key: "yes"}))
-                self.assertTrue(any("identity" in e for e in fileformat.errors(data)))
+                self.assertTrue(any("`identity`" in e for e in said(key)))
+        for key in ("solver", "database_version", "brightway-flows", "checksum", "token", "package", "run",
+                    "stratified", "authority", "signal", "nuclear_share", "decimals", "event",
+                    # a stem is not looked for across two words (review of 9a11c09)
+                    "stat_test", "format_test", "at_test", "design_at", "clear_edge", "grant_edge",
+                    "designation", "designator", "designate", "presigned_url"):  # fmt: skip
+            with self.subTest(key):
+                self.assertEqual(said(key), [])
 
     def test_a_key_written_twice_is_refused_when_read(self):
         with tempfile.TemporaryDirectory() as folder:

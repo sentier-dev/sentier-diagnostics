@@ -937,27 +937,25 @@ def _errors(f, found: list[str]) -> list[str]:
         and OF_KEYS <= set(of) <= OF_KEYS | OF_OPTIONAL
         and isinstance(of["file"], str)
         and fileformat.FILE_NAME.fullmatch(of["file"])
-        and fileformat.is_text(of["title"], 120)
-        and fileformat.is_text(of["base"], fileformat.MAX_ID)
     ):
         found.append(
             "`of` is not {file, title, base}, with `base_noise` where the base is a build: a file name, that "
             "file's title and a state's id"
         )
-    if not fileformat.is_text(f["title"], 120) or not fileformat.is_optional(f["about"]):
-        found.append("`title` is not a short text, or `about` not a text")
+    else:
+        found += fileformat.text_errors("", of, {"title": 120, "base": fileformat.MAX_ID}, (), "of.")
+    found += fileformat.text_errors("", f, {"title": 120, "about": fileformat.MAX_TEXT, "made_by": 60}, {"about"})
     for key in ("item", "indicator"):
         word = f.get(key)
-        if (word is not None or key == "item") and not (
-            isinstance(word, dict) and set(word) == {"one", "many"}
-            and all(fileformat.is_text(w, 30) for w in word.values())
-        ):  # fmt: skip
+        if (word is not None or key == "item") and not (isinstance(word, dict) and set(word) == {"one", "many"}):
             found.append(f"`{key}` is not {{one, many}}")
-    if not fileformat.is_text(f["made_by"], 60):
-        found.append("`made_by` is not a short text")
+        elif word is not None:
+            found += fileformat.text_errors("", word, {"one": 30, "many": 30}, (), key + ".")
     notes = f["notes"]
-    if not isinstance(notes, list) or len(notes) > fileformat.MAX_NOTES or not all(map(fileformat.is_text, notes)):
+    if not isinstance(notes, list) or len(notes) > fileformat.MAX_NOTES:
         found.append(f"`notes` is not a list of at most {fileformat.MAX_NOTES} texts")
+    else:
+        found += [f"note {k + 1} {fileformat.text_fault(n)}" for k, n in enumerate(notes) if fileformat.text_fault(n)]
     indicators = fileformat._indicators(f, found)
     floors = _rule(f, found, indicators)
     if not indicators or floors is None or not _items(f, found, indicators, floors):
@@ -1009,12 +1007,12 @@ def _rule(f, found, indicators) -> dict | None:
             isinstance(one, dict)
             and set(one) == fileformat.FLOOR_KEYS
             and one["indicator"] in indicators
-            and fileformat.is_optional(one["unit"], fileformat.MAX_WORD)
             and fileformat.is_share(one["value"])
             and one["basis"] in fileformat.FLOOR_BASES
             and fileformat.is_count(one["n"])
+            and (one["unit"] is None or not fileformat.text_fault(one["unit"], fileformat.MAX_WORD))
         ):
-            found.append("a floor is not {indicator, unit, value, basis, n} of a known indicator")
+            found.append(f"a floor is not {{indicator, unit, value, basis, n}} of a known indicator, its unit a text of at most {fileformat.MAX_WORD} characters or null")
             return None
         key = (one["indicator"], one["unit"])
         if key in table:
@@ -1145,8 +1143,7 @@ def _built_sets(f, found, base: _Base, builds: _Builds) -> list | None:
         if one["id"] in ids:
             found.append(f"two built sets have the id {one['id']!r}")
         ids.add(one["id"])
-        if not fileformat.is_text(one["label"], fileformat.MAX_LABEL):
-            found.append(f"{where}: `label` is not a short text")
+        found += fileformat.text_errors(where, one, {"label": fileformat.MAX_LABEL})
         if not fileformat.is_optional(one["state"], fileformat.MAX_ID):
             found.append(f"{where}: `state` is not the id of a state, or null")
         named = one["fixes"]
@@ -1193,12 +1190,12 @@ def _fixes(f, found, base: _Base, builds: _Builds) -> bool:
     of what it requires; and its counts and verdicts, worked out again."""
     for one in f["fixes"]:
         where = f"fix {one['id']!r}"
-        if not fileformat.is_text(one["label"], fileformat.MAX_LABEL) or not fileformat.is_optional(one["about"]):
-            found.append(f"{where}: `label` or `about` is not a text")
-        if not fileformat.is_text(one["kind"], fileformat.MAX_WORD) or not isinstance(one["explained"], bool):
-            found.append(f"{where}: a fix has a `kind` and says whether a cause explains it")
+        found += fileformat.text_errors(where, one, {"label": fileformat.MAX_LABEL, "about": fileformat.MAX_TEXT,
+                                                     "kind": fileformat.MAX_WORD}, {"about"})  # fmt: skip
+        if not isinstance(one["explained"], bool):
+            found.append(f"{where}: a fix says whether a cause explains it (`explained`: true or false)")
         if not fileformat.is_link(one["link"]):
-            found.append(f"{where}: `link` is not an https address")
+            found.append(f"{where}: `link` is not an https address of at most 500 characters")
         if one["claim"] is not None:
             shape = fileformat.claim_errors(one["claim"], where, base.ids, "items")
             if shape:
@@ -1217,9 +1214,12 @@ def _fixes(f, found, base: _Base, builds: _Builds) -> bool:
             and set(tol) == {"value", "basis", "note"}
             and fileformat.is_share(tol["value"])
             and tol["basis"] in fileformat.TOLERANCE_BASES
-            and fileformat.is_optional(tol["note"])
         ):
             found.append(f"{where}: `tolerance` is not {{value, basis, note}}")
+            return False
+        note = fileformat.text_errors(where, tol, {"note": fileformat.MAX_TEXT}, {"note"}, "tolerance.")
+        if note:
+            found += note
             return False
         noise = fileformat.noise_errors(one["noise"], where, base.ids)
         if noise:
@@ -1243,8 +1243,9 @@ def _fixes(f, found, base: _Base, builds: _Builds) -> bool:
             found.append(f"{where}: `counts` is not one block per indicator")
             return False
         shape = [e for ind in base.ids for e in fileformat._block(written[ind], f"{where}, counts of {ind!r}", one)]
-        shape += [f"{where}, counts of {ind!r}: `{key}` is null: a fix has no published results to come closer to"
-                  for ind in base.ids for key in ("closer", "further") if written[ind][key] is not None]  # fmt: skip
+        if not shape:  # each is a block of counts: its `closer` and `further` can be read
+            shape = [f"{where}, counts of {ind!r}: `{key}` is null: a fix has no published results to come closer to"
+                     for ind in base.ids for key in ("closer", "further") if written[ind][key] is not None]  # fmt: skip
         if shape:
             found += shape
             continue

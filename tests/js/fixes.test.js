@@ -323,6 +323,35 @@ test('the drawer splits an item into each fix\'s effect, and the set\'s value is
   assert.match(body, /Along the chain/);
 });
 
+// the drawer's numbers, and what a reader reads on hovering them, are written as the rest of the
+// page writes a number (SPEC 10.3): an exact value with "−" and "e", or "missing", never "null"
+test('every number of the drawer on every page and set is written in the page\'s style, hovered too', () => {
+  const exact = /^(the base: )?(missing|−?\d+(\.\d+)?(e−?\d+)?)$/;
+  let titles = 0;
+  for (const name of Object.keys(FIXTURE.pages)) {
+    // every item of the matrix: the fixes move items the chain does not list
+    const p = pageOf(name), items = p.matrix.items.map((r) => r[0]);
+    for (const names of setsOf(p)) {
+      for (const item of items) {
+        const d = drawn(name, 'set=' + names.join(',') + '&item=' + item);
+        const body = d.byId['item-body'];
+        // the tables of what the fixes did; those along the chain have sentences of their own
+        const fixTables = body.all().filter((n) => n.tagName === 'TABLE' && /^Measured against/.test(n.all().filter((h) => h.tagName === 'TH')[1].textContent));
+        for (const td of fixTables.flatMap((n) => n.all()).filter((n) => n.tagName === 'TD' && /\bnum\b/.test(n.className))) {
+          const title = td.getAttribute('title');
+          if (title === null) continue;
+          assert.ok(title === 'a side has no result' || exact.test(title), name + ', ' + names + ', ' + item + ': ' + title);
+          titles += 1;
+        }
+        for (const n of body.all().filter((x) => x.getAttribute('title') !== null)) {
+          assert.doesNotMatch(n.getAttribute('title'), /\bnull\b|\bundefined\b|NaN|e\+|\d-\d|(^|[^\w])-\d/, name + ', ' + names + ', ' + item);
+        }
+      }
+    }
+  }
+  assert.ok(titles >= 100, titles + ' titles');
+});
+
 test('a built set that is a state of the chain is offered as one choice', () => {
   const d = drawn('a built set that is a state', 'set=');
   const built = d.byId['fix-built'].all().filter((n) => n.getAttribute('data-built') !== null);
@@ -399,6 +428,8 @@ test('fixes.json over http is refused when larger than a page loads in bytes, no
   assert.match((await fetched(large)).said, /^The file of fixes was not loaded: fixes\.json is larger than 67\D108\D864 bytes/);
   assert.match((await fetched(Buffer.from('{"format": '))).said, /^The file of fixes was not loaded: fixes\.json is not JSON/);
   assert.match((await fetched(Buffer.from([0x7b, 0xff, 0x7d]))).said, /^The file of fixes was not loaded: fixes\.json is not UTF-8 text/);
+  // a key written twice is refused, as the Python refuses it, never read as the last of the two
+  assert.match((await fetched(Buffer.from('{"of": 1, "of": 2}'))).said, /^The file of fixes was not loaded: fixes\.json cannot be read: the key "of" is written twice in one object/);
   assert.match((await fetched(null, 404)).said, /^The file of fixes was not loaded: fixes\.json could not be read \(404\)/);
   // from the disk, a page reads no JSON beside it
   const p = pageOf('fixes that need others');
@@ -597,6 +628,9 @@ test('a value no sum can be formed for reads "no sum" wherever the page names it
   assert.equal(p2.getAttribute('data-class'), 'no sum');
   assert.match(p2.getAttribute('title'), /^no sum: .*it is not a missing result\. Before 2\.$/);
   assert.doesNotMatch(p2.getAttribute('title'), /missing after/);
+  // the value before is written as every hovered number is, and a base with no result as "none"
+  assert.match(page.cellView(-1.5e-7, null, 'no sum').title, /\. Before −1\.5e−7\.$/);
+  assert.match(page.cellView(null, null, 'no sum').title, /\. Before none\.$/);
   const th = d.byId['grid-table'].all().find((n) => n.tagName === 'TH' && n.getAttribute('data-indicator') === ind);
   assert.match(th.getAttribute('title'), /: 1 moved, 1 no sum here$/);
   const card = d.byId['dist-cards'].all().find((n) => n.getAttribute('data-indicator') === ind && n.tagName === 'DIV');

@@ -16,12 +16,18 @@ The fixture `fixtures/boundaries.json` is written by
 
 from __future__ import annotations
 
+import contextlib
+import copy
+import io
 import json
 import math
+import tempfile
 import unittest
 from pathlib import Path
 
-from sentier_diagnostics import rule
+from sentier_diagnostics import chain, claims, cli, example, fileformat, from_tables, matrix, rule, summary, together
+
+from . import helpers
 
 FIXTURE = Path(__file__).parent / "fixtures" / "boundaries.json"
 TOLERANCE = 1e-5
@@ -131,6 +137,132 @@ class Boundaries(unittest.TestCase):
                     "the noise, exactly", "the tolerance, exactly"):  # fmt: skip
             with self.subTest(why):
                 self.assertGreater(len(by_edge[why]), 1, why)
+
+
+class OtherEdges(unittest.TestCase):
+    """The other edges a reader meets, each taken on it and just past it (issue 15: one-line
+    mutations of `<=` to `<` or `>` to `>=` here went unnoticed): a claim's largest change,
+    the floor a noise is measured beyond, the mark of a large noise, closer and further, the
+    12 MB of a file and the 200 items a description lists unless it says otherwise."""
+
+    def test_a_change_of_exactly_a_claims_largest_is_within_it(self):
+        entry = claims.scope(["a"], "*", "up", 0.5, claims.MAY)
+        self.assertEqual(rule.change(1.0, 1.5), 0.5)
+        self.assertTrue(claims.fits(entry, 1.0, 1.5, "up"))
+        self.assertFalse(claims.fits(entry, 1.0, math.nextafter(1.5, 2.0), "up"))
+
+    def test_a_noise_is_measured_beyond_its_floor_not_on_it(self):
+        self.assertIsNone(chain.noise_of({"a": 0.01}, {"a": 0.02}, floor=0.01))
+        self.assertIsNotNone(chain.noise_of({"a": math.nextafter(0.01, 1.0)}, {"a": 0.02}, floor=0.01))
+
+    def test_a_noise_of_exactly_the_large_mark_is_not_called_large(self):
+        names = {"a": "A"}
+        said = lambda size: summary.noise_text({"measured": True, "between": ["x", "y"], "by": {"a": size}}, names)  # noqa: E731
+        self.assertEqual(chain.LARGE_NOISE, 0.01)  # SPEC 5.3: above 1 % a noise is large
+        self.assertNotIn("(large)", said(0.01))
+        self.assertIn("(large)", said(math.nextafter(0.01, 1.0)))
+        # and a large one never reads as 1 % itself (review of 9a11c09)
+        self.assertIn("A just over 1 % (large)", said(math.nextafter(0.01, 1.0)))
+        self.assertIn("A 1.04 % (large)", said(0.0104))
+        self.assertIn("A 120 % (large)", said(1.2))
+        self.assertIn("A 1e\u22125 %", said(1e-7))
+
+    def test_closer_and_further_may_add_up_to_what_moved_and_no_more(self):
+        data = example.build()
+        step = next(s for s in data["steps"] if s["id"] == "fix-1")
+        block = copy.deepcopy(data["counts"]["steps"]["fix-1"]["x:climate"])
+        moved = sum(block["classes"][k] for k in rule.MOVES)
+        self.assertGreater(moved, 0)
+        block.update(closer=moved, further=0)
+        self.assertEqual([e for e in fileformat._block(block, "b", step) if "closer" in e], [])
+        block.update(further=1)
+        self.assertIn("b: more came closer or went further than moved", fileformat._block(block, "b", step))
+
+    def test_a_result_as_far_from_the_published_one_as_it_began_came_neither_closer_nor_further(self):
+        # published 1.0; from 0.5, 1.5 ends exactly as far from it as it began, 0.9 comes
+        # closer, 0.1 goes further. Each place that counts them: the build, the file's check,
+        # the matrix's check and a run of steps (a tie counted as either changes the count).
+        a, b = helpers.A, helpers.B
+        results = [{"e": 1.0, "c": 1.0, "f": 1.0}, {"e": 0.5, "c": 0.5, "f": 0.5}] + [{"e": 1.5, "c": 0.9, "f": 0.1}] * 2
+        self.assertEqual(abs(0.5 - 1.0), abs(1.5 - 1.0))
+        data, full = chain.build_with_matrix(
+            "Equal distance",
+            indicators=helpers.INDICATORS,
+            states=[chain.state(f"s{n}", f"State {n}", kind="published" if n == 0 else "build") for n in range(4)],
+            steps=[chain.step(f"t{k}", f"Step t{k}", kind="fix") for k in range(3)],
+            values={f"s{n}": {a: dict(r), b: dict.fromkeys("ecf", 2.0)} for n, r in enumerate(results)},
+            units=dict.fromkeys("ecf", "kg"),
+        )
+        block = data["counts"]["steps"]["t1"][a]
+        self.assertEqual(block["classes"][rule.DIFFERS], 3)
+        self.assertEqual((block["closer"], block["further"]), (1, 1))
+        self.assertEqual(fileformat.errors(data), [])
+        self.assertEqual(matrix.against(full, data), [])
+        run = together.counts(data, full, 1, 2)["blocks"][a]
+        self.assertEqual((run["closer"], run["further"]), (1, 1))
+
+    def test_a_state_identity_of_12_entries_is_taken_and_one_more_refused(self):
+        # SPEC 4.4: "a state's identity has up to 12 entries", written as it says it
+        for size, refused in ((12, False), (13, True)):
+            data = example.build()
+            data["states"][1]["identity"] = {f"part{n}": "v" for n in range(size)}
+            found = [e for e in fileformat.errors(data) if "`identity`" in e]
+            self.assertEqual(found, ["state 'repro': `identity` is not a table of at most 12 entries"] if refused else [], size)
+
+    def test_a_step_that_does_not_say_whether_it_is_explained_is_explained(self):
+        # SPEC 3: a step is explained unless it says `explained: false`, in a description and
+        # in a chain built from code
+        data = chain.build(
+            "Explained",
+            indicators=helpers.INDICATORS,
+            states=[chain.state("s0", "State 0"), chain.state("s1", "State 1")],
+            steps=[{"id": "t0", "label": "Step t0", "kind": "fix"}],
+            values={f"s{n}": {helpers.A: {"e": 1.0 + n}, helpers.B: {"e": 2.0}} for n in range(2)},
+            units={"e": "kg"},
+        )
+        self.assertIs(data["steps"][0]["explained"], True)
+        spec = {"title": "t", "item": {"one": "i", "many": "is"},
+                "indicators": [{"id": "x:a", "name": "A", "short": "A", "unit": "m3"}], "items": "items.csv",
+                "states": [{"id": "s0", "label": "0", "results": "s0.csv"}, {"id": "s1", "label": "1", "results": "s1.csv"}],
+                "steps": [{"id": "st", "label": "step", "kind": "method"}]}  # fmt: skip
+        tables_ = {"items.csv": "item,unit\np,kg\n", "s0.csv": "item,x:a\np,1.0\n", "s1.csv": "item,x:a\np,2.0\n"}
+        with tempfile.TemporaryDirectory() as folder:
+            for name, text in tables_.items():
+                (Path(folder) / name).write_text(text, encoding="utf-8")
+            (Path(folder) / "d.json").write_text(json.dumps(spec), encoding="utf-8")
+            built = from_tables.build(Path(folder) / "d.json")
+        self.assertIs(built["steps"][0]["explained"], True)
+
+    def test_a_file_of_12_mb_is_checked_and_one_byte_more_refused(self):
+        # written as SPEC says it, not taken from the constant, so that a change of the
+        # constant is a change a test sees
+        limit = 12 * 1024 * 1024
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "d.json"
+            text = chain.dumps(example.build())
+            for size, code in ((limit, 0), (limit + 1, 1)):
+                path.write_text(text + " " * (size - len(text.encode())), encoding="utf-8")
+                self.assertEqual(path.stat().st_size, size)
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(cli.check([path]), code, size)
+
+    def test_a_description_lists_200_items_unless_it_says_otherwise(self):
+        many = 205
+        spec = {"title": "t", "item": {"one": "i", "many": "is"},
+                "indicators": [{"id": "x:a", "name": "A", "short": "A", "unit": "m3"}], "items": "items.csv",
+                "states": [{"id": "s0", "label": "0", "results": "s0.csv"}, {"id": "s1", "label": "1", "results": "s1.csv"}],
+                "steps": [{"id": "st", "label": "step", "kind": "method"}]}  # fmt: skip
+        tables_ = {"items.csv": ["item,unit"] + [f"p{k},kg" for k in range(many)],
+                   "s0.csv": ["item,x:a"] + [f"p{k},{1.0 + k}" for k in range(many)],
+                   "s1.csv": ["item,x:a"] + [f"p{k},{2.0 * (1.0 + k)}" for k in range(many)]}  # fmt: skip
+        with tempfile.TemporaryDirectory() as folder:
+            for name, lines in tables_.items():
+                (Path(folder) / name).write_text("\n".join(lines) + "\n", encoding="utf-8")
+            (Path(folder) / "d.json").write_text(json.dumps(spec), encoding="utf-8")
+            data = from_tables.build(Path(folder) / "d.json")
+        self.assertEqual(data["items_count"]["qualifying"], many)
+        self.assertEqual(data["items_count"]["listed"], 200)
+        self.assertEqual(len(data["items"]), 200)
 
 
 if __name__ == "__main__":

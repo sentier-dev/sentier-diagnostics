@@ -11,7 +11,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from sentier_diagnostics import breakdown, chain, claims, example, fileformat, rule, summary, tables
+from sentier_diagnostics import breakdown, chain, claims, example, fileformat, page, rule, summary, tables
 
 from . import helpers
 from .helpers import A, B
@@ -273,7 +273,13 @@ class Acceptance(unittest.TestCase):
         said = summary.text(data).lower()
         for word in ("better", "worse", "improve", "closer"):
             self.assertNotIn(word, said)
-        # what the page draws is read under node: "nothing drawn calls a move better or worse"
+        # the page as written, its own words: what its script draws is read under node,
+        # "nothing drawn calls a move better or worse"
+        with tempfile.TemporaryDirectory() as folder:
+            shown = helpers.shown_text(page.write(data, Path(folder)).read_text(encoding="utf-8")).lower()
+        self.assertIn("steps and the whole way", shown)  # the page's words were read
+        for word in ("better", "worse", "improve", "closer"):
+            self.assertNotIn(word, shown)
 
     def test_a23_indicators_are_matched_by_their_exact_id(self):
         """A23: a column `x:a:biogenic` is not the indicator `x:a`."""
