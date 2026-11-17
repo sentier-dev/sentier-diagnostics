@@ -924,6 +924,15 @@ class Verdicts(unittest.TestCase):
         way = rule.direction(before, after, kind)
         return claims.verdict(kind, before, after, way, entries)
 
+    def test_where_a_must_covers_a_pair_its_may_entries_are_not_held(self):
+        """SPEC 6: a pair that moved is held to the `must` entries that cover it, and only where
+        none does to the `may` entries (a mutation holding it to every entry went unnoticed)."""
+        must_down = claims.scope([A], {"p"}, "down", None, claims.MUST)
+        may_up = claims.scope([A], {"p"}, "up", None, claims.MAY)
+        self.assertEqual(self.verdict(rule.DIFFERS, 2.0, 1.0, [must_down, may_up]), claims.AS_CLAIMED)
+        self.assertEqual(self.verdict(rule.DIFFERS, 2.0, 1.0, [may_up, must_down]), claims.AS_CLAIMED)
+        self.assertEqual(self.verdict(rule.DIFFERS, 2.0, 1.0, [may_up]), claims.OFF_CLAIM)
+
     def test_a_must_that_did_not_move_beyond_the_noise_is_unmet(self):
         must = claims.scope([A], {"p"}, "down", None, claims.MUST)
         may = claims.scope([A], {"p"}, "down", None, claims.MAY)
