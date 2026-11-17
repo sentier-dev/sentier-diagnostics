@@ -922,9 +922,19 @@ class Summary(unittest.TestCase):
         """The summary wrote a noise of 120 % as `1.2e+02 %`, 1e-5 % as `1e-05 %`, and a
         tolerance of 1e-5 as `1e-05` where the page writes `0.00001` (review of 9a11c09).
         Its writers are held to the page's own, run over the whole range of the floats."""
-        said = summary.text(example.build())
+        data = example.build()
+        data["rule"].update(total_tolerance=1e-5, floor_factor=1e-5)
+        said = summary.text(data)
         self.assertIn("tolerance 0.00001 (default)", said)
+        self.assertIn("The whole way: tolerance 0.00001;", said)
+        self.assertIn("0.00001 of the median size", said)
         self.assertNotRegex(said, r"\de[-+]\d")
+        # a checked file holds no number that is not finite: one is refused, never written "0"
+        for value in (math.inf, -math.inf, math.nan):
+            with self.assertRaises(ValueError):
+                summary._exact(value)
+            with self.assertRaises(ValueError):
+                summary._short(value, 4)
         node = shutil.which("node")
         if node is None:
             self.skipTest("node is not installed")

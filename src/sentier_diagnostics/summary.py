@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Mapping
 from decimal import ROUND_HALF_UP, Decimal
@@ -35,6 +36,8 @@ def _exact(value: float) -> str:
     >>> [_exact(v) for v in (1e-05, 0.0005, 1e-07, 2.5, 10.0, 0.1, 123456.75, 1e21, -1.5e300, 0.0)]
     ['0.00001', '0.0005', '1e−7', '2.5', '10', '0.1', '123456.75', '1e21', '−1.5e300', '0']
     """
+    if not math.isfinite(value):
+        raise ValueError(f"{value!r} is not a finite number")  # a checked file holds none
     if value == 0:
         return "0"
     exact = Decimal(repr(abs(float(value)))).normalize()
@@ -60,6 +63,8 @@ def _rounded(value: float, digits: int) -> Decimal:
     >>> _rounded(1234.5, 4), _rounded(-1234.5, 4), _rounded(9.9995, 4), _rounded(0.0, 4)
     (Decimal('1235'), Decimal('-1235'), Decimal('9.999'), Decimal('0'))
     """
+    if not math.isfinite(value):
+        raise ValueError(f"{value!r} is not a finite number")  # a checked file holds none
     exact = Decimal(value)
     if not exact:
         return exact
