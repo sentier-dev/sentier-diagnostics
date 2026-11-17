@@ -77,6 +77,17 @@
 .sentier-diagnostics .sd-chip-flag { font-weight: 800; color: var(--sd-fail); }
 .sentier-diagnostics .sd-chip[aria-pressed="true"] .sd-chip-flag { color: inherit; }
 .sentier-diagnostics .sd-chip-mark { font-size: var(--sd-t-xs); }
+.sentier-diagnostics .sd-chip { user-select: none; -webkit-user-select: none; }
+/* a step taken into a run only because it lies between two chosen ones: pressed, and hatched */
+.sentier-diagnostics .sd-chip.sd-between[aria-pressed="true"] { border-style: dashed;
+  background: repeating-linear-gradient(135deg, var(--sd-accent) 0 6px, color-mix(in srgb, var(--sd-accent) 72%, var(--sd-surface)) 6px 12px); }
+.sentier-diagnostics .sd-pick { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sd-s2) var(--sd-s3); margin: 0; font-size: var(--sd-t-xs); }
+.sentier-diagnostics .sd-pick[hidden] { display: none; }
+.sentier-diagnostics .sd-switch { display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 600; cursor: pointer; }
+.sentier-diagnostics .sd-notice { padding: 0.2rem 0.5rem; border-left: 3px solid var(--sd-line-strong); background: var(--sd-surface); }
+.sentier-diagnostics .sd-claims { margin: 0.25rem 0; padding-left: 1.2rem; }
+.sentier-diagnostics .sd-claims > li + li { margin-top: 0.2rem; }
+.sentier-diagnostics .sd-drawer tr.sd-in-run > * { background: var(--sd-paper-deep); }
 
 /* the line of the chosen step: what it compares, its claim and what the claim found, its rule */
 .sentier-diagnostics .sd-step { margin: 0 0 var(--sd-s3); padding: var(--sd-s2) var(--sd-s4); border-left: 3px solid var(--sd-accent); border-radius: 0 var(--sd-radius) var(--sd-radius) 0; background: var(--sd-paper-deep); font-size: var(--sd-t-sm); }

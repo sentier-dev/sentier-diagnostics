@@ -815,3 +815,129 @@ test('a card says over how many ratios its median is, how many have none, and wh
     assert.match(card.childNodes[1].textContent, /^tallest bar: \d/);
   }
 });
+
+// ------------------------------------------------------------------ several steps: a run
+
+const pressed = (drawn) => chips(drawn).filter((c) => c.getAttribute('aria-pressed') === 'true').map((c) => c.getAttribute('data-comp'));
+const chipOf = (drawn, id) => chips(drawn).find((c) => c.getAttribute('data-comp') === id);
+
+test('Shift-click chooses the steps from one to another together: the range the file compares', () => {
+  const data = example();
+  const [a, b] = [data.steps[1], data.steps[2]];
+  const id = a.id + '..' + b.id;
+  assert.ok(data.ranges.some((r) => r.id === id));
+  const drawn = dom.page(data);
+  assert.equal(drawn.byId.pick.hidden, false);
+  chipOf(drawn, a.id).dispatch('click', {});
+  chipOf(drawn, b.id).dispatch('click', { shiftKey: true });
+  assert.deepEqual(pressed(drawn), [a.id, b.id]);
+  assert.equal(drawn.context.location.hash, 'step=' + encodeURIComponent(id));
+  const said = drawn.byId['step-said'].textContent;
+  assert.match(said, /^Steps 1 to 2 together\. /);
+  for (const s of [a, b]) assert.ok(said.includes('Step ' + data.steps.indexOf(s) + ': ' + s.label), s.id);
+  assert.match(said, /no verdict: a run is judged as the whole way is/);
+  // every card shows the file's counts of the range, never a sum of its steps
+  for (const card of cards(drawn)) {
+    const block = data.counts.ranges[id][card.getAttribute('data-indicator')];
+    const total = card.childNodes[2].childNodes.reduce((sum, bar) => sum + Number(/: ([\d\s]+) of [\d\s]+$/.exec(bar.getAttribute('title'))[1].replace(/\s/g, '')), 0);
+    assert.equal(total, block.pairs);
+  }
+  // a grid cell is the range's own class, after the last step against before the first
+  const at = data.steps.length + 1 + data.ranges.findIndex((r) => r.id === id);
+  const row = gridRows(drawn)[0];
+  const item = data.items.find((i) => i.id === row.getAttribute('data-item'));
+  const cls = row.childNodes.filter((n) => n.tagName === 'TD').slice(1).map((td) => td.getAttribute('data-class'));
+  const heads = drawn.byId['grid-table'].querySelectorAll('th[scope="col"]').slice(2)
+    .map((th) => data.indicators.find((i) => th.getAttribute('title').indexOf(i.name) === 0).id);
+  heads.forEach((ind, k) => assert.equal(cls[k], item.classes[ind][at], ind));
+});
+
+test('steps chosen apart take in the steps between them, and the page says so', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  chipOf(drawn, data.steps[0].id).dispatch('click', {});
+  chipOf(drawn, data.steps[2].id).dispatch('click', { metaKey: true });
+  assert.deepEqual(pressed(drawn), data.steps.slice(0, 3).map((s) => s.id));
+  assert.match(chipOf(drawn, data.steps[1].id).className, /sd-between/);
+  assert.doesNotMatch(chipOf(drawn, data.steps[2].id).className, /sd-between/);
+  assert.match(drawn.byId['step-said'].textContent, /Step 1 lies between the steps chosen and is taken in: each state is built on the one before it/);
+  // an end taken off shrinks the run; a step inside cannot be taken off, and nothing changes
+  chipOf(drawn, data.steps[1].id).dispatch('click', { metaKey: true });
+  assert.match(drawn.byId['step-said'].textContent, /^Step 1 lies inside the steps 0 to 2, which are compared as a whole/);
+  assert.deepEqual(pressed(drawn), data.steps.slice(0, 3).map((s) => s.id));
+  chipOf(drawn, data.steps[0].id).dispatch('click', { ctrlKey: true });
+  assert.deepEqual(pressed(drawn), data.steps.slice(1, 3).map((s) => s.id));
+  assert.equal(drawn.context.location.hash, 'step=' + encodeURIComponent(data.steps[1].id + '..' + data.steps[2].id));
+  // with "Several steps" on, a plain click does what ⌘-click does
+  drawn.byId['pick-several'].checked = true;
+  drawn.byId['pick-several'].dispatch('change', {});
+  chipOf(drawn, data.steps[3].id).dispatch('click', {});
+  assert.deepEqual(pressed(drawn), data.steps.slice(1, 4).map((s) => s.id));
+});
+
+test('every step chosen is the whole way, and a run the file does not compare is said and not shown', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  chipOf(drawn, data.steps[0].id).dispatch('click', {});
+  chipOf(drawn, data.steps[3].id).dispatch('click', { shiftKey: true });
+  assert.deepEqual(pressed(drawn), ['total']);
+  // a file that compares fewer runs
+  const fewer = example();
+  const gone = fewer.ranges.pop();
+  delete fewer.counts.ranges[gone.id];
+  const shown = dom.page(fewer);
+  chipOf(shown, gone.steps[0]).dispatch('click', {});
+  chipOf(shown, gone.steps[gone.steps.length - 1]).dispatch('click', { shiftKey: true });
+  assert.deepEqual(pressed(shown), [gone.steps[0]]);
+  assert.match(shown.byId['step-said'].textContent, /together are not compared in this file\. It compares 4 runs of steps, chosen by its writer/);
+});
+
+test('an address names a run of steps, and one the file does not compare falls back to the whole way, said', () => {
+  const data = example();
+  const range = data.ranges[2];
+  const drawn = dom.page(data);
+  drawn.open('step=' + encodeURIComponent(range.id) + '&item=' + encodeURIComponent(data.items[0].id));
+  assert.deepEqual(pressed(drawn), range.steps);
+  // the drawer holds the run's own row
+  assert.ok(drawn.byId['item-body'].textContent.includes('together'), 'a row of the run');
+  drawn.open('step=' + encodeURIComponent(data.steps[0].id + '..' + data.steps[3].id + 'x'));
+  assert.deepEqual(pressed(drawn), ['total']);
+  assert.match(drawn.byId['step-said'].textContent, /no step and no run of steps of this file\. The whole way is shown/);
+  const fewer = example();
+  const gone = fewer.ranges.pop();
+  delete fewer.counts.ranges[gone.id];
+  const shown = dom.page(fewer);
+  shown.open('step=' + encodeURIComponent(gone.id));
+  assert.match(shown.byId['step-said'].textContent, /^The address asks for steps \d to \d together, which this file does not compare/);
+});
+
+test('Shift and an arrow key grow the run, and a file without ranges offers no several steps', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  chipOf(drawn, data.steps[1].id).dispatch('click', {});
+  drawn.byId.comparison.dispatch('keydown', { key: 'ArrowRight', shiftKey: true });
+  assert.deepEqual(pressed(drawn), data.steps.slice(1, 3).map((s) => s.id));
+  drawn.byId.comparison.dispatch('keydown', { key: 'ArrowLeft', shiftKey: true });
+  assert.deepEqual(pressed(drawn), [data.steps[1].id]);
+  const none = example();
+  delete none.ranges;
+  delete none.counts.ranges;
+  const shown = dom.page(none);
+  assert.equal(shown.byId.pick.hidden, true);
+  chipOf(shown, none.steps[1].id).dispatch('click', {});
+  chipOf(shown, none.steps[2].id).dispatch('click', { shiftKey: true });
+  assert.match(shown.byId['step-said'].textContent, /This file compares no run of steps/);
+});
+
+test('a matrix result written "=" is the result before it, and a "=" that stands first is refused', () => {
+  assert.deepEqual(page.expandValues([1.5, '=', null, 2, '=', '='], 3), [1.5, 1.5, null, 2, 2, 2]);
+  assert.equal(page.expandValues(['=', 1], 2), null);
+  assert.equal(page.expandValues([1, null, '='], 3), null);
+  assert.equal(page.expandValues([1, 2, '=', 4], 2), null); // first of the second indicator
+  const m = full();
+  assert.ok(m.values.some((row) => row.includes('=')), 'the local example has repeated results');
+  const broken = full();
+  const at = broken.values.findIndex((row) => row.includes('='));
+  broken.values[at][0] = '=';
+  assert.match(page.checkMatrix(broken, local()), /"=" first in an indicator/);
+});

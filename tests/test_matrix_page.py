@@ -40,11 +40,18 @@ class Matrix(unittest.TestCase):
         self.assertEqual(json.loads(matrix.dumps(full)), full)
 
     def test_every_changed_code_is_found(self):
+        def written_out(m, at):
+            """A result written as a number after the first state: changing it changes a step.
+            (Changing the first, where the states after it are `=`, changes every state alike.)"""
+            nstates = len(m["of"]["states"])
+            n = next(n for n, v in enumerate(m["values"][at]) if n % nstates and isinstance(v, float) and v)
+            return n, m["values"][at][n] * 3
+
         data, full = local()
         cases = {
             "a class code": lambda m: m["classes"].__setitem__(0, ("=" if m["classes"][0][0] != "=" else "D") + m["classes"][0][1:]),
             "a direction": lambda m: m["classes"].__setitem__(0, m["classes"][0].swapcase()),
-            "a result": lambda m: m["values"][7].__setitem__(0, (m["values"][7][0] or 1.0) * 3),
+            "a result": lambda m: m["values"][7].__setitem__(*written_out(m, 7)),
             "a verdict": lambda m: m["verdicts"].__setitem__(
                 6, "".join("o" if c == "a" else "a" if c == "o" else c for c in m["verdicts"][6])),
             "a name of a listed item": lambda m: m["items"][0].__setitem__(1, "Another name"),

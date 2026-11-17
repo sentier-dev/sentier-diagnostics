@@ -20,6 +20,7 @@ from .helpers import A, B
 
 HERE = Path(__file__).parent
 FIXTURES = HERE / "fixtures" / "tables"
+TOTAL_AT = None
 MODULES = ["rule", "claims", "chain", "fileformat", "breakdown", "tables", "summary", "page", "from_tables", "matrix"]
 
 
@@ -34,6 +35,8 @@ class Validator(unittest.TestCase):
 
     def setUp(self):
         self.data = example.build()
+        global TOTAL_AT
+        TOTAL_AT = len(self.data["steps"])  # an item lists each step, then the total, then each range
 
     def refuses(self, change, says=None):
         found = fileformat.errors(helpers.mutated(self.data, change))
@@ -53,8 +56,8 @@ class Validator(unittest.TestCase):
 
     def test_a_class_that_contradicts_the_rule(self):
         def change(d):
-            item = next(i for i in d["items"] if i["classes"]["x:climate"][-1] == rule.DIFFERS)
-            item["classes"]["x:climate"][-1] = rule.AGREES
+            item = next(i for i in d["items"] if i["classes"]["x:climate"][TOTAL_AT] == rule.DIFFERS)
+            item["classes"]["x:climate"][TOTAL_AT] = rule.AGREES
         self.refuses(change)
 
     def test_a_verdict_that_contradicts_the_claim(self):
@@ -66,8 +69,8 @@ class Validator(unittest.TestCase):
 
     def test_a_direction_that_contradicts_the_values(self):
         def change(d):
-            item = next(i for i in d["items"] if i["directions"]["x:climate"][-1] == "down")
-            item["directions"]["x:climate"][-1] = "up"
+            item = next(i for i in d["items"] if i["directions"]["x:climate"][TOTAL_AT] == "down")
+            item["directions"]["x:climate"][TOTAL_AT] = "up"
         self.refuses(change)
 
     def test_items_out_of_order(self):

@@ -6,7 +6,9 @@ default), so that it stays small enough for a page to hold. A project looking at
 build wants every item: the matrix is that, in a second file the page loads after it has
 drawn. It is compact (one row per item, the indicators and states named once) and it holds
 only what the rule gives: the results, and one code per pair for its class and direction,
-and per step with a claim one code for its verdict.
+and per step with a claim one code for its verdict. A result equal to the one of the state
+before it, in the same indicator, is written `"="`: most steps of a chain of fixes leave most
+results as they were, and a chain of 16 states would otherwise hold every number 16 times.
 
 Only a local file may name a matrix (`"matrix": {"file": ..., "items": n}`); a public file
 keeps the listed items only. `errors(m)` checks the shape; `against(m, data)` works every
@@ -26,14 +28,18 @@ from . import claims, fileformat, rule
 FORMAT = "sentier-diagnostics-matrix/1"
 FAMILY = "sentier-diagnostics-matrix/"
 KEYS = {"format", "of", "items", "values", "classes", "verdicts"}
-OF_KEYS = {"title", "states", "indicators", "steps"}
+OF_KEYS = {"title", "states", "indicators", "steps", "ranges"}
+
+#: A result written as the same number as the state before it, in the same indicator.
+SAME = "="
 
 #: A matrix is loaded after the page is drawn, not held inside it: it may be larger.
 MAX_BYTES = 64 * 1024 * 1024
 MAX_ITEMS = 200_000
 
 #: One character per pair: its class, and for a pair that moved its direction (upper case
-#: up, lower case down).
+#: up, lower case down). An item has one per indicator and comparison: each step, the whole
+#: way, and each range of the file, in that order.
 CODES = {
     (rule.AGREES, None): "=",
     (rule.WITHIN_NOISE, None): "~",
@@ -75,6 +81,37 @@ def code_of(kind: str, way: str | None) -> str:
     return CODES[(kind, way)]
 
 
+def _same(a, b) -> bool:
+    """Two results that are the same number, bit for bit (0.0 and -0.0 are not)."""
+    return a is not None and b is not None and float(a).hex() == float(b).hex()
+
+
+def compact(values: list) -> list:
+    """One indicator's results over the states, each equal to the one before it as `SAME`.
+
+    >>> compact([1.5, 1.5, None, None, 2.0, 2.0, -0.0, 0.0])
+    [1.5, '=', None, None, 2.0, '=', -0.0, 0.0]
+    """
+    return [SAME if n and _same(v, values[n - 1]) else v for n, v in enumerate(values)]
+
+
+def expand(values: list, nstates: int) -> list:
+    """The results of one item, every `SAME` written out again; raises ValueError where one
+    stands first in its indicator or after a missing result.
+
+    >>> expand([1.5, "=", None, 2.0], 2)
+    [1.5, 1.5, None, 2.0]
+    """
+    out = []
+    for n, v in enumerate(values):
+        if v == SAME:
+            if n % nstates == 0 or out[-1] is None:
+                raise ValueError("`=` stands first in an indicator, or after a missing result")
+            v = out[-1]
+        out.append(v)
+    return out
+
+
 def make(data: Mapping, rows: list[dict]) -> dict:
     """A matrix of a diagnostics file from its rows, as `chain.build_with_matrix` gives them:
     `{id, name, place, group, unit, values: {indicator: [per state]}, classes, directions,
@@ -88,6 +125,7 @@ def make(data: Mapping, rows: list[dict]) -> dict:
             "states": [s["id"] for s in data["states"]],
             "indicators": ids,
             "steps": [s["id"] for s in steps],
+            "ranges": [r["id"] for r in data.get("ranges") or []],
         },
         "items": [],
         "values": [],
@@ -96,7 +134,7 @@ def make(data: Mapping, rows: list[dict]) -> dict:
     }
     for row in rows:
         out["items"].append([row["id"], row["name"], row["place"], row["group"], row["unit"]])
-        out["values"].append([v for i in ids for v in row["values"][i]])
+        out["values"].append([v for i in ids for v in compact(row["values"][i])])
         out["classes"].append(
             "".join(
                 code_of(kind, way) for i in ids for kind, way in zip(row["classes"][i], row["directions"][i])
@@ -195,11 +233,12 @@ def _errors(m) -> list[str]:
         isinstance(of, dict)
         and set(of) == OF_KEYS
         and fileformat.is_text(of["title"], 120)
-        and all(isinstance(of[k], list) and all(fileformat.is_text(x, fileformat.MAX_ID) for x in of[k])
-                for k in ("states", "indicators", "steps"))
+        and all(isinstance(of[k], list) and all(fileformat.is_text(x, 2 * fileformat.MAX_ID + 2) for x in of[k])
+                for k in ("states", "indicators", "steps", "ranges"))
     ):  # fmt: skip
-        return ["`of` is not {title, states, indicators, steps}"]
+        return ["`of` is not {title, states, indicators, steps, ranges}"]
     nstates, nind, nsteps = len(of["states"]), len(of["indicators"]), len(of["steps"])
+    ncodes = nsteps + 1 + len(of["ranges"])
     if nsteps != nstates - 1 or not nind:
         return ["`of`: one step fewer than states, and at least one indicator"]
     items = m["items"]
@@ -223,13 +262,15 @@ def _errors(m) -> list[str]:
         seen.add(row[0])
         values = m["values"][at]
         if not (isinstance(values, list) and len(values) == nind * nstates
-                and all(v is None or rule.is_value(v) for v in values)):  # fmt: skip
-            return [f"item {row[0]!r}: not one finite number or null per indicator and state"]
+                and all(v is None or v == SAME or rule.is_value(v) for v in values)):  # fmt: skip
+            return [f"item {row[0]!r}: not one finite number, `=` or null per indicator and state"]
+        try:
+            expand(values, nstates)
+        except ValueError as error:
+            return [f"item {row[0]!r}: {error}"]
         codes = m["classes"][at]
-        if not (
-            isinstance(codes, str) and len(codes) == nind * (nsteps + 1) and all(c in DECODE for c in codes)
-        ):
-            return [f"item {row[0]!r}: not one class code per indicator, step and the whole way"]
+        if not (isinstance(codes, str) and len(codes) == nind * ncodes and all(c in DECODE for c in codes)):
+            return [f"item {row[0]!r}: not one class code per indicator, step, the whole way and range"]
         if has_claims:
             said = m["verdicts"][at]
             if not (isinstance(said, str) and len(said) == nind * nsteps
@@ -257,21 +298,26 @@ def _against(m: Mapping, data: Mapping) -> list[str]:
     ids = [i["id"] for i in data["indicators"]]
     order = [s["id"] for s in data["states"]]
     steps = data["steps"]
-    of = {"title": data["title"], "states": order, "indicators": ids, "steps": [s["id"] for s in steps]}
+    ranges = data.get("ranges") or []
+    of = {"title": data["title"], "states": order, "indicators": ids, "steps": [s["id"] for s in steps],
+          "ranges": [r["id"] for r in ranges]}  # fmt: skip
     if m["of"] != of:
-        return ["it is the matrix of another file: its title, states, indicators or steps differ"]
+        return ["it is the matrix of another file: its title, states, indicators, steps or ranges differ"]
     n = len(m["items"])
     if named["items"] != n:
         found.append(f"the diagnostics file says {named['items']} items, the matrix holds {n}")
     if data["items_count"]["all"] != n:
         found.append(f"the diagnostics file counts {data['items_count']['all']} items, the matrix holds {n}")
     nstates, nsteps = len(order), len(steps)
+    ncodes = nsteps + 1 + len(ranges)
+    first_of = {s["id"]: k for k, s in enumerate(steps)}
+    ends = [(first_of[r["steps"][0]], first_of[r["steps"][0]] + len(r["steps"])) for r in ranges]
     floors = {(f["indicator"], f["unit"]): f["value"] for f in data["rule"]["floors"]}
     published_first = data["states"][0]["kind"] == "published"
     listed = {item["id"]: item for item in data["items"]}
 
     # what the counts and attribution must be, counted from every item
-    def empty(k):
+    def empty(k):  # k: the step, or None for the total and a range
         return {
             "pairs": 0,
             "classes": dict.fromkeys(rule.CLASSES, 0),
@@ -283,7 +329,7 @@ def _against(m: Mapping, data: Mapping) -> list[str]:
             "further": 0 if published_first and k not in (None, 0) else None,
         }
 
-    counted = {(k, i): empty(k) for k in [*range(nsteps), None] for i in ids}
+    counted = {(at, i): empty(at if at < nsteps else None) for at in range(ncodes) for i in ids}
     attributed = {
         i: {
             "dominant": {s["id"]: 0 for s in steps},
@@ -296,7 +342,7 @@ def _against(m: Mapping, data: Mapping) -> list[str]:
     qualifying = 0
     for at, (item_id, name, place, group, unit) in enumerate(m["items"]):
         where = f"item {item_id!r}"
-        flat, codes = m["values"][at], m["classes"][at]
+        flat, codes = expand(m["values"][at], nstates), m["classes"][at]
         said_verdicts = m["verdicts"][at] if m["verdicts"] is not None else None
         worth = False
         values_of = {}
@@ -307,24 +353,29 @@ def _against(m: Mapping, data: Mapping) -> list[str]:
             if floor is None:
                 return [f"{where}, {indicator}: the file holds no floor for unit {unit!r}"]
             kinds = []
-            for k in [*range(nsteps), None]:
-                at_k = nsteps if k is None else k
-                before, after = (values[0], values[-1]) if k is None else (values[k], values[k + 1])
-                if k is None:
+            for at_k in range(ncodes):
+                k = at_k if at_k < nsteps else None
+                if at_k > nsteps:
+                    one_range = ranges[at_k - nsteps - 1]
+                    before, after = values[ends[at_k - nsteps - 1][0]], values[ends[at_k - nsteps - 1][1]]
+                    tol, level = one_range["tolerance"], None
+                elif k is None:
+                    before, after = values[0], values[-1]
                     tol, level = data["rule"]["total_tolerance"], None
                 else:
+                    before, after = values[k], values[k + 1]
                     tol = steps[k]["tolerance"]["value"]
                     noise = steps[k]["noise"]
                     level = (noise["by"] or {}).get(indicator) if noise["measured"] else None
                 kind, way, band = rule.judge(before, after, floor=floor, tolerance=tol, noise=level)
-                code = codes[x * (nsteps + 1) + at_k]
+                code = codes[x * ncodes + at_k]
                 if code != code_of(kind, way):
-                    step_name = "the whole way" if k is None else steps[k]["id"]
+                    step_name = steps[k]["id"] if k is not None else "the whole way" if at_k == nsteps else ranges[at_k - nsteps - 1]["id"]
                     return [
                         f"{where}, {indicator}, {step_name}: written as {DECODE[code]}, the rule gives {kind}/{way}"
                     ]
                 kinds.append(kind)
-                block = counted[(k, indicator)]
+                block = counted[(at_k, indicator)]
                 block["pairs"] += 1
                 block["classes"][kind] += 1
                 if kind == rule.MISSING:
@@ -397,13 +448,16 @@ def _against(m: Mapping, data: Mapping) -> list[str]:
             f"the diagnostics file counts {data['items_count']['qualifying']} items worth a look, "
             f"the matrix holds {qualifying}"
         )
-    for (k, indicator), block in counted.items():
-        name = fileformat.TOTAL if k is None else steps[k]["id"]
-        written = (
-            data["counts"][fileformat.TOTAL][indicator]
-            if k is None
-            else data["counts"]["steps"][name][indicator]
-        )
+    for (at, indicator), block in counted.items():
+        if at < nsteps:
+            name = steps[at]["id"]
+            written = data["counts"]["steps"][name][indicator]
+        elif at == nsteps:
+            name = fileformat.TOTAL
+            written = data["counts"][fileformat.TOTAL][indicator]
+        else:
+            name = ranges[at - nsteps - 1]["id"]
+            written = data["counts"]["ranges"][name][indicator]
         for key in block:
             if block[key] != written[key]:
                 found.append(f"counts of {name!r} in {indicator!r}: `{key}` is not what the matrix holds")
