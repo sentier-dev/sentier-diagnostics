@@ -24,10 +24,15 @@
   var QUIET = ['agrees', 'within noise', 'near zero'];
   // the grid's filter for every class that moved at once: no class is called this
   var MOVED_ONLY = 'moved';
-  // the order of the classes from the worst: the same as the Python rule (rule.RANK)
+  // A value of a set of fixes that no sum can be formed for (a fix of the set has no result
+  // there, another has one): the page's own class, never "missing" (SPEC 16.8). The file's
+  // counts hold it under missing; the page takes it out of them and counts it as this.
+  var NO_SUM = 'no sum';
+  // the order of the classes from the worst: the same as the Python rule (rule.RANK); no sum
+  // ranks with missing, which the rule counts it as
   var RANK = {
     'sign change': 0, 'zero reference': 1, 'zero result': 2, 'beyond 10x': 3, 'differs': 4,
-    'missing': 5, 'within noise': 6, 'agrees': 7, 'near zero': 8
+    'missing': 5, 'no sum': 5, 'within noise': 6, 'agrees': 7, 'near zero': 8
   };
   var STRENGTH = { '1-1.1': 0.25, '1.1-1.25': 0.45, '1.25-2': 0.65, '2-10': 0.85, 'over 10': 1 };
   // the ends of the bands, as rule.SIZE_STEPS: the distance (|log10| of the factor) at which each ends
@@ -43,7 +48,8 @@
     'zero result': 'the result after is zero or within the floor; the result before is not',
     'sign change': 'the two results have different signs',
     'near zero': 'both results are within their floor: their ratio says nothing',
-    'missing': 'a side has no result; it is not read as zero'
+    'missing': 'a side has no result; it is not read as zero',
+    'no sum': 'a fix of this set has no result here and another has one, so no sum can be formed; it is not a missing result'
   };
   var SHORT = {
     'agrees': '=', 'within noise': '~', 'near zero': '≈ 0', 'missing': '∅',
@@ -334,7 +340,7 @@
   // A value without a ratio (a zero or a sign change) and a missing one always pass.
   function sizeAtLeast(cls, band, threshold) {
     if (!threshold) return true;
-    if (['zero reference', 'zero result', 'sign change', 'missing', 'beyond 10x'].indexOf(cls) >= 0) return true;
+    if (['zero reference', 'zero result', 'sign change', 'missing', NO_SUM, 'beyond 10x'].indexOf(cls) >= 0) return true;
     if (cls !== 'differs') return false;
     var step = bandStep(band);
     return step !== null && parseFloat(step) >= threshold;
@@ -350,6 +356,10 @@
       case 'missing':
         view.text = before === null && after === null ? 'missing' : before === null ? 'missing before' : 'missing after';
         view.tone = 'missing';
+        break;
+      case NO_SUM:
+        view.text = 'no sum'; view.tone = 'missing';
+        view.title = NO_SUM + ': ' + SAID[NO_SUM] + '. Before ' + (before === null ? 'none' : String(before)) + '.';
         break;
       case 'near zero':
         view.text = '≈ 0'; view.tone = 'near'; break;
@@ -1035,42 +1045,195 @@
     return out;
   }
 
-  // what a page needs of a file of fixes before it draws a set: its format and the shape of
-  // what it reads, and that it hangs on the diagnostics file shown (its title, its items in
-  // the order of the matrix, its indicators); null where it does, else why not
+  // the values of JSON in one text whatever the order of their keys, for comparing two of them
+  function canonical(x) {
+    if (Array.isArray(x)) return '[' + x.map(canonical).join(',') + ']';
+    if (x !== null && typeof x === 'object') return '{' + Object.keys(x).sort().map(function (k) { return JSON.stringify(k) + ':' + canonical(x[k]); }).join(',') + '}';
+    return JSON.stringify(x === undefined ? null : x);
+  }
+  function sameJSON(a, b) { return canonical(a) === canonical(b); }
+  function isObject(x) { return !!x && typeof x === 'object' && !Array.isArray(x); }
+  function isNumber(x) { return typeof x === 'number' && isFinite(x); }
+  // a sparse column as the file writes it: [[item index, result or null], ...]
+  function isSparse(x, n) {
+    return Array.isArray(x) && x.every(function (e) {
+      return Array.isArray(e) && e.length === 2 && Number.isInteger(e[0]) && e[0] >= 0 && e[0] < n && (e[1] === null || isNumber(e[1]));
+    });
+  }
+  function isNoise(x) { return isObject(x) && typeof x.measured === 'boolean' && (!x.measured || isObject(x.by)); }
+  var COUNT_PARTS = ['pairs', 'classes', 'missing', 'directions', 'bands'];
+  var NO_STATE_NOISE = 'the file shown says no noise of its states, so the noise of the base cannot be read from it';
+
+  // What a page needs of a file of fixes before it draws a set: its format, the shape of all it
+  // reads, and that it hangs on the diagnostics file shown (its title, a base that is a state
+  // of it with that state's noise, its indicators and words). Null where it does, else why not.
+  // It never throws, whatever JSON it is given: a host's global is checked as a file is.
+  // The items, the base results and the floors are held to the file in fixesAgainst.
   function checkFixes(fx, d) {
-    if (!fx || typeof fx !== 'object' || Array.isArray(fx)) return 'it is not a JSON object';
+    if (!isObject(fx)) return 'it is not a JSON object';
     if (fx.format !== FIXES_FORMAT) return 'its format is ' + JSON.stringify(fx.format) + ', and this page reads ' + FIXES_FORMAT;
     var keys = ['of', 'title', 'items', 'indicators', 'rule', 'base', 'fixes', 'interactions', 'built'];
     for (var i = 0; i < keys.length; i++) if (!own(fx, keys[i])) return 'it has no ' + keys[i];
-    if (!fx.of || fx.of.title !== d.title) return 'it belongs to "' + (fx.of ? fx.of.title : '') + '", and this page shows "' + d.title + '"';
-    if (!d.states.some(function (s) { return s.id === fx.of.base; })) return 'its base, state ' + JSON.stringify(fx.of.base) + ', is no state of the file shown';
-    var ids = d.indicators.map(function (x) { return x.id; });
-    if (!sameList(fx.indicators.map(function (x) { return x.id; }), ids)) return 'its ' + 'indicators are not those of the file shown';
-    var n = fx.items.length;
-    for (var x = 0; x < ids.length; x++) if (!Array.isArray(fx.base[ids[x]]) || fx.base[ids[x]].length !== n) return 'its base does not hold a result for every item in ' + ids[x];
+    if (!isObject(fx.of) || fx.of.title !== d.title) return 'it belongs to "' + (isObject(fx.of) ? fx.of.title : '') + '", and this page shows "' + d.title + '"';
+    var at = -1;
+    d.states.forEach(function (s, k) { if (s.id === fx.of.base) at = k; });
+    if (at < 0) return 'its base, state ' + JSON.stringify(fx.of.base) + ', is no state of the file shown';
+    if (!statesCarryNoise(d)) return NO_STATE_NOISE;
+    var state = d.states[at];
+    if (state.kind === 'published') {
+      if (own(fx.of, 'base_noise')) return 'its base is the published results, which are exact, and it gives them a noise (of.base_noise)';
+    } else if (!own(fx.of, 'base_noise')) {
+      return 'its base is a build, and it says no noise of it (of.base_noise)';
+    } else if (!sameJSON(fx.of.base_noise, state.noise)) {
+      return 'its noise of the base (of.base_noise) is not the noise the file shown gives state ' + JSON.stringify(fx.of.base);
+    }
+    if (!Array.isArray(fx.indicators) || !sameJSON(fx.indicators, d.indicators)) return 'its ' + 'indicators are not those of the file shown';
+    if (!sameJSON(fx.item, d.item) || !sameJSON(fx.indicator, d.indicator)) return 'its words for an item or an indicator are not those of the file shown';
+    if (!Array.isArray(fx.items) || !fx.items.every(function (r) { return Array.isArray(r) && r.length === 5 && typeof r[0] === 'string'; })) return 'its items are not what the format says';
+    if (!isObject(fx.rule) || !Array.isArray(fx.rule.floors)) return 'its rule is not what the format says';
+    var ids = d.indicators.map(function (x) { return x.id; }), n = fx.items.length;
+    if (!isObject(fx.base)) return 'its base is not what the format says';
+    for (var x = 0; x < ids.length; x++) {
+      var column = fx.base[ids[x]];
+      if (!Array.isArray(column) || column.length !== n || !column.every(function (v) { return v === null || isNumber(v); })) return 'its base does not hold a result for every item in ' + ids[x];
+    }
+    if (!Array.isArray(fx.fixes)) return 'its fixes are not a list';
+    var seen = bag();
     for (var k = 0; k < fx.fixes.length; k++) {
       var one = fx.fixes[k];
-      if (!one || typeof one.id !== 'string' || !Array.isArray(one.requires) || !one.effect || !one.counts || !one.tolerance || !one.noise) return 'fix ' + (k + 1) + ' is not what the format says';
-      for (var r = 0; r < one.requires.length; r++) if (!fx.fixes.slice(0, k).some(function (e) { return e.id === one.requires[r]; })) return 'fix ' + one.id + ' requires ' + one.requires[r] + ', which does not come before it';
+      if (!isObject(one) || typeof one.id !== 'string' || own(seen, one.id) || typeof one.label !== 'string' || typeof one.kind !== 'string' ||
+          !Array.isArray(one.requires) || !isObject(one.effect) || !isObject(one.counts) || !isObject(one.tolerance) || !isNumber(one.tolerance.value) || !isNoise(one.noise)) {
+        return 'fix ' + (k + 1) + ' is not what the format says';
+      }
+      for (var r = 0; r < one.requires.length; r++) if (!own(seen, one.requires[r])) return 'fix ' + one.id + ' requires ' + one.requires[r] + ', which does not come before it';
+      for (var e = 0; e < ids.length; e++) {
+        if (own(one.effect, ids[e]) && !isSparse(one.effect[ids[e]], n)) return 'the effect of fix ' + one.id + ' in ' + ids[e] + ' is not what the format says';
+        var block = one.counts[ids[e]];
+        if (!isObject(block) || !COUNT_PARTS.every(function (p) { return p === 'pairs' ? isNumber(block[p]) : isObject(block[p]); })) return 'the counts of fix ' + one.id + ' in ' + ids[e] + ' are not what the format says';
+      }
+      seen[one.id] = 1;
     }
-    return null;
-  }
-  // a file of fixes against the matrix of the file shown: the same items in the same order
-  // (an item a fix brings follows them), and its base the matrix's results in the base state
-  function fixesAgainstRows(fx, rows, d) {
-    if (fx.items.length < rows.length) return 'it holds ' + fx.items.length + ' items, and the matrix ' + rows.length;
-    var at = 0;
-    for (; at < d.states.length; at++) if (d.states[at].id === fx.of.base) break;
-    var ids = d.indicators.map(function (x) { return x.id; });
-    for (var k = 0; k < rows.length; k++) {
-      if (fx.items[k][0] !== rows[k].id) return 'its item ' + (k + 1) + ' is ' + fx.items[k][0] + ', and the matrix\'s ' + rows[k].id;
-      for (var x = 0; x < ids.length; x++) {
-        var mine = fx.base[ids[x]][k], theirs = rows[k].values[ids[x]][at];
-        if (mine !== theirs) return 'its base result of ' + rows[k].id + ' in ' + ids[x] + ' is not the matrix\'s in state ' + fx.of.base;
+    var said = fx.interactions;
+    if (!isObject(said) || typeof said.checked !== 'boolean' || !Array.isArray(said.pairs)) return 'its interactions are not what the format says';
+    for (var p = 0; p < said.pairs.length; p++) {
+      var two = said.pairs[p];
+      if (!isObject(two) || !Array.isArray(two.fixes) || two.fixes.length !== 2 || !two.fixes.every(function (y) { return own(seen, y); }) ||
+          !(two.largest === null || two.largest === NO_SIZE || isNumber(two.largest))) {
+        return 'pair ' + (p + 1) + ' is not what the format says';
+      }
+    }
+    if (!Array.isArray(fx.built)) return 'its built sets are not a list';
+    for (var b = 0; b < fx.built.length; b++) {
+      var set = fx.built[b];
+      if (!isObject(set) || typeof set.id !== 'string' || typeof set.label !== 'string' || !Array.isArray(set.fixes) || !set.fixes.every(function (y) { return own(seen, y); }) ||
+          !isObject(set.results) || !isNoise(set.noise) || !(set.state === null || typeof set.state === 'string')) {
+        return 'built set ' + (b + 1) + ' is not what the format says';
+      }
+      for (var c = 0; c < ids.length; c++) if (own(set.results, ids[c]) && !isSparse(set.results[ids[c]], n)) return 'the results of built set ' + set.id + ' in ' + ids[c] + ' are not what the format says';
+      if (set.state !== null) {
+        var there = -1;
+        d.states.forEach(function (s, k) { if (s.id === set.state) there = k; });
+        if (there <= at) return 'built set ' + set.id + ' says it is state ' + JSON.stringify(set.state) + ', which is no state of the chain after the base';
       }
     }
     return null;
+  }
+
+  // the rule a file of fixes holds (fixes._rule_of): the diagnostics file's, without the
+  // chain's total tolerance, and a floor of 0 from nothing for each unit only an item a fix
+  // brings has, for every indicator, the units in order and none last
+  var FIX_RULE_KEYS = ['floor_factor', 'floors_from', 'beyond', 'floors'];
+  function fixRuleOf(d, added) {
+    var out = {}, known = bag(), units = [];
+    FIX_RULE_KEYS.forEach(function (k) { if (own(d.rule, k)) out[k] = d.rule[k]; });
+    d.rule.floors.forEach(function (one) { known[JSON.stringify(one.unit === undefined ? null : one.unit)] = 1; });
+    added.forEach(function (row) {
+      var unit = row[4] === undefined ? null : row[4];
+      if (!own(known, JSON.stringify(unit)) && units.indexOf(unit) < 0) units.push(unit);
+    });
+    units.sort(function (a, b) { return a === b ? 0 : a === null ? 1 : b === null ? -1 : a < b ? -1 : 1; });
+    out.floors = d.rule.floors.slice();
+    d.indicators.forEach(function (ind) {
+      units.forEach(function (unit) { out.floors.push({ indicator: ind.id, unit: unit, value: 0, basis: 'none', n: 0 }); });
+    });
+    return out;
+  }
+
+  // A checked file of fixes against the file shown (fixes._against): its floors, and its
+  // items and base results, held to the matrix `rows` where it is loaded and to the listed
+  // items where it is not. Every item of the matrix comes first, in its order and whole (name,
+  // place, group, unit); an item a fix brings follows them, with no base result and a result
+  // from some fix. Null where it holds, else why not.
+  function fixesAgainst(fx, d, rows) {
+    var m = rows ? rows.length : d.items_count.all;
+    if (fx.items.length < m) return 'it holds ' + fx.items.length + ' items, and ' + (rows ? 'the matrix ' : 'the file shown counts ') + m;
+    if (!sameJSON(fx.rule, fixRuleOf(d, fx.items.slice(m)))) return 'its floors are not those of the file shown (with a floor of 0 for each unit only an item a fix brings has)';
+    var at = 0;
+    for (; at < d.states.length; at++) if (d.states[at].id === fx.of.base) break;
+    var ids = d.indicators.map(function (x) { return x.id; });
+    function sameBase(k, values, name, where) {
+      for (var x = 0; x < ids.length; x++) {
+        if (fx.base[ids[x]][k] !== values[ids[x]][at]) return 'its base result of ' + name + ' in ' + ids[x] + ' is not ' + where + ' in state ' + fx.of.base;
+      }
+      return null;
+    }
+    var problem;
+    if (rows) {
+      for (var k = 0; k < m; k++) {
+        var row = rows[k], mine = fx.items[k];
+        if (mine[0] !== row.id) return 'its item ' + (k + 1) + ' is ' + mine[0] + ', and the matrix\'s ' + row.id;
+        if (!sameJSON(mine, [row.id, row.name, row.place, row.group, row.unit])) return 'its item ' + row.id + ': its name, place, group or unit are not the matrix\'s';
+        if ((problem = sameBase(k, row.values, row.id, 'the matrix\'s'))) return problem;
+      }
+      var given = bag();
+      fx.fixes.map(function (one) { return one.effect; }).concat(fx.built.map(function (b) { return b.results; })).forEach(function (sparse) {
+        Object.keys(sparse).forEach(function (ind) { sparse[ind].forEach(function (e) { if (e[0] >= m && e[1] !== null) given[e[0]] = 1; }); });
+      });
+      for (var j = m; j < fx.items.length; j++) {
+        if (ids.some(function (ind) { return fx.base[ind][j] !== null; })) return 'its item ' + fx.items[j][0] + ' is not in the matrix, and its base has a result for it';
+        if (!own(given, j)) return 'its item ' + fx.items[j][0] + ' is in no state of the chain, and no fix gives it a result';
+      }
+      return null;
+    }
+    var index = bag();
+    fx.items.forEach(function (r, k) { index[r[0]] = k; });
+    for (var i = 0; i < d.items.length; i++) {
+      var item = d.items[i];
+      if (!own(index, item.id)) return 'the listed item ' + item.id + ' is not in it';
+      var at2 = index[item.id];
+      if (!sameJSON(fx.items[at2].slice(1), [item.name, item.place, item.group, item.unit])) return 'its item ' + item.id + ': its name, place, group or unit are not the file\'s';
+      if ((problem = sameBase(at2, item.values, item.id, 'the file\'s'))) return problem;
+    }
+    return null;
+  }
+  // checkFixes, then fixesAgainst, then what the page works out of the file once; a fault in
+  // any is why the file is refused, never an error thrown at the host
+  function fixesProblem(fx, d, rows) {
+    try {
+      var problem = checkFixes(fx, d) || fixesAgainst(fx, d, rows);
+      if (!problem) fixModel(fx);
+      return problem;
+    } catch (error) {
+      return 'it is not what the format says (' + String(error && error.message || error).slice(0, 200) + ')';
+    }
+  }
+
+  // the counts a page draws for a set: the file's counts (fixCounts), with each value no sum
+  // can be formed for taken out of "missing" and counted as "no sum" (SPEC 16.8)
+  function fixPageBlocks(f, by, cannot) {
+    var m = modelOf(f), out = {};
+    Object.keys(by).forEach(function (ind) {
+      var block = JSON.parse(JSON.stringify(by[ind])), ks = cannot[ind] || [];
+      if (ks.length) {
+        block.classes[NO_SUM] = ks.length;
+        ks.forEach(function (k) {
+          block.classes.missing -= 1;
+          block.missing[m.base[ind][k] === null ? 'both' : 'after'] -= 1;
+        });
+      }
+      out[ind] = block;
+    });
+    return out;
   }
 
   // ------------------------------------------------------------------ one mounted page
@@ -1248,10 +1411,8 @@
       var td = el('td', { cls: classes, title: title, style: v.strength ? '--s:' + v.strength : null, 'data-class': cls },
         [v.text, v.mark ? el('span', { cls: 'mark', text: v.mark, 'aria-hidden': 'true' }) : null]);
       if (verdict && LOOK.indexOf(verdict) >= 0) td.appendChild(el('span', { cls: 'mark verdict-look', text: LOOK_MARK[verdict], title: verdict }));
-      if (isSet(k) && row.together.cannot && row.together.cannot[indicator]) {
-        clear(td).appendChild(doc.createTextNode('no sum'));
-        td.className = 'cell tone-missing sd-nosum';
-        td.setAttribute('title', 'No sum can be formed here: a fix of this set has no result for it. That is not a missing result.');
+      if (cls === NO_SUM) {
+        td.className += ' sd-nosum';
       } else if (isSet(k) && row.together.est && row.together.est[indicator]) {
         td.appendChild(el('span', { cls: 'mark sd-est', text: '≈', title: 'estimated: the sum of the fixes\' effects, not a build' }));
         td.setAttribute('title', 'Estimated: the sum of the fixes\' effects, not a build. ' + title);
@@ -1492,22 +1653,32 @@
             ': the file says ' + JSON.stringify(d.file) + ', this page ' + JSON.stringify(d.page) + '), so it draws no set that holds it. Run sentier-diagnostics check on the file of fixes.';
         }
       }
-      var got = fixCompose(FX, names), counts = fixCounts(FX, names), m = modelOf(FX), ids = indicatorIds();
+      var got, counts;
+      try {
+        got = fixCompose(FX, names);
+        counts = fixCounts(FX, names);
+      } catch (error) {
+        return 'This page could not compose ' + fixLabels(names) + ' (' + String(error && error.message || error).slice(0, 200) + '). Run sentier-diagnostics check on the file of fixes.';
+      }
+      var m = modelOf(FX), ids = indicatorIds();
       var cannot = {};
       ids.forEach(function (ind) { cannot[ind] = {}; got.cannot_add[ind].forEach(function (k) { cannot[ind][k] = 1; }); });
       FXROWS.forEach(function (row) {
         var k = row.fx, t = { key: key, cls: {}, dir: {}, band: {}, pair: {}, est: {}, cannot: {} };
         ids.forEach(function (ind) {
           var before = m.base[ind][k], after = got.results[ind][k], stands = got.stands[ind].get(k), res;
-          if (stands) res = judge(before, after, m.floor[ind][k], got.tolerance, own(got.item_noise[ind], k) ? got.item_noise[ind][k] : null);
+          t.cannot[ind] = own(cannot[ind], k);
+          // no sum is its own class, never "missing" (fixPageBlocks takes it out of the counts)
+          if (t.cannot[ind]) res = [NO_SUM, null, null];
+          else if (stands) res = judge(before, after, m.floor[ind][k], got.tolerance, own(got.item_noise[ind], k) ? got.item_noise[ind][k] : null);
           else res = [classify(before, before, m.floor[ind][k], 0, null), null, null];
           t.pair[ind] = [before, after]; t.cls[ind] = res[0]; t.dir[ind] = res[1]; t.band[ind] = res[2];
           t.est[ind] = !!(stands && stands[0] === 'sum' && got.label === ESTIMATED);
-          t.cannot[ind] = own(cannot[ind], k);
         });
         row.together = t;
       });
-      C = { key: key, set: names, fixes: got, label: names.length ? got.label : BUILT, tolerance: got.tolerance, noise: got.noise, blocks: counts.by };
+      C = { key: key, set: names, fixes: got, label: names.length ? got.label : BUILT, tolerance: got.tolerance, noise: got.noise,
+        blocks: fixPageBlocks(FX, counts.by, got.cannot_add) };
       return null;
     }
 
@@ -1722,12 +1893,16 @@
           var under = fixColumn(m, m.closures[y])[ind.id], before = under.has(k) ? under.get(k) : base, after = m.entries[y][ind.id].get(k);
           var diff = before === null || after === null ? null : after - before;
           parts.push(diff);
-          var v = cellView(before, after, classify(before, after, m.floor[ind.id][k], fixById(y).tolerance.value, null), after !== null && before !== null && after !== before ? (after > before ? 'up' : 'down') : null, null);
+          // judged as the file counts the fix on its own (fixOwnCounts): its tolerance, and the
+          // noise of its build and the one it was measured against
+          var ends = [fixEnd(m, m.closures[y])[1], { kind: 'build', noise: m.noise[y] }];
+          var j = judge(before, after, m.floor[ind.id][k], fixById(y).tolerance.value, fixLevel(ends, ind.id));
+          var v = cellView(before, after, j[0], j[1], j[2]);
           tb.appendChild(el('tr', null, [
             el('th', { scope: 'row' }, [fixById(y).label, m.closures[y].length ? el('div', { cls: 'sd-quiet', text: 'on ' + fixLabels(m.closures[y]) }) : null]),
             el('td', { cls: 'num', text: formatNumber(before), title: String(before) }),
             el('td', { cls: 'num', text: formatNumber(after), title: String(after) }),
-            el('td', { cls: 'cell tone-' + v.tone, text: v.text, title: v.title }),
+            el('td', { cls: 'cell tone-' + v.tone, text: v.text, title: v.title, 'data-class': j[0] }),
             el('td', { cls: 'num', text: diff === null ? 'none' : formatNumber(diff), title: diff === null ? 'a side has no result' : String(diff) })
           ]));
         });
@@ -1761,7 +1936,7 @@
     // the file of fixes: handed over with the page, or the file the root names beside it
     function takeFixes(fx) {
       if (!D) return;
-      var problem = checkFixes(fx, D) || (M ? fixesAgainstRows(fx, M, D) : null);
+      var problem = fixesProblem(fx, D, M);
       if (problem) { refuseFixes(problem); return; }
       FX = fx;
       FXROWS = fixRows();
@@ -1805,7 +1980,7 @@
     function loadFixes() {
       if (given.fixes) { takeFixes(given.fixes); return; }
       var hostFixes = win.SENTIER_DIAGNOSTICS_FIXES || null;
-      if (hostFixes && !checkFixes(hostFixes, D)) { takeFixes(hostFixes); return; }
+      if (hostFixes && !fixesProblem(hostFixes, D, M)) { takeFixes(hostFixes); return; }
       var name = root.getAttribute('data-sd-fixes');
       if (!name) { if (hostFixes) takeFixes(hostFixes); return; } // refused, and said why
       if (!safeName(name)) { refuseFixes('its name is not a plain file name beside the page'); return; }
@@ -2209,7 +2384,8 @@
         .concat(bands.filter(function (b) { return b.indexOf('down') === 0; }).map(function (b) { return ['band', b, 'down']; }))
         .concat([['class', 'agrees', 'mid'], ['class', 'within noise', 'mid']])
         .concat(bands.filter(function (b) { return b.indexOf('up') === 0; }).map(function (b) { return ['band', b, 'up']; }))
-        .concat(['zero reference', 'zero result', 'near zero', 'missing'].map(function (c) { return ['class', c, 'aside']; }));
+        .concat(['zero reference', 'zero result', 'near zero', 'missing'].concat(block.classes[NO_SUM] ? [NO_SUM] : [])
+          .map(function (c) { return ['class', c, 'aside']; }));
     }
     // the words under a histogram, each under its run of bars
     function axis(bins) {
@@ -2468,17 +2644,19 @@
     // an indicator in which nothing moved last, quietened
     function columns() {
       var blocks = blocksNow();
-      // a missing value is a finding, not stillness: it counts with what moved
+      // a missing value is a finding, not stillness: it counts with what moved; so does a value
+      // of a set of fixes that no sum can be formed for, under its own name
       return D.indicators.map(function (ind, at) {
         var block = blocks[ind.id];
-        return { ind: ind, moved: moved(block), missing: block.classes.missing || 0, at: at };
-      }).map(function (c) { c.active = c.moved + c.missing; return c; })
+        return { ind: ind, moved: moved(block), missing: block.classes.missing || 0, noSum: block.classes[NO_SUM] || 0, at: at };
+      }).map(function (c) { c.active = c.moved + c.missing + c.noSum; return c; })
         .sort(function (a, b) { return b.active - a.active || a.at - b.at; });
     }
 
     function activeSaid(c) {
       if (!c.active) return 'nothing moved and nothing is missing';
-      return [c.moved ? groupThousands(c.moved) + ' moved' : null, c.missing ? groupThousands(c.missing) + ' missing' : null].filter(Boolean).join(', ');
+      return [c.moved ? groupThousands(c.moved) + ' moved' : null, c.missing ? groupThousands(c.missing) + ' missing' : null,
+        c.noSum ? groupThousands(c.noSum) + ' no sum' : null].filter(Boolean).join(', ');
     }
 
     function renderGrid() {
@@ -2500,7 +2678,7 @@
       ];
       cols.forEach(function (c) {
         var ind = c.ind, column = byColumn(ind.id);
-        head.push(el('th', { scope: 'col', cls: 'num' + (c.active ? '' : ' sd-still'), 'aria-sort': sorted(column),
+        head.push(el('th', { scope: 'col', cls: 'num' + (c.active ? '' : ' sd-still'), 'aria-sort': sorted(column), 'data-indicator': ind.id,
           title: ind.name + (ind.unit ? ' (' + ind.unit + ')' : '') + ': ' + activeSaid(c) + ' here' },
           [sortButton(indicatorName(ind.id), column, COLUMN_ORDER)]));
       });
@@ -2902,7 +3080,7 @@
       // address, which may ask for a run the page could not judge before, is read again
       C = null; CHECKED = {};
       if (FX) {
-        var against = fixesAgainstRows(FX, M, D);
+        var against = fixesProblem(FX, D, M);
         if (against) { FX = null; FXROWS = null; fixfile = { state: 'refused', said: against }; fixesSaid(); }
         else FXROWS = fixRows();
       }
@@ -3680,7 +3858,7 @@
     judge: judge, runsOf: runsOf, runPair: runPair, noiseOfStates: noiseOfStates, endsKnown: endsKnown, statesCarryNoise: statesCarryNoise,
     luminance: luminance, schemeIsDark: schemeIsDark,
     fixChosen: fixChosen, fixCompose: fixCompose, fixCounts: fixCounts, fixOwnCounts: fixOwnCounts, fixCountsDiffer: fixCountsDiffer, checkFixes: checkFixes,
-    fixesAgainstRows: fixesAgainstRows, inOrder: inOrder,
+    fixesAgainst: fixesAgainst, fixesProblem: fixesProblem, fixPageBlocks: fixPageBlocks, inOrder: inOrder,
     mount: mount, mountAll: mountAll };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else if (typeof global.document !== 'undefined') {

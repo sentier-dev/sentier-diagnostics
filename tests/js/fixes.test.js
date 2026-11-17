@@ -36,6 +36,25 @@ test('three differences are added in the order of the file, as fixes.in_order ad
   const one = FIXTURE.files.find((f) => f.name === 'three fixes at one item');
   const at = one.file.items.map((r) => r[0]).indexOf('p4');
   assert.equal(page.fixCompose(one.file, ['x', 'y', 'z']).results[one.file.indicators[0].id][at], 0.6000000000000001);
+  // from a base of 2.0: the differences from 0 in order, then the base (0.10000000000000009);
+  // the base first, or a compensated sum, gives 0.09999999999999987
+  const two = FIXTURE.files.find((f) => f.name === 'three fixes from 2.0').file;
+  const p2 = two.items.map((r) => r[0]).indexOf('p2');
+  assert.equal(two.base[two.indicators[0].id][p2], 2.0);
+  assert.equal(page.fixCompose(two, ['x', 'y', 'z']).results[two.indicators[0].id][p2], 0.10000000000000009);
+});
+
+test('where a fix with what it requires and a built set both cover an item, the fix comes first', () => {
+  const f = FIXTURE.files.find((x) => x.name === 'covers in order').file;
+  const ind = f.indicators[0].id, p1 = f.items.map((r) => r[0]).indexOf('p1');
+  assert.equal(page.fixCompose(f, ['a', 'b', 'd', 'e']).results[ind][p1], 1.8);
+  assert.equal(page.fixCompose(f, ['a', 'b', 'd']).results[ind][p1], 1.8001, 'the built set itself');
+});
+
+test('pair terms are added in order, and a pair with no size is never a known size', () => {
+  const f = FIXTURE.files.find((x) => x.name === 'sized pairs').file;
+  assert.deepEqual(page.fixCompose(f, ['a', 'b', 'c']).pair_terms, { value: 0.6000000000000001, measured: 3, no_size: 0, pairs: 3 });
+  assert.deepEqual(page.fixCompose(f, ['a', 'b', 'c', 'g']).pair_terms, { value: null, measured: 4, no_size: 1, pairs: 5 });
 });
 
 test('the page works out each fix\'s own counts again and finds the file\'s', () => {
@@ -52,6 +71,18 @@ test('a count the page\'s rule does not give is found, and named', () => {
   const found = page.fixCountsDiffer(one, one.fixes[2].id);
   assert.deepEqual([found.indicator, found.part], [ind, 'classes']);
   assert.equal(found.file.agrees, found.page.agrees + 1);
+  // every part of the counts, not the classes only
+  const changes = {
+    pairs: (b) => { b.pairs += 1; },
+    missing: (b) => { b.missing.after += 1; },
+    directions: (b) => { b.directions.up += 1; },
+    bands: (b) => { b.bands[Object.keys(b.bands)[0]] += 1; },
+  };
+  for (const [part, change] of Object.entries(changes)) {
+    const other = copy(FIXTURE.files.find((f) => f.name === 'a pair and two built sets').file);
+    change(other.fixes[2].counts[ind]);
+    assert.equal(page.fixCountsDiffer(other, other.fixes[2].id).part, part);
+  }
 });
 
 test('a choice holds every fix it requires, in the order of the file, and names an unknown one', () => {
@@ -96,6 +127,22 @@ function tick(d, id, on) {
 function cell(d, item, column) {
   const row = d.byId['grid-table'].all().find((n) => n.tagName === 'TR' && n.getAttribute('data-item') === item);
   return row.childNodes.filter((n) => n.tagName === 'TD')[1 + column];
+}
+// the grid's columns, by indicator (they are ordered by what moved), and its rows
+const columnsOf = (d) => d.byId['grid-table'].all().filter((n) => n.tagName === 'TH' && n.getAttribute('data-indicator') !== null).map((n) => n.getAttribute('data-indicator'));
+const gridRows = (d) => d.byId['grid-table'].all().filter((n) => n.tagName === 'TR' && n.getAttribute('data-item') !== null);
+const cellOf = (d, item, ind) => cell(d, item, columnsOf(d).indexOf(ind));
+// the row of the drawer's table for an indicator whose heading starts with `label`
+function drawerRow(d, ind, label) {
+  const table = d.byId['item-body'].all().find((n) => n.tagName === 'TABLE' && n.getAttribute('data-indicator') === ind);
+  return table.all().filter((n) => n.tagName === 'TR').find((r) => r.childNodes[0].textContent.startsWith(label));
+}
+const classIn = (row) => row.all().find((n) => n.getAttribute('data-class') !== null).getAttribute('data-class');
+const options = (select) => select.all().filter((n) => n.tagName === 'OPTION').map((n) => n.getAttribute('value'));
+function chooseClass(d, value) {
+  const select = d.byId['grid-class'];
+  select.value = value;
+  select.dispatch('change', {});
 }
 
 test('a page with a file of fixes offers them beside the chain, and opens on the chain', () => {
@@ -173,10 +220,17 @@ test('every summed value of an estimated set is marked, and its counts are said 
   const p1 = cell(d, 'p1', 0);
   assert.ok(p1.all().some((n) => n.textContent === '≈'), p1.textContent);
   assert.ok(!cell(d, 'p3', 0).all().some((n) => n.textContent === '≈'));
+  assert.match(d.byId['dist-said'].textContent, /^Estimated: /);
   // one fix alone is its build, never marked
   const alone = drawn('an estimated sum', 'set=a');
   assert.match(alone.byId['step-said'].textContent, /^Fix A\. built/);
   assert.ok(!cell(alone, 'p1', 0).all().some((n) => n.textContent === '≈'));
+  assert.doesNotMatch(alone.byId['dist-said'].textContent, /^Estimated/);
+  // in an estimated set, a value taken from one fix's build is not a sum, and is not marked
+  const three = drawn('an estimated sum', 'set=a,b,c');
+  const ind = pageOf('an estimated sum').fixes.indicators[0].id;
+  assert.ok(cellOf(three, 'p1', ind).all().some((n) => n.textContent === '≈'));
+  assert.ok(!cellOf(three, 'p3', ind).all().some((n) => n.textContent === '≈'), 'c alone moves p3');
 });
 
 test('the drawer splits an item into each fix\'s effect, and the set\'s value is the sum', () => {
@@ -214,13 +268,21 @@ test('a file of fixes beside the page loads after it is drawn, and takes the ent
   const script = d.head.all().find((n) => n.tagName === 'SCRIPT' && n.getAttribute('src') === 'fixes.js');
   assert.ok(script, 'the script is added');
   assert.match(d.byId['step-said'].textContent, /the file of fixes is loading, and the set is shown when it is here/);
-  // another page's entry first: never taken
+  script.onload.call(script); // nothing handed over yet
+  assert.match(d.byId['fixes-said'].textContent, /^The file of fixes was not loaded: fixes\.js holds no file of fixes/);
+  // another page's entry, before this page's and after it: never taken
   const other = copy(p.fixes);
   other.of.title = 'Another chain';
-  d.context.SENTIER_DIAGNOSTICS_FIXES_FILES = [{ src: 'fixes.js', fixes: p.fixes }, { src: 'other/fixes.js', fixes: other }];
-  script.onload();
-  assert.deepEqual(ticked(d), ['a', 'd', 'e']);
-  assert.match(d.byId['fixes-said'].textContent, /^5 fixes/);
+  const mine = { src: 'fixes.js', fixes: p.fixes }, theirs = { src: 'other/fixes.js', fixes: other };
+  for (const list of [[theirs, mine], [mine, theirs]]) {
+    const again = dom.page(p.data, undefined, { standalone: true, hash: 'set=e', attributes: { 'data-sd-fixes': 'fixes.js' },
+      globals: { SENTIER_DIAGNOSTICS_MATRIX: p.matrix } });
+    const added = again.head.all().find((n) => n.tagName === 'SCRIPT' && n.getAttribute('src') === 'fixes.js');
+    again.context.SENTIER_DIAGNOSTICS_FIXES_FILES = list;
+    added.onload();
+    assert.deepEqual(ticked(again), ['a', 'd', 'e'], list.map((e) => e.src).join(' then '));
+    assert.match(again.byId['fixes-said'].textContent, /^5 fixes/);
+  }
 });
 
 test('a page whose key is refused loads no file of fixes, and keeps saying why', () => {
@@ -231,4 +293,181 @@ test('a page whose key is refused loads no file of fixes, and keeps saying why',
   assert.match(d.byId['load-error'].textContent, /is one the page gives/);
   assert.equal(d.byId.content.hidden, true);
   assert.equal(d.context.location.hash, '#left.set=e', 'the address is left as it was');
+});
+
+// ------------------------------------------------------------------ review of 57ceb6a
+
+test('the drawer judges a fix as the file counts it: with its noise and that of what it was measured against', () => {
+  const p = pageOf('a fix within its noise');
+  const ind = p.fixes.indicators[0].id;
+  assert.equal(p.fixes.fixes[0].counts[ind].classes['within noise'], 1, 'the file: 1.0 to 1.01 is within 0.5 % + 1 %');
+  const d = drawn('a fix within its noise', 'set=x&item=p1');
+  assert.equal(classIn(drawerRow(d, ind, 'Fix x')), 'within noise');
+  assert.equal(classIn(drawerRow(d, ind, 'This set')), 'within noise');
+  assert.equal(cellOf(d, 'p1', ind).getAttribute('data-class'), 'within noise');
+});
+
+test('the grid\'s classes add up to the counts of the set, on every page and every set', () => {
+  let sets = 0;
+  for (const name of Object.keys(FIXTURE.pages)) {
+    const p = pageOf(name);
+    const ids = p.fixes.fixes.map((f) => f.id), seen = new Set();
+    for (let mask = 1; mask < (1 << ids.length); mask++) {
+      const names = page.fixChosen(p.fixes, ids.filter((_, i) => mask & (1 << i))).names;
+      if (seen.has(names.join(','))) continue;
+      seen.add(names.join(','));
+      const d = drawn(name, 'set=' + names.join(','));
+      assert.deepEqual(ticked(d), names, name + ': ' + names);
+      const counts = page.fixCounts(p.fixes, names).by, cannot = page.fixCompose(p.fixes, names).cannot_add;
+      const cols = columnsOf(d), rows = gridRows(d);
+      assert.equal(rows.length, p.fixes.items.length, name + ': every item is in the grid');
+      for (const ind of Object.keys(counts)) {
+        // the file's counts, with each value no sum can be formed for out of "missing"
+        const want = {};
+        for (const [c, k] of Object.entries(counts[ind].classes)) if (k) want[c] = k;
+        if (cannot[ind].length) {
+          want.missing -= cannot[ind].length;
+          if (!want.missing) delete want.missing;
+          want['no sum'] = cannot[ind].length;
+        }
+        const got = {};
+        for (const r of rows) {
+          const c = r.childNodes.filter((n) => n.tagName === 'TD')[1 + cols.indexOf(ind)].getAttribute('data-class');
+          got[c] = (got[c] || 0) + 1;
+        }
+        assert.deepEqual(got, want, name + ': ' + names + ', ' + ind);
+      }
+      sets += 1;
+    }
+  }
+  assert.ok(sets >= 40, sets + ' sets');
+});
+
+test('a value no sum can be formed for reads "no sum" wherever the page names it, never "missing"', () => {
+  const ind = pageOf('three fixes at one item').fixes.indicators[0].id;
+  // x moves p2 to 2.5; w has no result there
+  const d = drawn('three fixes at one item', 'set=x,w');
+  const p2 = cellOf(d, 'p2', ind);
+  assert.equal(p2.textContent, 'no sum');
+  assert.equal(p2.getAttribute('data-class'), 'no sum');
+  assert.match(p2.getAttribute('title'), /^no sum: .*it is not a missing result\. Before 2\.$/);
+  assert.doesNotMatch(p2.getAttribute('title'), /missing after/);
+  const th = d.byId['grid-table'].all().find((n) => n.tagName === 'TH' && n.getAttribute('data-indicator') === ind);
+  assert.match(th.getAttribute('title'), /: 1 moved, 1 no sum here$/);
+  const card = d.byId['dist-cards'].all().find((n) => n.getAttribute('data-indicator') === ind && n.tagName === 'DIV');
+  const meta = card.all().find((n) => n.className === 'sd-dist-meta');
+  assert.match(meta.textContent, /^1 moved, 1 no sum, of 4/);
+  assert.ok(options(d.byId['grid-class']).includes('no sum'));
+  assert.ok(!options(d.byId['grid-class']).includes('missing'));
+  chooseClass(d, 'no sum');
+  assert.deepEqual(gridRows(d).map((n) => n.getAttribute('data-item')), ['p2']);
+  // w alone has no result at p2: that is missing, and no sum is not said
+  const alone = drawn('three fixes at one item', 'set=w');
+  assert.equal(cellOf(alone, 'p2', ind).getAttribute('data-class'), 'missing');
+  assert.ok(options(alone.byId['grid-class']).includes('missing'));
+  assert.ok(!options(alone.byId['grid-class']).includes('no sum'));
+});
+
+test('"Moved (any class)": a missing value is not moved, the filter stays from set to set, and goes where nothing moved', () => {
+  // y moves p4 in both indicators; w has no result at p2
+  const d = drawn('three fixes at one item', 'set=y,w');
+  chooseClass(d, 'moved');
+  assert.deepEqual(gridRows(d).map((n) => n.getAttribute('data-item')), ['p4']);
+  assert.match(d.byId['grid-said'].textContent, /in which 2 values moved\./);
+  tick(d, 'x', true);
+  assert.equal(d.byId['grid-class'].value, 'moved', 'kept when the set changes');
+  assert.deepEqual(gridRows(d).map((n) => n.getAttribute('data-item')), ['p4'], 'no sum is not moved either');
+  tick(d, 'x', false);
+  tick(d, 'y', false);
+  assert.deepEqual(ticked(d), ['w']);
+  assert.ok(!options(d.byId['grid-class']).includes('moved'), 'nothing moved: no such choice');
+  assert.equal(d.byId['grid-class'].value, '');
+  assert.equal(gridRows(d).length, 4);
+});
+
+test('the drawer of a build of several fixes shows the rest; where it holds a listed pair, as the interaction', () => {
+  const ind = pageOf('a built set that is a state').fixes.indicators[0].id;
+  // a and b both move p1; b and c are a pair; every fix was built, and a with b
+  const all = drawn('a built set that is a state', 'set=a,b,c&item=p1');
+  assert.ok(drawerRow(all, ind, 'The interaction'));
+  assert.ok(!drawerRow(all, ind, 'The rest'));
+  const ab = drawn('a built set that is a state', 'set=a,b&item=p1');
+  assert.ok(drawerRow(ab, ind, 'The rest'));
+  assert.ok(!drawerRow(ab, ind, 'The interaction'));
+});
+
+test('a set\'s address is the page\'s own part in a host, beside the host\'s own set= and item=', () => {
+  const p = pageOf('fixes that need others');
+  const d = dom.page(p.data, undefined, { hash: 'set=zzz&left.set=e&item=host', attributes: { 'data-sd-key': 'left' },
+    globals: { SENTIER_DIAGNOSTICS_MATRIX: p.matrix, SENTIER_DIAGNOSTICS_FIXES: p.fixes } });
+  assert.deepEqual(ticked(d), ['a', 'd', 'e']);
+  tick(d, 'g', true);
+  const parts = d.context.location.hash.replace(/^#/, '').split('&');
+  assert.ok(parts.includes('left.set=a,b,d,e,g'), parts.join('&'));
+  assert.ok(parts.includes('set=zzz') && parts.includes('item=host'), 'the host\'s parts are kept: ' + parts.join('&'));
+  assert.equal(parts.filter((x) => x.startsWith('set=')).length, 1);
+});
+
+test('a file of fixes is held to the file shown as the Python holds it: base noise, words, floors, whole items', () => {
+  const cases = [
+    ['a fix within its noise', (f) => { const by = f.of.base_noise.by; by[Object.keys(by)[0]] = 0.5; }, /its noise of the base \(of\.base_noise\) is not the noise the file shown gives/],
+    ['a fix within its noise', (f) => { delete f.of.base_noise; }, /its base is a build, and it says no noise of it/],
+    ['from the published results', (f) => { f.of.base_noise = copy(f.fixes[0].noise); }, /its base is the published results, which are exact/],
+    ['fixes that need others', (f) => { f.indicators[0].name = 'Another'; }, /indicators are not those of the file shown/],
+    ['fixes that need others', (f) => { f.item = { one: 'thing', many: 'things' }; }, /words for an item or an indicator/],
+    ['fixes that need others', (f) => { f.rule.floors[0].value *= 2; }, /its floors are not those of the file shown/],
+    ['fixes that need others', (f) => { f.items[0][1] = 'Another name'; }, /its item p\d: its name, place, group or unit are not the matrix's/],
+    ['a built set that is a state', (f) => { f.built[1].state = 's0'; }, /says it is state "s0", which is no state of the chain after the base/],
+  ];
+  for (const [name, change, said] of cases) {
+    const p = pageOf(name);
+    assert.equal(page.fixesProblem(p.fixes, p.data, null), null, name);
+    const d = drawn(name, 'set=', (q) => change(q.fixes));
+    assert.match(d.byId['fixes-said'].textContent, /^The file of fixes was not loaded: /, String(said));
+    assert.match(d.byId['fixes-said'].textContent, said);
+  }
+});
+
+test('without the matrix, the listed items hold the file of fixes: their names and base results', () => {
+  const p = pageOf('fixes that need others');
+  assert.equal(page.fixesProblem(p.fixes, p.data, null), null);
+  const cases = [
+    [(f) => { for (const ind of Object.keys(f.base)) f.base[ind] = f.base[ind].map((v) => (v === null ? null : v * 7)); }, /its base result of p3 in .* is not the file's in state s1/],
+    [(f) => { f.items.find((r) => r[0] === 'p3')[3] = 'another group'; }, /its item p3: its name, place, group or unit are not the file's/],
+    [(f) => { f.items.find((r) => r[0] === 'p3')[0] = 'p33'; }, /the listed item p3 is not in it/],
+  ];
+  for (const [change, said] of cases) {
+    const f = copy(p.fixes);
+    change(f);
+    assert.match(page.fixesProblem(f, p.data, null), said);
+    const d = dom.page(p.data, undefined, { standalone: true, globals: { SENTIER_DIAGNOSTICS_FIXES: f } });
+    assert.match(d.byId['fixes-said'].textContent, said);
+  }
+});
+
+test('a malformed file of fixes from a host is refused and said, never thrown', () => {
+  const name = 'a built set that is a state';
+  const ind = pageOf(name).fixes.indicators[0].id;
+  const cases = [
+    [(f) => { delete f.built[0].fixes; }, /built set 1 is not what the format says/],
+    [(f) => { delete f.built[0].results; }, /built set 1 is not what the format says/],
+    [(f) => { f.built[1].noise = null; }, /built set 2 is not what the format says/],
+    [(f) => { delete f.interactions.pairs; }, /its interactions are not what the format says/],
+    [(f) => { delete f.fixes[0].counts[ind]; }, /the counts of fix a in .* are not what the format says/],
+    [(f) => { f.fixes[0].effect[ind] = [[99, 1]]; }, /the effect of fix a in .* is not what the format says/],
+    [(f) => { f.fixes = 'none'; }, /its fixes are not a list/],
+    [(f) => { f.base[ind] = f.base[ind].slice(1); }, /its base does not hold a result for every item/],
+    [(f) => { f.fixes[1].noise = null; }, /fix 2 is not what the format says/],
+    [(f) => { f.interactions.pairs[0].fixes = ['b', 'zz']; }, /pair 1 is not what the format says/],
+  ];
+  for (const [change, said] of cases) {
+    const p = pageOf(name);
+    const f = copy(p.fixes);
+    change(f);
+    assert.match(page.fixesProblem(f, p.data, null), said);
+    const d = drawn(name, 'set=a', (q) => { q.fixes = f; });
+    assert.match(d.byId['fixes-said'].textContent, /^The file of fixes was not loaded: /);
+    assert.match(d.byId['fixes-said'].textContent, said);
+    assert.equal(d.byId['fix-panel'].hidden, true);
+  }
 });

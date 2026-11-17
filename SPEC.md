@@ -705,7 +705,9 @@ those that did not move. A heading sorts by how far the two lie apart in that in
 the furthest first (the order of 10.4), or by name, and a second click goes back;
 filters by text, group, class and verdict, the class filter also offering **every class that
 moved at once** (and saying how many values moved among the items shown, the count beside
-the comparison); 300 rows at a time with "show more". The
+the comparison; a missing value, or a value no sum can be formed for, did not move). That
+choice is offered only where something moved, and stays chosen when the comparison or the
+set of fixes changes while something still moves; 300 rows at a time with "show more". The
 reader's **size filter** ("size at least ×1.1 ... ×10") hides smaller changes here and in
 the worst list; zeros, sign changes and missing values always show, and the page says the
 filter changes no count.
@@ -915,7 +917,8 @@ a build, and a comparison takes the sum of the noise of the builds it stands on 
 sentier-bafu wrote a file from its own chain to review the format as its producer (12 fixes
 and the release, checked clean), and its review defined the size of a pair (16.6), the route
 an effect is measured on (16.4), and the premise of the list of pairs (16.3). The reader and
-validator are `fixes.py`; the producer and the page are not written yet (16.12).
+validator are `fixes.py`, and the page reads a file of fixes as 16.8 says; sentier-bafu
+writes the producer (16.12).
 
 ### 16.1 Why not a chain of fixes
 
@@ -1223,7 +1226,9 @@ construction; the check of independence above is the one that can fail it.
   and says so; unticking a fix another chosen fix requires unticks that one too.
 - The address names the set: `#set=a,b,c`, in the order of the file. An address that names
   a fix the file does not hold opens on the base and says which.
-- One fix reads as a step does today: its claim, its verdicts, its own counts from the file.
+- One fix reads as a step does today: its claim and its own counts from the file, with the
+  verdicts the file counts for it in its line and in the list. The file counts verdicts per
+  fix and holds none per item, so in a set the verdict filter is off and no cell carries one.
 - Any set drives the matrix, the distributions, the worst values and the drawer. Its line
   says its label, its fixes with their claims, its tolerance and its noise.
 - The page works out the classes of a set, as it does those of a run of steps (section
@@ -1238,7 +1243,11 @@ construction; the check of independence above is the one that can fail it.
   holding a listed pair, the rest is shown as the interaction, never spread over the fixes.
 - An estimated set says so wherever its numbers are: "≈" on every value that is a sum, and
   "Estimated:" before its counts, the worst values and the distributions. A value no sum
-  can be formed for reads "no sum", never "missing".
+  can be formed for reads "no sum", never "missing", wherever the page names it: in its
+  cell, in the counts of the distributions and the column titles, and in the Class filter,
+  where it is a class of its own. `fixes.counts` counts it as missing (after, or on both
+  sides where the base has no result); the page takes it out of "missing" and counts it as
+  "no sum", so that the two never collapse into one.
 - The page offers the choice between the steps of the chain and a set of fixes only where
   a file of fixes came with it. `sentier-diagnostics page FILE --out FOLDER --fixes FIXES`
   checks the file of fixes against the file and its matrix and writes it beside the page as
@@ -1246,8 +1255,14 @@ construction; the check of independence above is the one that can fail it.
   does; the root names it (`data-sd-fixes`) and the page takes the entry of that script
   only. A host may name `fixes.json` instead (read over http), or set one file of fixes
   for one page, `SENTIER_DIAGNOSTICS_FIXES`. A file of fixes that does not hang on the file
-  shown (its title, a base that is no state of it, other indicators, other items or base
-  results than the matrix's) is refused, and the page says why.
+  shown is refused, and the page says why: its title, a base that is no state of it or
+  whose noise is not that state's (none where it is the published results), other
+  indicators or words, other floors (16.4), other items than the matrix's in its order and
+  whole (name, place, group, unit), other base results, an item a fix brings that has a
+  base result or no result from any fix, or a built set that names no state after the base.
+  Without the matrix, the listed items hold it. A file of another shape, from a script or a
+  host's global, is refused the same way and never stops the page. The page does not hold a
+  built set that names a state to that state's results, which `check` does.
 
 ### 16.9 Checks
 
