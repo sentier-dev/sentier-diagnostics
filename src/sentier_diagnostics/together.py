@@ -4,8 +4,9 @@ A file holds one comparison per step and one for the whole way. A run of two or 
 short of every step, is judged by the page (SPEC section 3, "A run of steps"): an item's
 pair is its result in the state before the run's first step and in the state after its last,
 two built states, never a sum. It is judged by the one rule, with the largest tolerance of
-the run's steps and per indicator the largest noise measured in any of them (the builds
-inside a run cancel); a run has no verdict.
+the run's steps and per indicator the sum of the noise of those two states (section 5.3):
+the pair holds no result of a state inside the run, so neither does its noise. In a file whose
+states carry no noise the run is judged without noise. A run has no verdict.
 
 Steps apart are not judged together on a chain: each step was measured with every step
 before it applied, so its difference belongs to that place in the order. Any set of fixes
@@ -36,7 +37,7 @@ def counts(data: Mapping, m: Mapping, first: int, last: int) -> dict:
     chosen = range(first, last + 1)
     taken = [steps[k] for k in chosen]
     tolerance = max(s["tolerance"]["value"] for s in taken)
-    noise = fileformat.noise_together(taken)
+    noise = fileformat.pair_noise(data, first, last + 1)
     floors = {(f["indicator"], f["unit"]): f["value"] for f in data["rule"]["floors"]}
     ids = [i["id"] for i in data["indicators"]]
     nstates = len(data["states"])

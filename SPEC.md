@@ -56,14 +56,17 @@ step 0 is counted as movement, never as better (see [A22](#11-acceptance-cases))
 A **state** is one set of results: an item's result per indicator. The first state may be
 the published results (`kind: "published"`); every other state is a build (`kind: "build"`).
 A state's `identity` names what makes it: commit, release, machine, and the solver, since
-two solvers on one package differ by about 3e-7.
+two solvers on one package differ by about 3e-7. A build has a **noise**: how far two builds
+of it differ, measured (section 5.3), or "not measured". The published results have no
+builds and carry none: they are exact.
 
 A **step** goes from one state to the next. Its kind is free text that the writer
 chooses (`reproduction`, `fix`, `mapping`, `contribution`, `rebuild`, ...). A step has:
 
 - a **claim** (optional): what it says it moves (section 6);
 - a **tolerance**: how far two results may differ and still agree;
-- a **noise** (optional): how far two builds of one state differ, measured;
+- a **noise**: the sum of the noise of its two states (section 5.3), worked out, never
+  declared on the step;
 - `explained`: `false` for a step that no cause explains (a rebuild on another machine,
   a change nobody can name). Its moves are counted as what nothing explains.
 
@@ -93,8 +96,9 @@ of two or more consecutive steps, short of every step (steps 3 to 9), is not in 
 the page judges it from every item's results (`together.py` is the reference). Its pair is
 the item's result in the state before the run's first step and in the state after its last:
 two built states, never a sum of steps. It is judged by the one rule (section 5) with the
-largest tolerance of its steps and, per indicator, the largest noise measured in any of
-them, since the builds inside a run cancel (5.3). A run has no verdict: each claim is judged
+largest tolerance of its steps and, per indicator, the sum of the noise of those two states
+(5.3): the pair holds no result of a state inside the run, so neither does its noise. A run
+has no verdict: each claim is judged
 in its own step. A run needs every item, so it needs the matrix, or a file that lists every
 item. Before it draws a run, the page judges each of its steps on its own from the same
 results and holds that to the file's class and direction of the step for every item; a run
@@ -139,9 +143,9 @@ control characters, bounded lengths.
 | `item` | `{"one": "product", "many": "products"}`: the word for an item |
 | `indicator` | Optional. `{"one": "impact category", "many": "impact categories"}`: the word for an indicator, which the page and the summary use; null or absent for "indicator" |
 | `indicators` | `[{id, name, short, unit}]`. An indicator is matched by its exact id, never by a prefix |
-| `rule` | The floors, the tolerance of the whole way and its noise, `total_noise` (section 5.3) |
-| `states` | `[{id, label, about, kind, identity, join}]` in order. `identity` is a short table of texts (commit, release, machine); `join` is what the reader counted when it matched its rows to items: `{compared, unmatched, ambiguous, note}`, or null |
-| `steps` | `[{id, from, to, label, about, kind, explained, link, claim, tolerance, noise}]`, one fewer than the states, each from one state to the next |
+| `rule` | The floors, the tolerance of the whole way and its noise, `total_noise`: the sum of the noise of the first and last state (section 5.3) |
+| `states` | `[{id, label, about, kind, identity, join, noise}]` in order. `identity` is a short table of texts (commit, release, machine); `join` is what the reader counted when it matched its rows to items: `{compared, unmatched, ambiguous, note}`, or null. `noise` is `{measured, between, by, note}`: `between` names two builds of that state and `by` holds a share per indicator measured; every build carries it, measured or not, and the published results never do (exact). A file made before noise belonged to a state has it on no state |
+| `steps` | `[{id, from, to, label, about, kind, explained, link, claim, tolerance, noise}]`, one fewer than the states, each from one state to the next. Where the states carry their noise, a step's `noise` is the sum of its two states', `between` null, and the validator holds it to them; in a file made before, it is the step's own, with its two builds |
 | `counts` | `{steps: {step: {indicator: block}}, total: {indicator: block}}` |
 | `attribution` | `{indicator: {dominant: {step: n}, not_attributable: n, spread: n, unexplained_moved: n}}` (section 7) |
 | `items` | The listed items, worst first (section 10.4) |
@@ -317,16 +321,33 @@ it. Two words, two jobs:
 tolerance (agreement by rule) and noise (measured instability). A third, the reader's
 **size filter**, hides small changes on the page and changes no count (section 10.5).
 
-**The whole way takes the noise of its steps** (`rule.total_noise`): per indicator, the
-largest noise measured in any step, since the builds inside a run of steps cancel. Only
-measured steps count; an indicator no step measured has no noise over the whole way, and the
-page says "not measured", never "identical". A run of steps takes the same: the largest of
-its steps (section 3). A set of fixes measured apart takes their sum (section 16). Decided by Manuel on 17 and
-18 November 2026, after sentier-agribalyse found a move within the noise of its step
-counted as "differs" over the whole way, which no step had found. The cost: one unstable
-step widens "within noise" for the whole way in that indicator. The validator holds
-`total_noise` to the steps' noise; a file made before it has none and is judged without
-noise over the whole way, as it was written.
+**Noise belongs to a state** (decided by Manuel on 17 November 2026). A state's noise is how
+far two builds of it differ; the published results have no builds and are exact. A step, a
+run of steps and the whole way are each a comparison of two states, and each is judged with
+the **sum** of the noise of its two ends, per indicator: rebuilding both ends moves the
+difference between them by up to the sum of their noise, and nothing cancels between two
+ends. A state inside a run adds nothing: the pair holds none of its results. So a step takes
+the noise of its two states, a run that of the state before its first step and the state after
+its last, and the whole way (`rule.total_noise`) that of the first and last state. A set of
+fixes measured on one base takes the same rule, repeated (section 16).
+
+An end that did not measure an indicator adds nothing to it, and the page says at how many of
+the two ends the noise was measured ("measured at 1 of 2 ends"): a noise measured at one end
+is never a bound for the comparison. An indicator measured at no end has no noise, and the page
+says "not measured", never "identical"; the published results read "exact".
+
+Why: sentier-agribalyse measured noise in upstream main, whose random identifiers make water
+use differ by up to 21 % between two builds. The rule before this one took the largest noise
+of any step for the whole way and for a run, so main's noise, a state inside them, put 1,504
+of 2,451 water results "within noise" where the difference from the published results, exact
+at one end and rebuilt bit-identically at the other, was real (A30). The rule before that
+judged the whole way without noise, which called a move within the noise of its last state
+"differs" (A28). Each comparison now carries the noise of what it compares, no more and no
+less.
+
+A file made before noise belonged to a state says a noise per step and never which state it was
+measured on: its steps are judged with their own noise, its runs and its whole way without
+noise, and the page says so. The validator refuses a `total_noise` in such a file.
 
 One number per indicator is coarse: a few unstable items make every smaller difference
 of that indicator "within noise". Two builds that are identical are a finding, shown as
@@ -698,7 +719,8 @@ the page script (`tests/js/page.test.js`), so the two cannot drift apart unnotic
 | A25 | A file is local unless its writer says otherwise | sentier-bafu, sentier-bafu-agribalyse | `test_a25` |
 | A26 | A pair on both sides of the floor that agrees was a zero result, and listed second worst | review of PR 2 | cases A26-* |
 | A27 | A factor too large for a float: Python and the page ordered the pair differently, the page wrote "×Infinity" | review of PR 2 | case A27 |
-| A28 | A move within the noise of its step was counted as "differs" over the whole way, which judged without noise | sentier-agribalyse | `TotalNoise`, node "the whole way takes the largest noise" |
+| A28 | A move within the noise of its step was counted as "differs" over the whole way, which judged without noise | sentier-agribalyse | `StateNoise` (a move within the noise of an end), node "the whole way and a run take the noise of their two ends" |
+| A30 | The noise of a state inside a run or the whole way, taken as the largest of any step, put 1,504 of 2,451 real differences "within noise"; a comparison now takes the sum of the noise of its two ends, never an inner state's | sentier-agribalyse | `StateNoise`, `Together` (sum of two measured ends), node "two states are compared with the sum of their noise", "a run is judged with the sum of the noise of its two ends" |
 | A29 | A run of steps judged by the page has the classes and counts of the Python reference, item by item, is refused where its steps disagree with the file, and steps apart are refused; the page's rule agrees with the Python's on every edge, to the last bit | review of PR 22 | `Together`, `Boundaries`, `tests/fixtures/together.json`, `tests/fixtures/boundaries.json`, node "a run judged by the page", "every edge of the rule", "refuses a run", "steps apart are refused" |
 
 Also tested: the validator refuses a class, direction or verdict that contradicts the

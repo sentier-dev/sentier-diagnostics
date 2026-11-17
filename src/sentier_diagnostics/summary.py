@@ -31,12 +31,16 @@ def md(text) -> str:
     return _MARKUP.sub(r"\\\1", str(text)).replace("@", "@\u2060")
 
 
-def noise_text(noise: Mapping, names: Mapping[str, str]) -> str:
-    """What a step's noise says, with its size per indicator. An indicator the noise holds no
-    size for was not measured; a size above `chain.LARGE_NOISE` is called large.
+def noise_text(noise: Mapping, names: Mapping[str, str], ends: int | None = None) -> str:
+    """What a noise says, with its size per indicator: a state's, measured between two of its
+    builds, or that of a comparison, the sum of its two states' (`between` is null), measured
+    at `ends` of its two ends. An indicator the noise holds no size for was not measured; a
+    size above `chain.LARGE_NOISE` is called large.
 
     >>> noise_text({"measured": True, "between": ["a", "b"], "by": {"w": 0.0244, "c": 0.0}}, {"w": "Water", "c": "Climate", "t": "Tox"})
     'noise measured between a and b: Water 2.4 % (large), Climate identical; Tox not measured'
+    >>> noise_text({"measured": True, "between": None, "by": {"w": 0.0244}}, {"w": "Water"}, ends=1)
+    'noise of its two states, measured at 1 of 2 ends: Water 2.4 % (large)'
     """
     if not noise["measured"]:
         return "noise not measured"
@@ -47,7 +51,10 @@ def noise_text(noise: Mapping, names: Mapping[str, str]) -> str:
             said.append(f"{name} identical" if size == 0 else
                         f"{name} {size * 100:.2g} %" + (" (large)" if size > chain.LARGE_NOISE else ""))  # fmt: skip
     absent = [name for key, name in names.items() if key not in noise["by"]]
-    between = f"noise measured between {md(noise['between'][0])} and {md(noise['between'][1])}"
+    if noise["between"] is None:
+        between = "noise of its two states" + (f", measured at {ends} of 2 ends" if ends is not None and ends < 2 else "")
+    else:
+        between = f"noise measured between {md(noise['between'][0])} and {md(noise['between'][1])}"
     return between + ": " + (", ".join(said) or "no result beyond the floor in both builds") + (
         "; " + ", ".join(absent) + " not measured" if absent else ""
     )
@@ -129,9 +136,26 @@ def text(data: Mapping) -> str:
             + f" | {largest} | {_n(said['spread'])} | {_n(said['not_attributable'])} | {_n(said['unexplained_moved'])} |"
         )
     out += ["", "## Rule", ""]
-    for step in data["steps"]:
+    by_state = fileformat.states_carry_noise(data)
+    order = data["states"]
+
+    def ends(first, last, noise):
+        """At how many of the two ends the noise was measured, the fewest over its indicators."""
+        keys = noise["by"] or {}
+        return min((fileformat.ends_known(first, last, key) for key in keys), default=2)
+
+    if by_state:
+        for one in order:
+            said = "exact: the published results have no builds" if one["kind"] == "published" else noise_text(one["noise"], names)
+            out.append(f"- {md(one['label'])}: {said}")
+    for k, step in enumerate(data["steps"]):
         tol = step["tolerance"]
-        out.append(f"- {labels[step['id']]}: tolerance {tol['value']:g} ({tol['basis']}); {noise_text(step['noise'], names)}")
+        said = noise_text(step["noise"], names, ends(order[k], order[k + 1], step["noise"]) if by_state else None)
+        out.append(f"- {labels[step['id']]}: tolerance {tol['value']:g} ({tol['basis']}); {said}")
+    if by_state:
+        total = fileformat.noise_of_states(order[0], order[-1])
+        out.append(f"- The whole way: tolerance {data['rule']['total_tolerance']:g}; "
+                   f"{noise_text(total, names, ends(order[0], order[-1], total))}")  # fmt: skip
     floors = data["rule"]["floors"]
     out.append(
         f"- Floors: {len(floors)}, one per {word['one']} and reference unit, "

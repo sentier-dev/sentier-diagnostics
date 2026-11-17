@@ -11,7 +11,7 @@ Five states of ten made-up items in three indicators:
 What it must show, at least once each:
 
     agrees            most values in every step
-    within noise      Oats, water use, in mapping-2: less than the rebuild differs
+    within noise      Oats, water use, in rebuilt and mapping-2: less than two builds differ
     differs           Wheat, climate change, in fix-1: down 10 %
     beyond 10x        Tomato, water use, in mapping-2: 25 times as much
     zero reference    Machine hour, toxicity, in mapping-2: from 0 to a result
@@ -103,15 +103,21 @@ VALUES = {
 }
 
 
-def steps() -> list[dict]:
-    # noise beyond the floors the chain counts with: those of its first state
+def rebuild_noise() -> dict:
+    """The noise of commit 0000002, from its two builds (With fix 1 and Rebuilt): it belongs to
+    both states, each a build of that commit. Taken beyond the floors the chain counts with,
+    those of its first state."""
     units = {item: about[1] for item, about in ITEMS.items()}
     floors = rule.floors_of(PUBLISHED, units)
-    noise = {
+    by = {
         key: chain.noise_of(FIX_1[key], REBUILT[key],
                             floor={item: floors[(key, unit)][0] for item, unit in units.items()})  # fmt: skip
         for key in FIX_1
     }
+    return chain.noise(("fix-1", "rebuilt"), by, "Two builds of commit 0000002, on two machines.")
+
+
+def steps() -> list[dict]:
     return [
         chain.step(
             "step-0",
@@ -157,7 +163,6 @@ def steps() -> list[dict]:
                 ],
                 by=claims.origin("code", "reach of the changed links"),
             ),
-            noise=chain.noise(("fix-1", "rebuilt"), noise, "One pair of builds of one state."),
         ),
     ]
 
@@ -222,8 +227,9 @@ def _made(builder, **more):
                         join={"compared": 10, "unmatched": 1, "ambiguous": 0,
                               "note": "One published row names no item of the build."}),
             chain.state("repro", "Recomputed", identity={"commit": "0000001"}),
-            chain.state("fix-1", "With fix 1", identity={"commit": "0000002"}),
-            chain.state("rebuilt", "Rebuilt", identity={"commit": "0000002", "machine": "second"}),
+            chain.state("fix-1", "With fix 1", identity={"commit": "0000002"}, noise=rebuild_noise()),
+            chain.state("rebuilt", "Rebuilt", identity={"commit": "0000002", "machine": "second"},
+                        noise=rebuild_noise()),  # fmt: skip
             chain.state("mapping-2", "With mapping 2", identity={"commit": "0000003"}),
         ],  # fmt: skip
         steps=steps(),

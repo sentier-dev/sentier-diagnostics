@@ -202,7 +202,7 @@
   function noiseText(noise, ids, many) {
     if (!noise || !noise.measured) return 'not measured';
     var by = noise.by || {};
-    var between = ' between ' + noise.between.join(' and ');
+    var between = noise.between ? ' between ' + noise.between.join(' and ') : ' at its two states';
     var keys = Object.keys(by);
     var all = ids || keys;
     var absent = all.filter(function (k) { return !(k in by); }).length;
@@ -295,18 +295,35 @@
   // applied, so its difference belongs to that place in the order (SPEC section 3).
   function runPair(values, first, last) { return [values[first], values[last + 1]]; }
 
-  // the noise of a run of steps, per indicator: the largest measured in any of them
-  // (fileformat.noise_together; the builds inside a run cancel); an indicator none measured
-  // is left out, not measured
-  function noiseTogether(steps) {
-    var out = {};
-    steps.forEach(function (s) {
-      if (!s.noise || !s.noise.measured) return;
+  // whether a file says the noise of each built state (SPEC 5.3); one made before noise
+  // belonged to a state says a noise per step, never which state it was measured on. The
+  // published results carry none: they are exact (fileformat.states_carry_noise)
+  function statesCarryNoise(d) {
+    return d.states.every(function (s) { return s.kind === 'published' || (s.noise !== undefined && s.noise !== null); });
+  }
+
+  // the noise two states are compared with, per indicator: the sum of the noise of the two,
+  // since rebuilding both ends moves their difference by up to the sum of theirs. The
+  // published results are exact and add nothing; an indicator measured at no end is left
+  // out, not measured (fileformat.noise_of_states, summed in the same order)
+  function noiseOfStates(first, last) {
+    var out = {}, any = false;
+    [first, last].forEach(function (s) {
+      if (s.kind === 'published' || !s.noise || !s.noise.measured) return;
+      any = true;
       Object.keys(s.noise.by || {}).forEach(function (key) {
-        out[key] = Object.prototype.hasOwnProperty.call(out, key) ? Math.max(out[key], s.noise.by[key]) : s.noise.by[key];
+        out[key] = (Object.prototype.hasOwnProperty.call(out, key) ? out[key] : 0) + s.noise.by[key];
       });
     });
-    return out;
+    return any ? out : null;
+  }
+
+  // at how many of two ends the noise of one indicator is known: the published results
+  // (exact) or a build that measured it (fileformat.ends_known)
+  function endsKnown(first, last, key) {
+    return [first, last].filter(function (s) {
+      return s.kind === 'published' || (s.noise && s.noise.measured && Object.prototype.hasOwnProperty.call(s.noise.by || {}, key));
+    }).length;
   }
 
   // the reader's own size filter: it hides values, it changes no class and no count.
@@ -427,6 +444,7 @@
     var noise = d.rule.total_noise;
     if (noise !== undefined && (!noise || typeof noise !== 'object' || Array.isArray(noise) ||
         Object.keys(noise).some(function (key) { return typeof noise[key] !== 'number'; }))) return 'the noise of the whole way is not a number per indicator';
+    if (noise !== undefined && !statesCarryNoise(d)) return 'the noise of the whole way is that of its first and last state, and the states of the file carry none';
     return null;
   }
 
@@ -808,7 +826,8 @@
 
     // a run of steps judged over every item, with the rule of the file: its pair (the two
     // built states it lies between), its class with the largest tolerance of its steps and the
-    // largest noise measured in them, and its counts. Kept until another run is chosen.
+    // sum of the noise of those two states (none of a state inside it), and its counts. Kept
+    // until another run is chosen.
     // Returns why it cannot be, or null.
     function judgeRun(set) {
       var key = set.join(',');
@@ -821,8 +840,8 @@
       }
       var steps = set.map(function (k) { return D.steps[k]; });
       var tolerance = Math.max.apply(null, steps.map(function (s) { return s.tolerance.value; }));
-      var noise = noiseTogether(steps);
       var first = set[0], last = set[set.length - 1], ids = indicatorIds();
+      var noise = statesCarryNoise(D) ? noiseOfStates(D.states[first], D.states[last + 1]) || {} : {};
       var blocks = {};
       ids.forEach(function (id) { blocks[id] = emptyBlock(id); });
       heldAll().forEach(function (row) {
@@ -1006,20 +1025,38 @@
       return claim;
     }
 
-    // the noise a set of steps is judged with, per indicator, in words: the largest measured
-    // in any of them; "not measured" where none measured it, never "identical"
-    function noiseOfSet(by, where) {
+    // what one state's noise is: the published results are exact; a build's was measured or not
+    function endSaid(s) {
+      return s.label + ' ' + (s.kind === 'published' ? 'exact' : s.noise && s.noise.measured ? 'measured' : 'not measured');
+    }
+    // the noise two states are compared with, in words: the sum of theirs, at how many ends it
+    // was measured, and its size; "not measured" where no end measured it, never "identical".
+    // Null for a file whose states carry no noise.
+    function pairNoiseSaid(first, last) {
+      if (!statesCarryNoise(D)) return null;
+      var a = D.states[first], b = D.states[last];
+      var by = noiseOfStates(a, b) || {};
       var keys = Object.keys(by);
-      if (!keys.length) return 'not measured in ' + where;
+      var head = 'the sum of its two ends\' (' + endSaid(a) + ', ' + endSaid(b) + ')';
+      if (!keys.length) return head + ': not measured';
       var all = indicatorIds().length;
+      var known = Math.min.apply(null, keys.map(function (k) { return endsKnown(a, b, k); }));
       var largest = Math.max.apply(null, keys.map(function (k) { return by[k]; }));
-      return 'the largest measured in ' + where + ', per ' + indWord(false) +
+      return head + (known < 2 ? ', measured at ' + known + ' of 2 ends' : '') +
         (keys.length < all ? ', for ' + keys.length + ' of ' + all + ' ' + indWord(true) + ' (not measured for the others)' : '') +
         (largest === 0 ? ': identical builds' : largest > LARGE_NOISE ? '; large: up to ' + formatNumber(largest * 100) + ' %' : '');
     }
     function totalNoiseSaid() {
-      if (!('total_noise' in D.rule)) return 'none: this file was made before the whole way took the noise of its steps';
-      return noiseOfSet(D.rule.total_noise, 'any step');
+      if (!('total_noise' in D.rule)) return 'none: this file was made before noise belonged to a state';
+      return pairNoiseSaid(0, D.states.length - 1);
+    }
+    function runNoiseSaid(first, last) {
+      return pairNoiseSaid(first, last + 1) || 'none: this file says the noise of each step, never of the state it was measured on, so a run of steps is compared without noise';
+    }
+    // a step's noise in words: that of its two states, or, in a file made before noise
+    // belonged to a state, its own
+    function stepNoiseSaid(k) {
+      return pairNoiseSaid(k, k + 1) || noiseText(D.steps[k].noise, indicatorIds(), indWord(true));
     }
 
     // under the strip: what the chosen comparison is, the claim of its step and who made it,
@@ -1047,7 +1084,7 @@
       }
       if (!s.explained) node.appendChild(el('p', { cls: 'sd-error', text: 'Nothing explains this step.' }));
       node.appendChild(el('p', { cls: 'sd-claim' }, [el('span', { cls: 'sd-claim-label', text: 'Claim' })].concat(claimParts(s))));
-      node.appendChild(el('p', { cls: 'sd-quiet', text: 'Tolerance ' + s.tolerance.value + ' (' + s.tolerance.basis + '). Noise ' + noiseText(s.noise, indicatorIds(), indWord(true)) + '.' }));
+      node.appendChild(el('p', { cls: 'sd-quiet', text: 'Tolerance ' + s.tolerance.value + ' (' + s.tolerance.basis + '). Noise ' + stepNoiseSaid(k) + '.' }));
     }
 
     function renderSetSaid(node) {
@@ -1076,7 +1113,7 @@
         node.appendChild(el('details', { cls: 'sd-quiet-steps' }, [el('summary', { text: 'Steps ' + runWords(runsOf(quiet)) +
           ': nothing moved in any of them' + (claimed ? ', as each claims.' : '.') }), folded]));
       }
-      node.appendChild(el('p', { cls: 'sd-quiet', text: 'Tolerance ' + C.tolerance + ', the largest of these steps. Noise ' + noiseOfSet(C.noise, 'these steps') +
+      node.appendChild(el('p', { cls: 'sd-quiet', text: 'Tolerance ' + C.tolerance + ', the largest of these steps. Noise ' + runNoiseSaid(C.set[0], C.set[C.set.length - 1]) +
         '. No verdict: each claim is judged in its own step. This page works out the classes with the rule of the file, from the two states, after holding it to the file\'s own class of each of these steps for every ' + D.item.one + '.' }));
     }
 
@@ -1106,7 +1143,7 @@
       var body = el('tbody');
       D.steps.forEach(function (s, k) {
         var verdict = function (name) { return s.claim ? n(sumOver(s.id, function (b) { return b.verdicts[name]; })) : '—'; };
-        var noise = noiseText(s.noise, indicatorIds(), indWord(true));
+        var noise = stepNoiseSaid(k);
         // the step from the published results: what moved there is the residual the chain
         // starts from, not a regression, whatever its claim says
         var unrepro = sumOver(s.id, moved);
@@ -1526,8 +1563,19 @@
       body.appendChild(el('p', null, ['Every value is put into one class by one rule, in this order: missing, near zero, agrees, within noise (both only where the two share a sign), zero reference, zero result, sign change, beyond 10x, differs. ' +
         'Direction is up where the result after is larger as a signed number, down otherwise; colour follows the direction only. ' +
         'Beyond 10x: one size more than ' + D.rule.beyond + ' times the other. The whole way is counted with a tolerance of ' + D.rule.total_tolerance + ', the largest of the steps, and noise ' + totalNoiseSaid() + '. ' +
-        'Several steps chosen together are counted by this page with the same rule, the largest tolerance of their steps and the largest noise measured in them, from the result before the first chosen step and the difference each made added to it; no verdict. ' +
+        'Noise belongs to a state: how far two builds of it differ. A step, a run of steps and the whole way are compared with the sum of the noise of their two ends, since rebuilding both moves the difference by up to the sum; a state inside a run adds nothing, as the pair holds none of its results. The published results are exact. ' +
+        'Several steps chosen together are always a run: this page counts them with the same rule and the largest tolerance of their steps, from the result before the first chosen step and the result after the last; no verdict. ' +
         'The matrix shows the result after divided by the result before; the ratio and the strength of its colour are a display, and change no class.']));
+      if (statesCarryNoise(D)) {
+        var stateNoise = el('ul', { cls: 'sd-quiet' });
+        D.states.forEach(function (st) {
+          var said = st.kind === 'published' ? 'exact: the published results have no builds'
+            : noiseText(st.noise, indicatorIds(), indWord(true)) + (st.noise.measured ? ': ' + Object.keys(st.noise.by).map(function (k) { return indicatorName(k) + ' ' + formatNumber(st.noise.by[k]); }).join(', ') : '');
+          stateNoise.appendChild(el('li', { text: st.label + ': ' + said }));
+        });
+        body.appendChild(el('h4', { text: 'Noise of each state' }));
+        body.appendChild(stateNoise);
+      }
       var stepsTable = el('table', null, [el('thead', null, [el('tr', null, ['Step', 'Tolerance', 'Basis', 'Note', 'Noise'].map(function (h) { return el('th', { scope: 'col', text: h }); }))])]);
       var tb = el('tbody');
       D.steps.forEach(function (s) {
@@ -2134,7 +2182,7 @@
     sizeAtLeast: sizeAtLeast, cellView: cellView, ratioView: ratioView, severityKey: severityKey, compareKeys: compareKeys,
     bandStep: bandStep, bandOf: bandOf, checkShape: checkShape, checkMatrix: checkMatrix, matrixRows: matrixRows,
     safeLink: safeLink, safeName: safeName, splitOf: splitOf, splitText: splitText, distance: distance, quantileTexts: quantileTexts, RANK: RANK,
-    judge: judge, runsOf: runsOf, runPair: runPair, noiseTogether: noiseTogether,
+    judge: judge, runsOf: runsOf, runPair: runPair, noiseOfStates: noiseOfStates, endsKnown: endsKnown, statesCarryNoise: statesCarryNoise,
     mount: mount, mountAll: mountAll };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else if (typeof global.document !== 'undefined') {

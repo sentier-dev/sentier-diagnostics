@@ -552,6 +552,7 @@ test('steps count from 1 where the chain does not start from the published resul
   assert.equal(first.byId['steps-zero'].hidden, false);
   const data = example();
   data.states[0].kind = 'build';
+  data.states[0].noise = { measured: false, between: null, by: null, note: null }; // a build says its noise
   const drawn = dom.page(data);
   assert.equal(drawn.byId.content.hidden, false);
   assert.equal(drawn.byId['steps-zero'].hidden, true);
@@ -840,8 +841,19 @@ test('a run of steps is the two built states it lies between, never a sum', () =
   assert.deepEqual(page.runPair([1, 2, 2.5, 4], 1, 2), [2, 4]);
   assert.deepEqual(page.runPair([1, null, 2.5, 4], 2, 2), [2.5, 4]);
   assert.deepEqual(page.runPair([1, 2, null, 4], 0, 1), [1, null]);
-  assert.deepEqual(page.noiseTogether([{ noise: { measured: true, by: { a: 1e-9 } } }, { noise: { measured: false, by: null } },
-    { noise: { measured: true, by: { a: 3e-9, b: 2e-9 } } }]), { a: 3e-9, b: 2e-9 });
+});
+
+test('two states are compared with the sum of their noise; the published results are exact', () => {
+  const built = (by) => ({ kind: 'build', noise: { measured: by !== null, between: by && ['x', 'y'], by: by, note: null } });
+  const published = { kind: 'published' };
+  assert.deepEqual(page.noiseOfStates(built({ a: 1e-9 }), built({ a: 3e-9, b: 2e-9 })), { a: 1e-9 + 3e-9, b: 2e-9 });
+  assert.deepEqual(page.noiseOfStates(published, built({ a: 0 })), { a: 0 });
+  assert.equal(page.noiseOfStates(published, built(null)), null);
+  assert.equal(page.endsKnown(published, built({ a: 0.1 }), 'a'), 2);
+  assert.equal(page.endsKnown(built(null), built({ a: 0.1 }), 'a'), 1);
+  assert.equal(page.endsKnown(built({ b: 0.1 }), built(null), 'a'), 0);
+  assert.equal(page.statesCarryNoise({ states: [published, built(null)] }), true);
+  assert.equal(page.statesCarryNoise({ states: [published, { kind: 'build' }] }), false);
 });
 
 test('a run judged by the page has the classes and counts of the Python reference, item by item', () => {
@@ -880,6 +892,18 @@ test('a run is judged with the largest tolerance of its steps, never the smalles
   const run = opened(runAddress(mixed.data, mixed.first, mixed.last));
   assert.deepEqual(run.t, mixed.classes.t);
   assert.deepEqual(mixed.classes.t, { 'x:a': 'agrees', 'x:b': 'agrees' });
+});
+
+test('a run is judged with the sum of the noise of its two ends, as the Python reference', () => {
+  // States 1 and 3 measured 3 % and 1 %: q moved by 3.4 % between them (tests/test_together.py)
+  const sum = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'together.json'), 'utf8')).noise;
+  const drawn = dom.page(sum.data, undefined, { globals: { SENTIER_DIAGNOSTICS_MATRIX: sum.matrix } });
+  drawn.open(runAddress(sum.data, sum.first, sum.last));
+  const run = gridClasses(drawn, sum.data);
+  assert.ok('q' in run && 'n' in run, Object.keys(run).join(','));
+  for (const id of Object.keys(run)) assert.deepEqual(run[id], sum.classes[id], id);
+  assert.equal(sum.classes.q['x:a'], 'within noise');
+  assert.match(drawn.byId['step-said'].textContent, /Noise the sum of its two ends' \(State 1 measured, State 3 measured\)/);
 });
 
 test('the strip: the whole way first, then a cell per step, its bar as high as what moved in it', () => {
@@ -991,7 +1015,8 @@ test('the list finds steps by number, name or kind, and shows those where someth
   const quiet = dom.page(still);
   quiet.byId['pick-moved'].checked = true;
   quiet.byId['pick-moved'].dispatch('change', {});
-  assert.deepEqual(quiet.byId['pick-list'].querySelectorAll('button[data-row]').map((row) => +row.getAttribute('data-row')), [0, 2, 3]);
+  // Rebuilt's one move (oats' water use) is within the noise of its two builds: nothing moved
+  assert.deepEqual(quiet.byId['pick-list'].querySelectorAll('button[data-row]').map((row) => +row.getAttribute('data-row')), [0, 3]);
 });
 
 test('without every item no run is judged: said why, and one step and the whole way remain', () => {
@@ -1098,19 +1123,30 @@ test('Shift and an arrow key grow the steps chosen, and shrink them back', () =>
   assert.deepEqual(pressed(drawn), [data.steps[1].id]);
 });
 
-test('the whole way takes the largest noise measured in any step; a file made before says it took none', () => {
+test('the whole way and a run take the noise of their two ends only; a file made before says it has none', () => {
+  // the example measured noise in With fix 1 and Rebuilt, two builds of one commit: the whole
+  // way runs from the published results (exact) to Mapping 2 (not measured), and takes none
   const data = example();
   const drawn = dom.page(data);
-  // the example measured noise in one step, 2.4 % in water: large, and said so
-  assert.match(drawn.byId['step-said'].textContent, /Noise the largest measured in any step, per indicator; large: up to 2\.439 %\./);
-  assert.match(drawn.byId['rule-body'].textContent, /and noise the largest measured in any step, per indicator; large: up to 2\.439 %\./);
+  assert.match(drawn.byId['step-said'].textContent, /Noise the sum of its two ends' \(Published exact, With mapping 2 not measured\): not measured\./);
+  assert.match(drawn.byId['rule-body'].textContent, /With fix 1: measured between fix-1 and rebuilt/);
+  assert.match(drawn.byId['rule-body'].textContent, /Published: exact: the published results have no builds/);
+  // one step: Rebuilt is two builds, each measured, so its noise is their sum
+  drawn.open('step=' + data.steps[2].id);
+  assert.match(drawn.byId['step-said'].textContent, /Noise the sum of its two ends' \(With fix 1 measured, Rebuilt measured\); large: up to 4\.878 %\./);
+  // a run from Recomputed (not measured) to Rebuilt: measured at one end
+  drawn.open(runAddress(data, 1, 2));
+  assert.match(drawn.byId['step-said'].textContent, /Noise the sum of its two ends' \(Recomputed not measured, Rebuilt measured\), measured at 1 of 2 ends; large: up to 2\.439 %\./);
+  // a file made before noise belonged to a state: its whole way and its runs have none
   const older = example();
   delete older.rule.total_noise;
+  older.states.forEach((st) => delete st.noise);
   const old = dom.page(older);
-  assert.match(old.byId['step-said'].textContent, /Noise none: this file was made before the whole way took the noise of its steps\./);
-  const none = example();
-  none.rule.total_noise = {};
-  assert.match(dom.page(none).byId['step-said'].textContent, /Noise not measured in any step\./);
+  assert.match(old.byId['step-said'].textContent, /Noise none: this file was made before noise belonged to a state\./);
+  // one that took the whole way's noise from its steps is refused
+  const guessed = example();
+  guessed.states.forEach((st) => delete st.noise);
+  assert.equal(dom.page(guessed).byId.content.hidden, true);
 });
 
 test('a matrix result written "=" is the result before it, and a "=" that stands first is refused', () => {

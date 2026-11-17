@@ -44,8 +44,10 @@ def tolerance(value=None, basis=None, note=None) -> dict:
 
 def noise(between=None, by=None, note=None) -> dict:
     """What two builds of one state differ by, per indicator; not measured without `between`.
-    An indicator whose noise is None (`noise_of` found no pair to take it from) is left out:
-    its noise was not measured, which is not the same as two identical builds."""
+    It belongs to the state that was built twice (`state(..., noise=...)`), never to a step: a
+    step and a run are compared with the noise of the two states they lie between (SPEC
+    section 5.3). An indicator whose noise is None (`noise_of` found no pair to take it from) is
+    left out: its noise was not measured, which is not the same as two identical builds."""
     if not between:
         return {"measured": False, "between": None, "by": None, "note": note}
     found = {k: v for k, v in (by or {}).items() if v is not None}
@@ -88,7 +90,11 @@ def noise_of(first: Mapping[str, float | None], second: Mapping[str, float | Non
 def step(id: str, label: str, *, kind: str, explained: bool = True, about: str | None = None,
          link: str | None = None, claim: dict | None = None, tolerance: dict | None = None,
          noise: dict | None = None) -> dict:  # fmt: skip
-    """One step between two states, as `build` takes it."""
+    """One step between two states, as `build` takes it. Its noise is that of its two states,
+    worked out by `build`; a noise given here is refused, since it cannot say which state was
+    built twice."""
+    if noise is not None:
+        raise ValueError(NOISE_ON_A_STEP.format(id=id))
     return {
         "id": id,
         "label": label,
@@ -98,13 +104,25 @@ def step(id: str, label: str, *, kind: str, explained: bool = True, about: str |
         "link": link,
         "claim": claim,
         "tolerance": tolerance,
-        "noise": noise,
     }
 
 
+#: Why a step takes no noise of its own.
+NOISE_ON_A_STEP = (
+    "step {id!r}: noise belongs to the state that was built twice: give it to `chain.state`; "
+    "a step is compared with the noise of its two states (SPEC section 5.3)"
+)
+
+
 def state(id: str, label: str, *, kind: str = "build", about: str | None = None,
-          identity: Mapping[str, str | None] | None = None, join: Mapping | None = None) -> dict:  # fmt: skip
+          identity: Mapping[str, str | None] | None = None, join: Mapping | None = None,
+          noise: dict | None = None) -> dict:  # fmt: skip
     """One state: a set of results. `kind` is "published" for the results its publisher released.
+
+    `noise` is what two builds of this state differ by (`chain.noise`); without it the
+    state's noise was not measured. A step, a run of steps and the whole way are compared with
+    the sum of the noise of the two states they lie between, never with that of a state inside
+    them. The published results have no builds: they are exact and take no noise.
 
     `identity` is a short table of texts (commit, release, machine); an entry whose value is
     None is left out, so that a writer can pass what it may not know.
@@ -115,11 +133,14 @@ def state(id: str, label: str, *, kind: str = "build", about: str | None = None,
     >>> state("b", "Build", identity={"commit": "0e1f5be", "machine": None})["identity"]
     {'commit': '0e1f5be'}
     """
+    if kind == "published" and noise is not None:
+        raise ValueError(f"state {id!r}: the published results have no builds and take no noise: they are exact")
     if join is not None:
         join = {"compared": join["compared"], "unmatched": join.get("unmatched", 0),
                 "ambiguous": join.get("ambiguous", 0), "note": join.get("note")}  # fmt: skip
     return {"id": id, "label": label, "about": about, "kind": kind,
-            "identity": {k: v for k, v in (identity or {}).items() if v is not None}, "join": join}  # fmt: skip
+            "identity": {k: v for k, v in (identity or {}).items() if v is not None}, "join": join,
+            "noise": noise}  # fmt: skip
 
 
 def explanation(text: str, by: dict, *, step: str | None = None, indicator: str | None = None,
@@ -272,9 +293,23 @@ def _build(
             floor_rows.append({"indicator": indicator, "unit": unit, "value": value,
                                "basis": basis, "n": n})  # fmt: skip
 
+    # the states, normalised: each with its noise, measured or not
+    out_states = []
+    for s in states:
+        out = {"id": s["id"], "label": s["label"], "about": s.get("about"),
+               "kind": s.get("kind", "build"), "identity": dict(s.get("identity") or {}), "join": s.get("join")}  # fmt: skip
+        if out["kind"] == "published":
+            if s.get("noise") is not None:
+                raise ValueError(f"state {s['id']!r}: the published results have no builds and take no noise: they are exact")
+        else:
+            out["noise"] = s.get("noise") or noise()
+        out_states.append(out)
+
     # the steps, normalised
     out_steps = []
     for k, one in enumerate(steps):
+        if one.get("noise") is not None:
+            raise ValueError(NOISE_ON_A_STEP.format(id=one["id"]))
         found_claim = one.get("claim")
         out_steps.append({
             "id": one["id"],
@@ -287,10 +322,10 @@ def _build(
             "link": one.get("link"),
             "claim": claims.published(found_claim, tier == "items" and claim_lists) if found_claim else None,
             "tolerance": one.get("tolerance") or tolerance(),
-            "noise": one.get("noise") or noise(),
+            "noise": fileformat.noise_of_states(out_states[k], out_states[k + 1]),
         })  # fmt: skip
     total_tolerance = max(s["tolerance"]["value"] for s in out_steps)
-    total_noise = fileformat.noise_together(out_steps)
+    total_noise = fileformat.noise_of_states(out_states[0], out_states[-1])["by"] or {}
     published_first = states[0].get("kind") == "published"
 
     def judged(k, indicator, item):
@@ -442,12 +477,7 @@ def _build(
             "total_noise": total_noise,
             "floors": floor_rows,
         },
-        "states": [
-            {"id": s["id"], "label": s["label"], "about": s.get("about"),
-             "kind": s.get("kind", "build"), "identity": dict(s.get("identity") or {}),
-             "join": s.get("join")}
-            for s in states
-        ],  # fmt: skip
+        "states": out_states,
         "steps": out_steps,
         "counts": counts,
         "attribution": attribution,
