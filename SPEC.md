@@ -31,8 +31,8 @@ Three rules from Manuel Klarmann (16 November 2026) frame it:
    start. It is never the target of a later step.
 2. The final view is **a chain of steps** from the published results to the current
    build. Each step's share of the whole difference is named, and so is what nothing
-   explains. The split is exact (up to the rounding of floating point, which the page
-   shows: section 7).
+   explains. The split is exact up to the rounding of floating point, which the page
+   shows, and where rounding could reach a printed digit it says so (section 7).
 3. The tool must be possible to trial, establish and maintain **without Laurenz**. The
    code is open; **no data goes into this repository**.
 
@@ -463,13 +463,20 @@ So `dominant` over the steps, `spread` and `not_attributable` add up to the item
 moved over the whole way.
 
 The item view shows each step's share of the item's whole difference, signed, the share of
-the steps nothing explains, and the **sum of the shares it shows**: in floating point that
-sum may differ from 100 % in its last digits, and the page prints what it computed instead
-of a fixed 100 %. Where the steps' differences, taken by size, add up to more than ten
-times the whole difference, the steps **cancel**: their shares would be large, of both
-signs, and partly rounding. The page then prints no shares and says how many times the
-whole difference the steps add up to. It also says why it prints none for an item that
-did not move, that is missing in a state between, or that is missing at either end.
+the steps nothing explains, and the **shares added up**. A share is one difference over
+the whole difference, each rounded once, so it is right to a few roundoffs (2⁻⁵³) of its
+own size and is printed to the digits it holds: one decimal of a percent, four digits from
+1e4 % on. The shares added up are printed as what rounding left of 100 %
+(`100 % − 1.11e−14 %`), never as a fixed 100 %. Where the steps' differences, taken by
+size, add up to more than ten times the whole difference, the steps **cancel**: their
+shares are large and of both signs (`[1, 6, 1.5]`: +1000 % and −900 %, right to the last
+digit). The page prints them and says how many times the whole difference the steps add up
+to. Adding shares rounds off up to (steps + 2) roundoffs of their sizes added up; where
+that could reach the last digit of a sum (0.05 %), from about 10¹² times the whole
+difference, the page adds up neither all the shares nor those of the steps nothing
+explains, and says why. It also says why it prints no share for an item that did not move,
+that is missing in a state between, that is missing at either end, or whose first and last
+results are the same.
 
 A finer split inside a step (by link, by flow) is a breakdown (section 9). sentier-bafu-
 agribalyse can split step 2 by link exactly because LCA is linear, but the ecoinvent unit

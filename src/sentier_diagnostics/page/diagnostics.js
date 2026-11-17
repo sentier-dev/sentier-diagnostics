@@ -94,9 +94,11 @@
   }
 
   // a step's share of the whole difference, signed; never "0.0 %" for a share that is not 0
+  // A share from 1e4 % on is printed as formatNumber prints a number, to four digits: one
+  // decimal of a percent would print more digits than a float holds (1e18 % as nineteen).
   function shareText(part) {
     var v = part * 100, size = Math.abs(v);
-    var text = size === 0 ? '0' : size < 0.1 ? size.toExponential(1) : size.toFixed(1);
+    var text = size === 0 ? '0' : size < 0.1 ? size.toExponential(1) : size < 1e4 ? size.toFixed(1) : formatNumber(size);
     return (v > 0 ? '' : v < 0 ? '−' : '') + text + ' %';
   }
 
@@ -157,39 +159,60 @@
   }
 
   // Steps whose differences add up to more than this many times the whole difference
-  // cancel: their shares would be large and of both signs, and in floating point the
-  // whole may be mostly rounding. The page says so instead of printing them.
+  // cancel: their shares are large and of both signs. The page prints them, and says so.
   var CANCEL = 10;
+  // what one rounding of a double takes off a number, at most, as a part of it
+  var ROUNDOFF = Math.pow(2, -53);
+  // half the last digit a sum of shares is printed to (0.1 %), as a share
+  var LAST_DIGIT = 5e-4;
 
   // how an item's whole difference splits among the steps (SPEC 7): `values` are its
   // results per state, `explained` says per step whether a cause explains it, `totalClass`
-  // is the class of the whole way. The split is exact up to rounding, so the page prints
-  // the sum of the shares it shows, never a fixed 100 %.
+  // is the class of the whole way.
+  //
+  // A share is one difference over the whole difference, each rounded once, so it is right
+  // to a few roundoffs of its own size, and is printed to the digits it holds. A sum of
+  // shares is not: adding them rounds off up to a few roundoffs of every share, and where
+  // the steps cancel that is far more than the sum. `bound` is that rounding, as a share:
+  // (steps + 2) roundoffs of the shares' sizes added up. A sum (all the shares, or those
+  // of the steps nothing explains) is printed only where `bound` stays under its last
+  // digit; all the shares are printed as what rounding left of 100 %, so the page never
+  // prints a fixed 100 %.
   function splitOf(values, explained, totalClass) {
     if (totalClass === 'missing') return { state: 'missing' };
     if (MOVES.indexOf(totalClass) < 0) return { state: 'still' };
     for (var i = 0; i < values.length; i++) if (values[i] === null) return { state: 'gap' };
     var whole = values[values.length - 1] - values[0];
+    if (!whole) return { state: 'level' };
     var diffs = [], gross = 0;
     for (var k = 0; k + 1 < values.length; k++) {
       diffs.push(values[k + 1] - values[k]);
       gross += Math.abs(values[k + 1] - values[k]);
     }
-    if (!whole || gross > CANCEL * Math.abs(whole)) return { state: 'cancel', factor: whole ? gross / Math.abs(whole) : Infinity };
     var shares = diffs.map(function (d) { return d / whole; });
-    var sum = 0, unexplained = 0;
-    shares.forEach(function (part, j) { sum += part; if (!explained[j]) unexplained += part; });
-    return { state: 'split', shares: shares, sum: sum, unexplained: unexplained };
+    var factor = gross / Math.abs(whole);
+    var sum = 0, unexplained = null;
+    shares.forEach(function (part, j) { sum += part; if (!explained[j]) unexplained = (unexplained || 0) + part; });
+    return { state: 'split', shares: shares, sum: sum, unexplained: unexplained, factor: factor,
+      bound: (shares.length + 2) * ROUNDOFF * factor };
   }
 
-  // what the whole way's row says of a split
+  // what the whole way's row says of a split: the shares added up, as what rounding left of
+  // 100 % ("100 % − 1.11e−14 %"), and the part of the steps nothing explains, each where
+  // rounding does not reach its last digit; and that the steps cancel, where they do
   function splitText(split) {
     switch (split.state) {
-      case 'split': return shareText(split.sum) + (split.unexplained ? ', of which nothing explains ' + shareText(split.unexplained) : '');
+      case 'split':
+        var cancel = split.factor > CANCEL ? 'the steps cancel: their differences add up to ' + formatNumber(split.factor) + ' times the whole difference' : '';
+        if (split.bound >= LAST_DIGIT) return 'the shares are not added up: rounding would reach the last digit; ' + cancel;
+        var left = split.sum - 1; // exact: the sum lies within a rounding of 1
+        var said = left === 0 ? '100 %' : '100 % ' + (left > 0 ? '+ ' : '− ') + formatNumber(Math.abs(left) * 100) + ' %';
+        if (split.unexplained !== null) said += ', of which nothing explains ' + shareText(split.unexplained);
+        return said + (cancel ? '; ' + cancel : '');
       case 'still': return 'not split: it did not move';
       case 'gap': return 'not split: missing in a state between';
-      case 'missing': return 'not split: missing in the first or the last state';
-      default: return 'not split: the steps cancel, their differences add up to ' + formatNumber(split.factor) + ' times the whole difference';
+      case 'level': return 'not split: its first and last results are the same';
+      default: return 'not split: missing in the first or the last state';
     }
   }
 
@@ -1829,7 +1852,7 @@
         el('td', { cls: 'num', text: formatNumber(last), title: String(last) }),
         valueCell(row, ind.id, D.steps.length, false),
         el('td', { text: '—' }),
-        el('td', { cls: 'num', text: splitText(split) })
+        el('td', { cls: 'num', text: splitText(split), title: split.state === 'split' ? 'the shares above, added up in floating point: what rounding left of 100 %' : null })
       ]));
       if (isSet(kNow())) {
         var pair = pairOf(row, ind.id, SET);

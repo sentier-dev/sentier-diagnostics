@@ -112,26 +112,50 @@ test('one number style from 1e4 on, never the "e+" of toPrecision', () => {
   assert.equal(page.formatNumber(0.00042), '4.2e−4');
 });
 
-test('an item\'s whole difference is split by the steps, the sum of the shares shown (A18)', () => {
+test('an item\'s whole difference is split by the steps, and the shares added up are what rounding left of 100 % (A18, issue 9)', () => {
   const split = page.splitOf([1, 1.5, 1.75], [true, false], 'differs');
   assert.equal(split.state, 'split');
   assert.deepEqual(split.shares, [2 / 3, 1 / 3]);
-  assert.equal(page.splitText(split), '100.0 %, of which nothing explains 33.3 %');
-  // in floating point the shares need not add up to exactly 1: the page prints their sum
-  const rounded = page.splitOf([0.1, 0.2, 0.7], [true, true], 'differs');
-  assert.equal(page.splitText(rounded), page.shareText(rounded.shares[0] + rounded.shares[1]));
+  assert.equal(page.splitText(split), '100 %, of which nothing explains 33.3 %');
+  // in floating point the shares need not add up to exactly 1: the page prints what is left
+  const rounded = page.splitOf([3, 1.1, 2.2, 0.3], [true, true, true], 'differs');
+  assert.equal(rounded.sum, 0.9999999999999999);
+  assert.equal(page.splitText(rounded), '100 % − 1.11e−14 %');
+  // a step nothing explains is named even where its share is 0
+  assert.equal(page.splitText(page.splitOf([1, 1, 2], [false, true], 'differs')), '100 %, of which nothing explains 0 %');
 });
 
-test('steps that cancel are said to cancel, not split into large shares of both signs (A18)', () => {
+test('steps that cancel are printed, and said to cancel; a sum is withheld only where rounding reaches its last digit (A18, issue 9)', () => {
+  // correct to the last digit printed: +1000 % and −900 %
+  const nineteen = page.splitOf([1, 6, 1.5], [true, true], 'differs');
+  assert.deepEqual(nineteen.shares.map(page.shareText), ['1000.0 %', '−900.0 %']);
+  assert.equal(page.splitText(nineteen), '100 %; the steps cancel: their differences add up to 19 times the whole difference');
+  // under ten times the steps do not cancel, and nothing is said of it
+  assert.equal(page.splitText(page.splitOf([1, 3, 1.5], [true, true], 'differs')), '100 %');
+  // the rounding of the sum stays under its last digit at 4e9 times, and reaches it at 4e12
+  const far = page.splitOf([1, 1e9, 1.5], [true, true], 'differs');
+  assert.deepEqual(far.shares.map(page.shareText), ['2e11 %', '−2e11 %']);
+  assert.equal(page.splitText(far), '100 %; the steps cancel: their differences add up to 4e9 times the whole difference');
+  const farther = page.splitOf([1, 1e12, 1.5], [true, false], 'differs');
+  assert.equal(page.splitText(farther), 'the shares are not added up: rounding would reach the last digit; the steps cancel: their differences add up to 4e12 times the whole difference');
+  // each share is still one difference over the whole, right to the digits it is printed to
   const split = page.splitOf([1, 1e16, 1, 2], [true, true, true], 'differs');
-  assert.equal(split.state, 'cancel');
-  assert.match(page.splitText(split), /^not split: the steps cancel, their differences add up to 2e16 times/);
+  assert.equal(split.state, 'split');
+  assert.deepEqual(split.shares.map(page.shareText), ['1e18 %', '−1e18 %', '100.0 %']);
+  assert.match(page.splitText(split), /^the shares are not added up: rounding would reach the last digit; the steps cancel: their differences add up to 2e16 times/);
+  // a share is printed to four digits from 1e4 % on, never to more digits than a float holds
+  assert.deepEqual([page.shareText(99.99), page.shareText(123.45), page.shareText(-1e16)], ['9999.0 %', '1.235e4 %', '−1e18 %']);
 });
 
 test('an item missing in any state is not split, not even for the steps before the gap (A18)', () => {
   assert.equal(page.splitOf([1, 2, null, 4], [true, true, true], 'differs').state, 'gap');
   assert.equal(page.splitOf([null, 2, 4], [true, true], 'missing').state, 'missing');
   assert.equal(page.splitOf([1, 1, 1], [true, true], 'agrees').state, 'still');
+  // a file whose class says the whole way moved, with its first and last results equal, is
+  // one the validator refuses; the page divides by nothing all the same
+  const level = page.splitOf([1, 2, 1], [true, true], 'differs');
+  assert.equal(level.state, 'level');
+  assert.equal(page.splitText(level), 'not split: its first and last results are the same');
 });
 
 const dom = require('./dom.js');
