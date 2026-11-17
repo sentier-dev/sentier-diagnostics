@@ -152,9 +152,12 @@ test('a number that rounds across a threshold of its style is written as the num
   same(page.shareText, [99.99996], [100]);
   same(page.shareText, [0.000999], [0.001]);
   same(page.ratioShort, [1, 0.009996], [1, 0.01]);
-  // 1.001 − 1 is 0.000999999999999889 in floats: the ratio still reads 1.001 (review of 9a11c09)
-  same(page.ratioText, [1, 1.001], [1, 1.0010001]);
-  same(page.ratioText, [1, 0.99900001], [1, 0.999]);
+  // 1.001 − 1 is 0.000999999999999889 in floats: the ratio still reads 1.001, and a difference
+  // that four digits keep under 0.001 is still written as one (reviews of 9a11c09, 2d0d545)
+  assert.equal(page.ratioText(1, 1.001), '1.001');
+  assert.equal(page.ratioText(1, 0.999), '0.999');
+  assert.equal(page.ratioText(1, 1.0009995), '1 + 9.995e−4');
+  assert.equal(page.ratioText(1, 0.9990005), '1 − 9.995e−4');
   same(page.ratioShort, [1, 999.6], [1, 1000]);
   const all = (v) => ({ p10: v, median: v, p90: v });
   assert.deepEqual(page.quantileTexts(all(0.0099996)), page.quantileTexts(all(0.01)));
