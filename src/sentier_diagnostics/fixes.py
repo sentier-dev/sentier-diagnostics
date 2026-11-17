@@ -17,8 +17,14 @@ labelled:
     estimated   otherwise: drawn, and marked on every cell and count
 
 A set has no verdict: each claim is judged in its own fix. A set's tolerance is the largest
-of its fixes'; its noise is the sum of their noise, with the number of fixes whose noise was
-measured, never read as none.
+of its fixes'. Noise belongs to a build, as it belongs to a state of a chain (SPEC 5.3): the
+base's is that state's (none where the base is the published results, which are exact), a
+fix's is that of the build with it, a built set's that of its build. A fix is judged with the
+sum of the noise of its build and of the one it was measured against. A set's result is a
+build's, or a sum over its fixes, so its noise is the sum, over its fixes, of the noise of each
+fix's build and of the one it was measured against; or that of a build it takes a result from,
+and of the base, where that is larger. It says at how many of those builds the noise is known,
+never reading not measured as none.
 
 A listed pair holds no text: its kind of interaction (one of `PAIR_KINDS`, from where the
 two changes meet in h = c·B·A⁻¹·f), how many items it can reach and the measured size of
@@ -39,7 +45,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from functools import cached_property
 from pathlib import Path
 
@@ -54,6 +60,9 @@ KEYS = {
 #: A key a file may leave out, as in the diagnostics file.
 OPTIONAL_KEYS = {"indicator"}
 OF_KEYS = {"file", "title", "base"}
+#: The noise of the base, when the base is a build; left out where it is the published
+#: results, which are exact (SPEC 5.3).
+OF_OPTIONAL = {"base_noise"}
 #: The rule of the diagnostics file, without the chain's own total tolerance.
 RULE_KEYS = fileformat.RULE_KEYS - {"total_tolerance"}
 FIX_KEYS = {"id", "label", "about", "kind", "explained", "link", "requires", "claim", "tolerance", "noise",
@@ -64,13 +73,19 @@ BUILT_KEYS = {"id", "label", "fixes", "state", "results", "noise"}
 
 #: Where two changes of h = c·B·A⁻¹·f meet, so that their joint result is not the sum of
 #: their effects (SPEC 16.3). Two changes to different factors, or to different entries of
-#: B, add up exactly and are never a pair.
+#: B, add up exactly and are never a pair. In the order of precedence: a pair that meets in
+#: several ways is the first that applies.
+SAME_ENTRY = "same entry"  # both change one number of A, B or c: two edits of one number do not add
 TECHNOSPHERE = "technosphere"  # both change A, and an item's supply chain reaches both
 TECHNOSPHERE_AND_EMISSION = "technosphere and emission"  # A, and an amount of B on a chain the A change shifts
 TECHNOSPHERE_AND_FACTOR = "technosphere and factor"  # A, and the factor of a flow the A change shifts
 EMISSION_AND_FACTOR = "emission and factor"  # an amount of a flow, and that flow's factor
-SAME_ENTRY = "same entry"  # both change one number of A, B or c: two edits of one number do not add
-PAIR_KINDS = (TECHNOSPHERE, TECHNOSPHERE_AND_EMISSION, TECHNOSPHERE_AND_FACTOR, EMISSION_AND_FACTOR, SAME_ENTRY)
+PAIR_KINDS = (SAME_ENTRY, TECHNOSPHERE, TECHNOSPHERE_AND_EMISSION, TECHNOSPHERE_AND_FACTOR, EMISSION_AND_FACTOR)
+
+#: A pair's `largest` where no tolerance makes its build agree with the sum of its effects:
+#: at some item the two lie on two sides of zero, one is zero, or one has no result (SPEC
+#: 16.6). Not null, which says the size was not measured.
+NO_SIZE = "no size"
 
 MAX_FIXES, MAX_BUILT = 1000, 500
 MAX_ITEMS, MAX_BYTES = matrix.MAX_ITEMS, matrix.MAX_BYTES
@@ -91,17 +106,18 @@ IDENTIFIER = re.compile(
 def fix(id: str, label: str, *, kind: str, requires: Iterable[str] = (), explained: bool = True,
         about: str | None = None, link: str | None = None, claim: dict | None = None,
         tolerance: dict | None = None, noise: dict | None = None) -> dict:  # fmt: skip
-    """One fix, as `build` takes it: what a step has (`chain.step`), and the fixes it needs
-    applied first."""
+    """One fix, as `build` takes it: what a step has (`chain.step`), the fixes it needs applied
+    first, and the noise of the build with it (`chain.noise`), which belongs to that build as a
+    state's noise belongs to the state."""
     one = chain.step(id, label, kind=kind, explained=explained, about=about, link=link, claim=claim,
-                     tolerance=tolerance, noise=noise)  # fmt: skip
-    return {**one, "requires": list(requires)}
+                     tolerance=tolerance)  # fmt: skip
+    return {**one, "requires": list(requires), "noise": noise}
 
 
-def pair(a: str, b: str, kind: str, *, reach: int | None = None, largest: float | None = None) -> dict:
-    """Two fixes that can interact: `kind` is one of `PAIR_KINDS`, `reach` how many items the
-    cross term can change, `largest` its measured size (SPEC 16.6); None where not counted or
-    not measured."""
+def pair(a: str, b: str, kind: str, *, reach: int | None = None, largest: float | str | None = None) -> dict:
+    """Two fixes that can interact: `kind` is the first of `PAIR_KINDS` that applies, `reach`
+    how many items the cross term can change, counted on the build with both; `largest` its
+    measured size (`size_of`), or `NO_SIZE`; None where not counted or not measured."""
     return {"fixes": [a, b], "kind": kind, "reach": reach, "largest": largest}
 
 
@@ -121,9 +137,45 @@ def built_set(id: str, label: str, fixes: Iterable[str], results: Mapping, *, st
             "noise": noise or chain.noise()}  # fmt: skip
 
 
-def _cell(full: Mapping, k: int, x: int, at: int, nstates: int):
-    """One result of a matrix: item `k`, indicator `x`, state `at`."""
-    return full["values"][k][x * nstates + at]
+def _rule_of(data: Mapping, added: Iterable) -> dict:
+    """The rule of a fixes file: its diagnostics file's, without the chain's total tolerance,
+    and a floor for every unit only an added item has: 0, from nothing, as the chain gives a
+    unit its first state holds no result in (an added item is in no state of it)."""
+    out = {k: data["rule"][k] for k in sorted(RULE_KEYS)}
+    known = {one["unit"] for one in data["rule"]["floors"]}
+    new = sorted({row[4] for row in added} - known, key=lambda u: (u is None, u or ""))
+    out["floors"] = [*out["floors"], *({"indicator": i["id"], "unit": unit, "value": 0.0, "basis": "none", "n": 0}
+                                       for i in data["indicators"] for unit in new)]  # fmt: skip
+    return out
+
+
+def _expanded(full: Mapping, nstates: int) -> list[list]:
+    """The results of a matrix, item by item, a result written as the one before it
+    (`matrix.SAME`) written out again."""
+    return [matrix.expand(row, nstates) if matrix.SAME in row else row for row in full["values"]]
+
+
+def _results_of(rows: list[list], x: int, at: int, nstates: int) -> list:
+    """The results of expanded matrix rows in indicator `x` and state `at`, item by item."""
+    col = x * nstates + at
+    return [row[col] for row in rows]
+
+
+def _base_noise(data: Mapping, at: int) -> dict | None:
+    """The noise of the state at place `at` of a checked diagnostics file: None where it is the
+    published results, which are exact. A file whose states carry no noise is refused: it never
+    says which state its noise was measured on."""
+    if not fileformat.states_carry_noise(data):
+        raise ValueError(NO_STATE_NOISE)
+    state = data["states"][at]
+    return None if state["kind"] == "published" else state["noise"]
+
+
+#: Why a fixes file needs the noise of the chain's states.
+NO_STATE_NOISE = (
+    "the diagnostics file says no noise of its states: it was made before noise belonged to a "
+    "state (SPEC 5.3), so the base's noise cannot be read from it; make it again"
+)
 
 
 def build(
@@ -152,8 +204,12 @@ def build(
     - `interactions`: `interactions(...)`; not checked where it is None.
     - `built`: `built_set(...)`.
     - `added_items`: `[id, name, place, group, unit]` of items a fix brings that the base
-      does not hold; the base has no result for them.
+      does not hold; the base has no result for them. An added item in a unit no item of the
+      chain has gets the floor the chain gives a unit with no results: 0, from nothing.
     - `file`: the name of the diagnostics file beside it.
+
+    The base's noise is its state's (none where it is the published results); a fix's and a
+    built set's noise are those of their builds.
     """
     ids = [i["id"] for i in data["indicators"]]
     states = [s["id"] for s in data["states"]]
@@ -165,23 +221,25 @@ def build(
     index = {r[0]: k for k, r in enumerate(rows)}
     if len(index) != len(rows):
         raise ValueError("an added item is an item of the base already")
-    base_values = {
-        ind: [_cell(full, k, x, at, nstates) for k in range(m)] + [None] * (len(rows) - m)
-        for x, ind in enumerate(ids)
-    }
+    base_noise = _base_noise(data, at)
+    expanded = _expanded(full, nstates)
+    base_values = {ind: _results_of(expanded, x, at, nstates) + [None] * (len(rows) - m) for x, ind in enumerate(ids)}
     known = [one["id"] for one in fixes]
     unknown = set(results) - set(known)
     if unknown:
         raise ValueError(f"results of fixes that are not given: {sorted(unknown)}")
+    of = {"file": file, "title": data["title"], "base": base}
+    if base_noise is not None:
+        of["base_noise"] = base_noise
     f = {
         "format": FORMAT,
-        "of": {"file": file, "title": data["title"], "base": base},
+        "of": of,
         "title": title,
         "about": about,
         "item": dict(data["item"]),
         **({"indicator": dict(data["indicator"])} if data.get("indicator") else {}),
         "indicators": [dict(i) for i in data["indicators"]],
-        "rule": {k: data["rule"][k] for k in sorted(RULE_KEYS)},
+        "rule": _rule_of(data, rows[m:]),
         "items": rows,
         "base": base_values,
         "fixes": [],
@@ -212,11 +270,12 @@ def build(
         return out
 
     closures: dict[str, frozenset] = {}
-    builds = _Builds(ctx, closures)
+    builds = _Builds(ctx, closures, base_noise)
     nothing = {ind: {} for ind in ids}
     for one in built:
         results_of = sparse(one["results"], f"built set {one['id']!r}", nothing)
         builds.built[frozenset(one["fixes"])] = _columns(results_of)
+        builds.noise[frozenset(one["fixes"])] = one.get("noise") or chain.noise()
         f["built"].append({
             "id": one["id"],
             "label": one["label"],
@@ -253,7 +312,8 @@ def build(
             "counts": None,
         }
         builds.entries[one["id"]] = _columns(made["effect"])
-        made["counts"] = _fix_counts(ctx, made, builds.entries[one["id"]], before)
+        builds.noise[one["id"]] = made["noise"]
+        made["counts"] = _fix_counts(builds, made, builds.entries[one["id"]], before)
         f["fixes"].append(made)
     found = errors(f) or against(f, data, full)
     if found:
@@ -385,21 +445,41 @@ class _Base:
 class _Builds:
     """Every build a file holds, as a column over the base (`{indicator: {item index: result}}`,
     the items where it is not the base): a fix with what it requires (its effect laid over the
-    build of its requirements) and every built set."""
+    build of its requirements) and every built set; and the noise of each, as an end of a
+    comparison (`end`)."""
 
-    def __init__(self, base: _Base, closures: Mapping[str, frozenset]):
+    def __init__(self, base: _Base, closures: Mapping[str, frozenset], base_noise: Mapping | None = None):
         self.base = base
         self.closures = closures  # fix id: every fix it requires, at any depth
         self.entries: dict[str, dict] = {}  # fix id: its written results, by indicator
         self.built: dict[frozenset, dict] = {}  # the fixes of a built set: its results
+        self.noise: dict[str | frozenset, Mapping] = {}  # a fix's id, or a built set's fixes: its noise
+        # the base as an end: the published results are exact
+        self.base_end = {"kind": "published"} if base_noise is None else {"kind": "build", "noise": base_noise}
         self._memo: dict[frozenset, dict] = {}
 
     @classmethod
     def of(cls, f: Mapping) -> _Builds:
-        found = cls(_Base(f), _closures(f))
+        found = cls(_Base(f), _closures(f), f["of"].get("base_noise"))
         found.entries = {one["id"]: _columns(one["effect"]) for one in f["fixes"]}
         found.built = {frozenset(b["fixes"]): _columns(b["results"]) for b in f["built"]}
+        found.noise = {one["id"]: one["noise"] for one in f["fixes"]}
+        found.noise.update((frozenset(b["fixes"]), b["noise"]) for b in f["built"])
         return found
+
+    def end(self, fixes: Iterable[str]) -> tuple[str | frozenset, Mapping] | None:
+        """The build of exactly these fixes that `column` gives, as an end of a comparison:
+        `(what names it, {kind, noise})`, the base being exact where it is the published
+        results; None where the file holds no such build."""
+        fixes = frozenset(fixes)
+        if not fixes:
+            return "", self.base_end
+        top = self.top(fixes)
+        if top is not None and self.column(self.closures[top]) is not None:
+            return top, {"kind": "build", "noise": self.noise[top]}
+        if fixes in self.built:
+            return fixes, {"kind": "build", "noise": self.noise[fixes]}
+        return None
 
     def top(self, fixes: frozenset) -> str | None:
         """The fix that, with what it requires, is exactly these fixes; None where none is."""
@@ -433,13 +513,15 @@ class _Builds:
             found += [b for b in self.built if b < fixes]
         return found
 
-    def composed(self, fixes: frozenset, ind: str, *, built: bool = True) -> dict[int, tuple[float | None, bool]]:
+    def composed(self, fixes: frozenset, ind: str, *, built: bool = True,
+                 used: set | None = None) -> dict[int, tuple[float | None, bool]]:  # fmt: skip
         """A closed set's result in one indicator, at every item one of its fixes changes:
         `{item index: (result, whether it could be formed)}`. Where the fixes that change an
         item all lie in one build inside the set (`covers`), the first such build's result is
         the set's: measured, not summed. Otherwise the base plus each fix's difference against
         what it was measured against. `built=False` leaves the built sets out: the sum a built
-        set is held to stands on the fixes alone."""
+        set is held to stands on the fixes alone. `used` gathers the builds a result was taken
+        from."""
         touching: dict[int, list[str]] = {}
         for y in fixes:
             for k in self.entries[y][ind]:
@@ -455,6 +537,8 @@ class _Builds:
             here = set(ys)
             cover = next((c for c in covers if here <= c), None)
             if cover is not None:
+                if used is not None:
+                    used.add(cover)
                 column = self.column(cover)[ind]
                 out[k] = (column[k] if k in column else base[k], True)
             else:
@@ -489,8 +573,36 @@ def _sum(before: float | None, changes: list[tuple[float | None, float | None]])
     return before + sum(a - b for a, b in changes), True
 
 
-def _level(noise: Mapping, indicator: str) -> float | None:
-    return (noise["by"] or {}).get(indicator) if noise["measured"] else None
+def _level(ends: Iterable[Mapping], indicator: str) -> float | None:
+    """The noise a comparison is judged with in one indicator: the sum of the noise of its ends
+    (`{kind, noise}`, SPEC 5.3), each counted as often as it enters it. The published results
+    are exact and add nothing; an end that did not measure the indicator adds nothing either;
+    None where no end measured it. For two ends it is `fileformat.noise_of_states`, bit for bit.
+
+    >>> built = lambda by: {"kind": "build", "noise": {"measured": by is not None, "between": by and ["x", "y"], "by": by, "note": None}}
+    >>> _level([built({"a": 1e-9}), built({"a": 3e-9})], "a"), _level([{"kind": "published"}, built(None)], "a")
+    (4e-09, None)
+    >>> _level([built({"a": 0.25})] * 3 + [built({"b": 1.0})], "a")
+    0.75
+    """
+    level = None
+    for end in ends:
+        if end["kind"] == "published":
+            continue
+        said = end["noise"]
+        if said["measured"] and indicator in said["by"]:
+            level = (0.0 if level is None else level) + said["by"][indicator]
+    return level
+
+
+def _known(end: Mapping, indicator: str) -> bool:
+    """Whether the noise of an end is known in one indicator: the published results (exact), or
+    a build that measured it (`fileformat.ends_known`)."""
+    return end["kind"] == "published" or (end["noise"]["measured"] and indicator in end["noise"]["by"])
+
+
+def _built(noise: Mapping) -> dict:
+    return {"kind": "build", "noise": noise}
 
 
 def _side(before, after) -> str:
@@ -561,13 +673,14 @@ def _block(base: _Base, ind: str, changed: Mapping[int, float | None], tolerance
             "verdicts": verdicts, "closer": None, "further": None}  # fmt: skip
 
 
-def _fix_counts(base: _Base, one: Mapping, effect: Mapping, before: Mapping) -> dict:
+def _fix_counts(builds: _Builds, one: Mapping, effect: Mapping, before: Mapping) -> dict:
     """A fix's counts: the build of what it requires against that build with its effect, with
-    its own tolerance, noise and claim."""
+    its own tolerance and claim, and the noise of those two builds."""
     tol = one["tolerance"]["value"]
+    ends = [builds.end(builds.closures[one["id"]])[1], _built(one["noise"])]
     return {
-        ind: _block(base, ind, effect[ind], tol, _level(one["noise"], ind), one["claim"], before[ind])
-        for ind in base.ids
+        ind: _block(builds.base, ind, effect[ind], tol, _level(ends, ind), one["claim"], before[ind])
+        for ind in builds.base.ids
     }
 
 
@@ -620,12 +733,41 @@ def _label(f: Mapping, builds: _Builds, names: list[str]) -> str:
 
 def pair_terms(f: Mapping, ids: Iterable[str]) -> dict:
     """How far an estimated set may lie from its sum, to first order: `{value, measured,
-    pairs}`, the value being the sum of the measured sizes of the listed pairs it holds, and
-    None where some were not measured (a pair not measured is never a pair of size 0)."""
+    no_size, pairs}`, the value being the sum of the sizes of the listed pairs it holds; None
+    where some were not measured (a pair not measured is never a pair of size 0) or have no
+    size (`NO_SIZE`), which the counts tell apart."""
     held = held_pairs(f, ids)
-    sizes = [p["largest"] for p in held if p["largest"] is not None]
+    said = [p["largest"] for p in held if p["largest"] is not None]
+    sizes = [x for x in said if x != NO_SIZE]
     value = sum(sizes) if len(sizes) == len(held) else None
-    return {"value": value, "measured": len(sizes), "pairs": len(held)}
+    return {"value": value, "measured": len(said), "no_size": len(said) - len(sizes), "pairs": len(held)}
+
+
+def size_of(summed: Sequence, built: Sequence, floor: Sequence) -> float | str:
+    """The size of a pair's cross term in one indicator (SPEC 16.6), item by item: the
+    smallest tolerance under which its build agrees with the sum of its effects, by the rule.
+    That is the largest relative difference of the two (`rule.relative_difference`) over the
+    items the rule does not call near zero on both sides; `NO_SIZE` where no tolerance is
+    enough: an item where the two lie on two sides of zero, one is zero, or one has no
+    result. A pair's size is the largest over the indicators.
+
+    >>> size_of([1.5, 2.0], [2.0, 2.0], [0.01, 0.01])
+    0.25
+    >>> size_of([1.5], [-0.1], [0.01]), size_of([-0.5], [0.0], [0.01]), size_of([1e-9], [-1e-9], [0.01])
+    ('no size', 'no size', 0.0)
+    """
+    largest = 0.0
+    for s, b, fl in zip(summed, built, floor):
+        if s is None and b is None:
+            continue
+        if s is None or b is None:
+            return NO_SIZE
+        if abs(s) <= fl and abs(b) <= fl:
+            continue
+        if not ((s > 0 and b > 0) or (s < 0 and b < 0)):
+            return NO_SIZE
+        largest = max(largest, rule.relative_difference(s, b))
+    return largest
 
 
 def tolerance_of(f: Mapping, ids: Iterable[str]) -> float:
@@ -634,29 +776,50 @@ def tolerance_of(f: Mapping, ids: Iterable[str]) -> float:
 
 
 def noise_of(f: Mapping, ids: Iterable[str]) -> dict[str, dict]:
-    """The noise of a set, per indicator: `{value, measured, fixes}`, the value being the sum
-    of the noise of the fixes whose noise was measured there, and None where none was: not
-    measured is never none."""
-    fixes = _fixes_of(f, chosen(f, ids)[0])
+    """The noise of a set against the base, per indicator (SPEC 16.5): `{value, known, builds}`.
+
+    A built set's is the sum of the noise of its build and of the base. Any other set's result
+    at an item is a build's, or the base plus each fix's difference against what it was
+    measured against: its value is the sum, over its fixes, of the noise of each fix's build and
+    of the one it was measured against (the base once for each fix measured against it), or,
+    where larger, that of a build a result is taken from and of the base. `builds` counts the
+    builds that enter it, `known` those whose noise is known there (the published results are
+    exact); None where none measured it: not measured is never none."""
+    names = chosen(f, ids)[0]
+    builds = _Builds.of(f)
+    return _set_noise(builds, names, _changed(builds, names)[2])
+
+
+def _set_noise(builds: _Builds, names: list[str], used: Mapping[str, set]) -> dict[str, dict]:
+    whole = builds.end(names)
+    base = ("", builds.base_end)
     out = {}
-    for ind in (i["id"] for i in f["indicators"]):
-        levels = [lv for lv in (_level(one["noise"], ind) for one in fixes) if lv is not None]
-        out[ind] = {"value": sum(levels) if levels else None, "measured": len(levels), "fixes": len(fixes)}
+    for ind in builds.base.ids:
+        if whole is not None:
+            sums = [[base, whole]]
+        else:
+            terms = [end for y in names for end in (builds.end(builds.closures[y]), (y, _built(builds.noise[y])))]
+            sums = [terms, *([base, builds.end(cover)] for cover in sorted(used[ind], key=sorted))]
+        levels = [lv for lv in (_level([end for _, end in one], ind) for one in sums) if lv is not None]
+        every = {name: end for one in sums for name, end in one}
+        out[ind] = {"value": max(levels) if levels else None,
+                    "known": sum(_known(end, ind) for end in every.values()), "builds": len(every)}  # fmt: skip
     return out
 
 
-def _changed(builds: _Builds, names: list[str]) -> tuple[dict, dict]:
-    """The items a closed set changes, per indicator, with its result at each; and the items
-    where no sum can be formed."""
+def _changed(builds: _Builds, names: list[str]) -> tuple[dict, dict, dict]:
+    """The items a closed set changes, per indicator, with its result at each; the items
+    where no sum can be formed; and the builds inside the set a result was taken from."""
     column = builds.column(names)
     if column is not None:
-        return column, {ind: [] for ind in builds.base.ids}
-    changed, cannot = {}, {}
+        return column, {ind: [] for ind in builds.base.ids}, {ind: set() for ind in builds.base.ids}
+    changed, cannot, used = {}, {}, {}
     for ind in builds.base.ids:
-        cells = builds.composed(frozenset(names), ind)
+        used[ind] = set()
+        cells = builds.composed(frozenset(names), ind, used=used[ind])
         changed[ind] = {k: v for k, (v, _) in cells.items()}
         cannot[ind] = sorted(k for k, (_, ok) in cells.items() if not ok)
-    return changed, cannot
+    return changed, cannot, used
 
 
 def compose(f: Mapping, ids: Iterable[str]) -> dict:
@@ -668,7 +831,7 @@ def compose(f: Mapping, ids: Iterable[str]) -> dict:
     there, so that it reads apart from a missing result. A set has no verdict."""
     names, added = chosen(f, ids)
     builds = _Builds.of(f)
-    changed, cannot = _changed(builds, names)
+    changed, cannot, used = _changed(builds, names)
     results = {}
     for ind in builds.base.ids:
         column = list(builds.base.values[ind])
@@ -682,7 +845,7 @@ def compose(f: Mapping, ids: Iterable[str]) -> dict:
         "pairs": held_pairs(f, names),
         "pair_terms": pair_terms(f, names),
         "tolerance": tolerance_of(f, names),
-        "noise": noise_of(f, names),
+        "noise": _set_noise(builds, names, used),
         "results": results,
         "cannot_add": cannot,
     }
@@ -693,8 +856,8 @@ def counts(f: Mapping, ids: Iterable[str]) -> dict:
     estimated set's counts are estimates ("estimated: 153 would differ"). No verdicts."""
     names = chosen(f, ids)[0]
     builds = _Builds.of(f)
-    changed, _ = _changed(builds, names)
-    tol, noise = tolerance_of(f, names), noise_of(f, names)
+    changed, _, used = _changed(builds, names)
+    tol, noise = tolerance_of(f, names), _set_noise(builds, names, used)
     return {
         "label": _label(f, builds, names),
         "by": {ind: _block(builds.base, ind, changed[ind], tol, noise[ind]["value"], None) for ind in builds.base.ids},
@@ -729,13 +892,16 @@ def _errors(f, found: list[str]) -> list[str]:
     of = f["of"]
     if not (
         isinstance(of, dict)
-        and set(of) == OF_KEYS
+        and OF_KEYS <= set(of) <= OF_KEYS | OF_OPTIONAL
         and isinstance(of["file"], str)
         and fileformat.FILE_NAME.fullmatch(of["file"])
         and fileformat.is_text(of["title"], 120)
         and fileformat.is_text(of["base"], fileformat.MAX_ID)
     ):
-        found.append("`of` is not {file, title, base}: a file name, that file's title and a state's id")
+        found.append(
+            "`of` is not {file, title, base}, with `base_noise` where the base is a build: a file name, that "
+            "file's title and a state's id"
+        )
     if not fileformat.is_text(f["title"], 120) or not fileformat.is_optional(f["about"]):
         found.append("`title` is not a short text, or `about` not a text")
     for key in ("item", "indicator"):
@@ -754,6 +920,8 @@ def _errors(f, found: list[str]) -> list[str]:
     floors = _rule(f, found, indicators)
     if not indicators or floors is None or not _items(f, found, indicators, floors):
         return found
+    if isinstance(of, dict) and "base_noise" in of:
+        found += fileformat.noise_errors(of["base_noise"], "`of.base_noise`", indicators)
     n = len(f["items"])
     said_base = f["base"]
     if not (
@@ -769,7 +937,7 @@ def _errors(f, found: list[str]) -> list[str]:
     closures = _requirements(f, found)
     if closures is None:
         return found
-    builds = _Builds(base, closures)
+    builds = _Builds(base, closures, f["of"].get("base_noise"))
     built = _built_sets(f, found, base, builds)
     if built is None or not _fixes(f, found, base, builds):
         return found
@@ -879,29 +1047,6 @@ def _sparse(said, where: str, base: _Base, found: list[str], under: Mapping | No
     return out
 
 
-def _noise_errors(noise, where: str, indicators) -> list[str]:
-    if not (
-        isinstance(noise, dict)
-        and set(noise) == {"measured", "between", "by", "note"}
-        and isinstance(noise["measured"], bool)
-        and fileformat.is_optional(noise["note"])
-    ):
-        return [f"{where}: `noise` is not {{measured, between, by, note}}"]
-    if noise["measured"]:
-        if not (
-            isinstance(noise["between"], list)
-            and len(noise["between"]) == 2
-            and all(fileformat.is_text(n, fileformat.MAX_LABEL) for n in noise["between"])
-            and isinstance(noise["by"], dict)
-            and set(noise["by"]) <= set(indicators)
-            and all(fileformat.is_share(v) for v in noise["by"].values())
-        ):
-            return [f"{where}: measured noise names the two builds and a size per indicator"]
-    elif noise["between"] is not None or noise["by"] is not None:
-        return [f"{where}: noise that was not measured has no builds and no sizes"]
-    return []
-
-
 def _requirements(f, found) -> dict[str, frozenset] | None:
     """Every fix's id and what it requires, at any depth. A fix's requirements come before it
     in `fixes`, so that no fix requires itself through others."""
@@ -988,7 +1133,7 @@ def _built_sets(f, found, base: _Base, builds: _Builds) -> list | None:
         if key in sets:
             found.append(f"{where}: holds the same fixes as another built set")
         sets.add(key)
-        noise = _noise_errors(one["noise"], where, base.ids)
+        noise = fileformat.noise_errors(one["noise"], where, base.ids)
         if noise:
             found += noise
             continue
@@ -996,6 +1141,7 @@ def _built_sets(f, found, base: _Base, builds: _Builds) -> list | None:
         if results is None:
             continue
         builds.built[key] = results
+        builds.noise[key] = one["noise"]
         out.append((one, key, results))
     return None if len(found) > before else out
 
@@ -1033,10 +1179,11 @@ def _fixes(f, found, base: _Base, builds: _Builds) -> bool:
         ):
             found.append(f"{where}: `tolerance` is not {{value, basis, note}}")
             return False
-        noise = _noise_errors(one["noise"], where, base.ids)
+        noise = fileformat.noise_errors(one["noise"], where, base.ids)
         if noise:
             found += noise
             return False
+        builds.noise[one["id"]] = one["noise"]
         before = builds.column(builds.closures[one["id"]])
         if before is None:
             needs = ", ".join(repr(x) for x in sorted(builds.closures[one["id"]]))
@@ -1059,7 +1206,7 @@ def _fixes(f, found, base: _Base, builds: _Builds) -> bool:
         if shape:
             found += shape
             continue
-        again = _fix_counts(base, one, effect, before)
+        again = _fix_counts(builds, one, effect, before)
         for ind in base.ids:
             for key, value in again[ind].items():
                 if written[ind][key] != value:
@@ -1127,8 +1274,11 @@ def _interactions(f, found, closures: Mapping[str, frozenset], n: int) -> dict[f
             found.append(f"{where}: `kind` is not one of {', '.join(PAIR_KINDS)}")
         if one["reach"] is not None and not (fileformat.is_count(one["reach"]) and 0 < one["reach"] <= n):
             found.append(f"{where}: `reach` is not a count of 1 to {n} items, or null")
-        if one["largest"] is not None and not fileformat.is_share(one["largest"]):
-            found.append(f"{where}: `largest` is not a share, or null where it was not measured")
+        if one["largest"] not in (None, NO_SIZE) and not fileformat.is_share(one["largest"]):
+            found.append(
+                f"{where}: `largest` is not a share, {NO_SIZE!r} where no tolerance is enough, or null where it was "
+                "not measured"
+            )
         key = frozenset(named)
         if key in pairs:
             found.append(f"{where}: is listed twice")
@@ -1138,17 +1288,46 @@ def _interactions(f, found, closures: Mapping[str, frozenset], n: int) -> dict[f
 
 def _built_checks(f, found, builds: _Builds, built: list, pairs: Mapping[frozenset, dict]) -> None:
     """A built set the file calls independent must be the sum of its effects; a built pair
-    whose cross term the file measured must lie within it."""
+    whose cross term the file measured must lie within it; a pair with no size must be built,
+    and its build must have none."""
     if not f["interactions"]["checked"]:
         return
     by_id = {one["id"]: one for one in f["fixes"]}
+    for key, one in pairs.items():
+        a, b = one["fixes"]
+        if one["largest"] == NO_SIZE and builds.column(key | builds.closures[a] | builds.closures[b]) is None:
+            found.append(
+                f"the pair {a!r} and {b!r}: has no size, so no set holding it can be drawn from its sum: the "
+                "file holds a build of the two with what they require (a built set)"
+            )
     for one, key, results in built:
         where = f"built set {one['id']!r}"
         held = [p for p in pairs if p <= key]
         if not held:
             found += _disagreements(builds, where, key, by_id, one, results)
+        elif held == [key] and pairs[key]["largest"] == NO_SIZE:
+            found += _sized(builds, where, key, results)
         elif held == [key] and pairs[key]["largest"] is not None:
             found += _disagreements(builds, where, key, by_id, one, results, pairs[key]["largest"])
+
+
+def _sized(builds: _Builds, where: str, key: frozenset, results: Mapping) -> list[str]:
+    """A built pair the file says has no size must have none: where some tolerance makes its
+    build agree with its sum, that tolerance is its size, and the file says it."""
+    base = builds.base
+    sizes = []
+    for ind in base.ids:
+        cells, values = builds.composed(key, ind, built=False), base.values[ind]
+        items = sorted(set(cells) | set(results[ind]))
+        summed = [cells[k][0] if k in cells else values[k] for k in items]
+        if not all(cells[k][1] for k in items if k in cells):
+            return []  # no sum at some item: nothing to measure against
+        size = size_of(summed, [results[ind].get(k, values[k]) for k in items], [base.floor[ind][k] for k in items])
+        if size == NO_SIZE:
+            return []
+        sizes.append(size)
+    size = _number(max(sizes))
+    return [f"{where}: the file says its pair has no size, and its build lies within {size} of the sum of its effects"]
 
 
 #: How many disagreements of one built set are named before the rest are counted.
@@ -1165,23 +1344,23 @@ def _number(value: float | None) -> str:
     return "null" if value is None else f"{value:.10g}"
 
 
-def _tolerance_and_noise(fixes: list[Mapping], ind: str, own: Mapping | None = None) -> tuple[float, float | None]:
-    """The tolerance of a set (the largest of its fixes') and its noise (the sum of theirs,
-    and of `own` where a built set's own noise is measured); None where none is measured."""
-    noises = [x["noise"] for x in fixes] + ([own] if own else [])
-    levels = [lv for lv in (_level(x, ind) for x in noises) if lv is not None]
-    return max(x["tolerance"]["value"] for x in fixes), (sum(levels) if levels else None)
+def _sum_ends(builds: _Builds, fixes: Iterable[str]) -> list[Mapping]:
+    """The builds a sum over these fixes stands on, as ends: each fix's build and the one it was
+    measured against (the base, once for each fix measured against it)."""
+    return [end for y in sorted(fixes) for end in (builds.end(builds.closures[y])[1], _built(builds.noise[y]))]
 
 
 def _disagreements(builds: _Builds, where: str, key: frozenset, by_id: Mapping, one: Mapping, results: Mapping,
                    largest: float | None = None) -> list[str]:  # fmt: skip
     """Where a built set is further from the sum of its effects than the file says, by the
-    rule, with the set's tolerance and the sum of its fixes' noise and its own."""
+    rule, with the largest tolerance of its fixes and the noise of every build the two sides
+    stand on: the base and each fix's build and what it was measured against, in the sum; the
+    built set, on the other side."""
     base = builds.base
-    fixes = [by_id[x] for x in sorted(key)]
+    ends = [builds.base_end, *_sum_ends(builds, key), _built(one["noise"])]
     found, more = [], 0
     for ind in base.ids:
-        tol, level = _tolerance_and_noise(fixes, ind, one["noise"])
+        tol, level = max(by_id[x]["tolerance"]["value"] for x in key), _level(ends, ind)
         if largest is not None:
             tol = max(tol, largest)
         cells = builds.composed(key, ind, built=False)
@@ -1230,12 +1409,26 @@ def _against(f: Mapping, data: Mapping, full: Mapping | None) -> list[str]:
     states = [s["id"] for s in data["states"]]
     if of["base"] not in states:
         return [*found, f"the base {of['base']!r} is no state of the diagnostics file"]
+    if not fileformat.states_carry_noise(data):
+        return [*found, NO_STATE_NOISE]
+    base_state = data["states"][states.index(of["base"])]
+    if base_state["kind"] == "published":
+        if "base_noise" in of:
+            found.append("the base is the published results, which are exact: `of.base_noise` is left out")
+    elif "base_noise" not in of:
+        found.append("the base is a build: `of.base_noise` is its noise, as the diagnostics file says it")
+    elif of["base_noise"] != base_state["noise"]:
+        found.append(f"`of.base_noise` is not the noise the diagnostics file gives state {of['base']!r}")
     if f["indicators"] != data["indicators"]:
         found.append("its indicators differ from the diagnostics file's")
     if f["item"] != data["item"] or f.get("indicator") != data.get("indicator"):
         found.append("its words for an item or an indicator differ from the diagnostics file's")
-    if f["rule"] != {k: data["rule"][k] for k in RULE_KEYS}:
-        found.append("its floors differ from the diagnostics file's")
+    m = len(full["items"]) if full is not None else data["items_count"]["all"]
+    if f["rule"] != _rule_of(data, f["items"][m:]):
+        found.append(
+            "its floors differ from the diagnostics file's, with a floor of 0 from nothing for each unit only "
+            "an added item has"
+        )
     for one in f["built"]:
         later = one["state"] in states and states.index(one["state"]) > states.index(of["base"])
         if one["state"] is not None and not later:
@@ -1245,14 +1438,14 @@ def _against(f: Mapping, data: Mapping, full: Mapping | None) -> list[str]:
     ids = [i["id"] for i in data["indicators"]]
     at, nstates = states.index(of["base"]), len(states)
     if full is not None:
-        m = len(full["items"])
         if [list(r) for r in f["items"][:m]] != [list(r) for r in full["items"]]:
             return ["its items are not the matrix's, in the matrix's order, before any item a fix adds"]
+        expanded = _expanded(full, nstates)
         for x, ind in enumerate(ids):
-            if [_cell(full, k, x, at, nstates) for k in range(m)] != f["base"][ind][:m]:
+            if _results_of(expanded, x, at, nstates) != f["base"][ind][:m]:
                 found.append(f"the base results in {ind!r} are not the matrix's results of state {of['base']!r}")
         found += _added_items(f, m)
-        found += _states(f, data, lambda k, x, s: _cell(full, k, x, states.index(s), nstates) if k < m else None,
+        found += _states(f, data, lambda k, x, s: expanded[k][x * nstates + states.index(s)] if k < m else None,
                          range(len(f["items"])))  # fmt: skip
         return found
     if len(f["items"]) < data["items_count"]["all"]:
@@ -1293,19 +1486,23 @@ def _added_items(f: Mapping, m: int) -> list[str]:
 
 def _states(f: Mapping, data: Mapping, cell, items) -> list[str]:
     """A built set that names a state of the chain is two builds of one thing: by the rule,
-    with the set's tolerance and the sum of its fixes' noise and its own."""
+    with the largest tolerance of its fixes and the noise of the two builds, its own and the
+    state's (none where that is the published results)."""
     found = []
     by_id = {one["id"]: one for one in f["fixes"]}
     floors = _Base(f).floor
+    of_state = {s["id"]: s for s in data["states"]}
     for one in f["built"]:
         if one["state"] is None:
             continue
         where = f"built set {one['id']!r}"
-        fixes = [by_id[x] for x in one["fixes"]]
+        state = of_state[one["state"]]
+        ends = [_built(one["noise"]), state if state["kind"] == "published" else _built(state["noise"])]
+        tol = max(by_id[x]["tolerance"]["value"] for x in one["fixes"])
         results = _columns(one["results"])
         named = 0
         for x, ind in enumerate(f["base"]):
-            tol, level = _tolerance_and_noise(fixes, ind, one["noise"])
+            level = _level(ends, ind)
             for k in items:
                 got = results[ind].get(k, f["base"][ind][k])
                 there = cell(k, x, one["state"])

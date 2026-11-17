@@ -89,7 +89,9 @@ so the claim stays right when the factors change. `tests/fixtures/located-factor
 that step, made up, and a test holds what it shows.
 
 **Order matters.** Where two steps touch the same results, each one's share depends on the
-order they were applied in. The file keeps the order; the page says so.
+order they were applied in. The file keeps the order; the page says so. A set of changes
+chosen freely, not a run of consecutive steps, is not drawn from a chain: section 16
+measures each fix on its own against one base, so that any set can be.
 
 **A run of steps.** A file holds one comparison per step and one for the whole way. A run
 of two or more consecutive steps, short of every step (steps 3 to 9), is not in the file:
@@ -535,7 +537,7 @@ of its own.** It reads them from the file, which the validator has checked, and 
 the file's counts up: the classes that moved into "moved", and a step's counts over its
 indicators. Two things it works out itself, and only from every item: the median and
 percentiles of a distribution (10.3), and a run of steps (section 3), the one place where
-it judges a pair itself. It does so with the rule ported from `rule.py`, held to it by the
+it judges a pair itself in a diagnostics file (a set of fixes is the other, 16.8). It does so with the rule ported from `rule.py`, held to it by the
 shared acceptance cases and by 813 pairs on every edge of the rule that the Python writes
 (`tests/test_boundaries.py`), after holding each step of the run to the file's own classes.
 `tests/fixtures/together.json` holds the counts `together.py` gives for every run of the
@@ -864,8 +866,12 @@ and that a set the file cannot show to be exact is shown, marked as estimated. F
 questions were settled in the validator's pull request, before any producer writes a file,
 for Manuel to agree there: a pair holds no text (16.6); a fix may require others (16.4); a
 fix may bring items the base does not hold (16.4); and a built set may say which state of
-the chain it is (16.7). The reader and validator are `fixes.py`; the producer and the page
-are not written yet (16.12).
+the chain it is (16.7). Noise follows section 5.3 (Manuel: "sum, go ahead"): it belongs to
+a build, and a comparison takes the sum of the noise of the builds it stands on (16.5).
+sentier-bafu wrote a file from its own chain to review the format as its producer (12 fixes
+and the release, checked clean), and its review defined the size of a pair (16.6), the route
+an effect is measured on (16.4), and the premise of the list of pairs (16.3). The reader and
+validator are `fixes.py`; the producer and the page are not written yet (16.12).
 
 ### 16.1 Why not a chain of fixes
 
@@ -883,8 +889,10 @@ the base to a release. A fixes file hangs on one of its states.
 ### 16.2 Words
 
 - **Base**: one state of a chain, the state every fix is measured against.
+- **Build**: a set of results the producer made: the base, a fix with what it requires, or
+  a built set (16.7). Noise belongs to a build, as it belongs to a state (section 5.3).
 - **Fix**: one change, applied to the base alone and built. It has what a step has: a
-  kind, a claim, a tolerance, a noise, `explained`, a link.
+  kind, a claim, a tolerance, `explained`, a link; and the noise of its build.
 - **Requires**: the fixes a fix cannot be applied without. Its effect is measured with
   them applied, and choosing it chooses them.
 - **Effect**: what a fix does, per item and indicator: its result with the fix (and what it
@@ -913,6 +921,16 @@ the technosphere A. So:
 These are the kinds of pair a file can list (16.6). Two fixes that change different
 factors, or different entries of B, are never a pair.
 
+All of this holds for fixes that are fixed changes of A, B and c. **A fix that edits the
+data a model is imported from can change what another fix puts into the matrices**: an
+importer that links an exchange to a flow by its name, compartment or CAS number links it to
+whatever another fix calls that flow. Changing which flow an exchange is (its name,
+compartment or CAS number, where factors match on them) changes B. Several such edits can
+be needed together without any one pair showing it. A producer whose fixes edit data checks
+that the release's change of A, B and c is the sum of each fix's change, entry by entry, and
+says so in `method` (16.6); where it is not, the fixes that meet before the matrices are a
+pair (`same entry`), or one requires the others.
+
 An interaction always shows in a pair: every term of A⁻¹ expanded in its changes that
 holds two fixes holds two of them next to each other. So a set whose fixes are independent
 two by two adds up exactly, however many it holds, and a check of pairs is enough. That
@@ -928,13 +946,13 @@ item. One JSON object, read as strictly as the diagnostics file (section 4.1).
 | Key | What it holds |
 |---|---|
 | `format` | `"sentier-diagnostics-fixes/1"` |
-| `of` | `{file, title, base}`: the diagnostics file it belongs to (a file name), that file's title, and the id of the state that is the base |
+| `of` | `{file, title, base, base_noise}`: the diagnostics file it belongs to (a file name), that file's title, the id of the state that is the base, and that state's noise as the diagnostics file says it (5.3). `base_noise` is left out where the base is the published results, which are exact |
 | `title`, `about` | Short text; `about` may be null |
 | `item`, `indicator`, `indicators` | As in the diagnostics file, and equal to it (`indicator` may be left out where that file leaves it out) |
-| `rule` | `{floor_factor, floors_from, beyond, floors}`: the diagnostics file's rule without its `total_tolerance`, which belongs to the chain (a set has its own, 16.5). The floors come from the chain's first state |
+| `rule` | `{floor_factor, floors_from, beyond, floors}`: the diagnostics file's rule without its `total_tolerance`, which belongs to the chain (a set has its own, 16.5). The floors come from the chain's first state, followed by a floor for each unit only an item a fix brings has |
 | `items` | Every item, `[id, name, place, group, unit]`: the matrix's items in the matrix's order, then any item a fix brings that no state of the chain holds |
 | `base` | The base result of every item, per indicator: `{indicator: [result or null, ...]}`, in the order of `items`; null for an item a fix brings |
-| `fixes` | `[{id, label, about, kind, explained, link, requires, claim, tolerance, noise, effect, counts}]`, a fix's requirements before it |
+| `fixes` | `[{id, label, about, kind, explained, link, requires, claim, tolerance, noise, effect, counts}]`, a fix's requirements before it; `noise` is that of the build with the fix |
 | `interactions` | `{checked, method, by, pairs}` (16.6) |
 | `built` | Sets the producer built: `[{id, label, fixes, state, results, noise}]` (16.7) |
 | `notes`, `made_by` | As in the diagnostics file |
@@ -944,9 +962,23 @@ result it was measured against bit for bit, as `[[item index, result], ...]`, th
 being the one built with the fix (`null` where it has none). **Every change is kept,
 however small**: two changes under the tolerance each can be over it together, and a set is
 a sum. An entry equal to the result it was measured against is refused: it would read as a
-change. Every indicator has a list, empty where the fix changes nothing. A fix's `counts` is
-one block per indicator (section 4.2), its pairs being the result it was measured against
-and the result with the fix, judged with the fix's own tolerance and noise; `closer` and
+change. Every indicator has a list, empty where the fix changes nothing.
+
+**An effect is measured on the base's route.** The result with the fix is built as the base
+was (the same importer, linking and solver), or is the base result plus the difference
+between two results of one other route, so that an item the fix does not reach keeps the
+base result bit for bit. The base is held to the chain bit for bit and every entry that
+differs is kept, so an effect computed another way fills up with the route's own
+differences, each read as a change: sentier-bafu built one release twice, a pinned copy
+against today's importer with no change meant, and 294,590 of 298,675 results moved, 722 of
+them by 1e-5 or more. **Results are read exactly**, as they were written: a reader that
+rounds the last bit drops changes and adds others (a default CSV reader misread 134,743 of
+the 298,675 results of one build in the last bit, and lost 7 of the 86 changes of one patch;
+read round-trip, every result matches its text).
+
+A fix's `counts` is one block per indicator (section 4.2), its pairs being the result it was
+measured against and the result with the fix, judged with the fix's own tolerance and the
+sum of the noise of those two builds (16.5); `closer` and
 `further` are null, since a fix has no published results to come closer to. A fix's claim
 names its items (no `items: null`): the file is local and holds every item, and the page
 works out each item's verdict from the claim.
@@ -963,7 +995,9 @@ one is measured with the other applied.
 
 **A fix may bring items** no state of the chain holds (a new product an added activity
 makes). They follow the matrix's items in `items`, their base result is null, and some fix
-or built set gives each a result. Their unit needs a floor in the rule, as any item's does.
+or built set gives each a result. Their unit takes the chain's floor; a unit no item of the
+chain has takes the floor the chain gives a unit its first state holds no result in: 0, from
+nothing (`basis: "none"`), added to the rule after the chain's floors.
 
 A fix's claim is judged as a step's is (section 6), against what the fix was measured
 against. Its verdicts do not depend on which other fixes are chosen or in what order: that
@@ -990,14 +1024,27 @@ it), the set has no result there, and the page says the sum cannot be formed, ap
 result that is missing. It is judged by the rule (section 5) against the base:
 
 - its **tolerance** is the largest of its fixes';
-- its **noise** is the sum of its fixes' noise, per indicator. A fix's noise stands for
-  how unstable its comparison with the base is; the set's difference is the sum of those
-  comparisons, and their instabilities add up instead of cancelling, as they would along
-  a run of a chain. Noise not measured for some fixes is said ("noise measured for 3 of 5
-  fixes"), never read as none; where none is measured the page says "not measured", never
-  "identical". A fix's noise names its two builds (`between`): two builds in one process on
-  one solve route measure the engine's determinism and read 0, two routes measure how the
-  comparison moves with the route; the note says which;
+- its **noise** follows section 5.3, per indicator: noise belongs to a build, and a
+  comparison takes the sum of the noise of the builds it stands on. The base's is its
+  state's (`of.base_noise`; the published results are exact and add nothing), a fix's that
+  of the build with it and what it requires, a built set's that of its build.
+  - A set that is a build (one fix with what it requires, or a built set) takes the sum of
+    its noise and the base's.
+  - Any other set's difference from the base is a sum of its fixes' differences, each
+    against what that fix was measured against. Its noise is the sum, over its fixes, of the
+    noise of each fix's build and of the build it was measured against: the base once for
+    each fix measured against it, since a rebuild of the base moves every one of those
+    differences the same way. Where it takes a result from a build inside it, that build's
+    noise and the base's bound the result there, and the set's noise is the larger of the
+    two. The sum runs in the order of the file's fixes, each fix's measured-against build
+    before its own, so that the page's port gives the same number bit for bit.
+
+  A build whose noise was not measured adds nothing, and the page says at how many of the
+  builds the noise is known ("noise known at 3 of 5 builds"; the published results are
+  known, and exact), never reading not measured as none; where no build measured it the page
+  says "not measured", never "identical". A noise names its two builds (`between`): two
+  builds in one process on one solve route measure the engine's determinism and read 0, two
+  routes measure how a result moves with the route; the note says which;
 - it has **no verdict**: each claim is judged in its own fix.
 
 Each set carries one of three labels, and the page shows it wherever the set is drawn:
@@ -1012,8 +1059,9 @@ An estimated set is never drawn as a built one: the mark is on the cell, not onl
 heading a reader may have scrolled past. Its **pair terms** are the sum of the measured
 sizes (`largest`) of the listed pairs it holds: how far it may lie from its sum, to first
 order (a term of three fixes or more needs interacting pairs, 16.3). Where a pair it holds
-was not measured, the pair terms are not known, and the page says how many of its pairs were
-measured, never 0. Where interactions were not checked, every set of
+was not measured, or has no size (16.6), the pair terms are not known, and the page says how
+many of its pairs were measured and how many of those have no size, never 0. Where
+interactions were not checked, every set of
 two fixes or more that was not built is estimated.
 
 ### 16.6 Interactions
@@ -1028,14 +1076,29 @@ into it.
 - `method`: what the check did, in a sentence, and `by`: who or what ran it (section 8).
 - `pairs`: `[{fixes: [a, b], kind, reach, largest}]`, every pair that can interact, each
   once:
-  - `kind`: where the two changes meet (16.3), one of `technosphere` (both change A),
-    `technosphere and emission` (A, and an amount of B), `technosphere and factor` (A, and
-    a factor of c), `emission and factor` (an amount of a flow, and that flow's factor),
-    `same entry` (both change one number);
-  - `reach`: how many items the cross term can change (1 to the number of items), or null
-    where it was not counted;
-  - `largest`: the measured size of its cross term, the largest over items and indicators
-    of |h_ab − h_a − h_b + h_0| / |h_ab|, or null where it was not measured.
+  - `kind`: where the two changes meet (16.3), the first that applies of `same entry` (both
+    change one number), `technosphere` (both change A), `technosphere and emission` (A, and
+    an amount of B), `technosphere and factor` (A, and a factor of c), `emission and factor`
+    (an amount of a flow, and that flow's factor). A pair that meets in several ways (a fix
+    to an amount and an emission of one activity, with a fix to A) takes the first;
+  - `reach`: how many items the cross term can change, counted on the build with both fixes
+    (1 to the number of items), or null where it was not counted. A fix can open a path (an
+    exchange finds a supplier it had none for), so the base undercounts; whether an item
+    reaches one fix's change does not depend on that fix, so the build with both bounds it;
+  - `largest`: the size of its cross term: the smallest tolerance under which the build of
+    the two agrees, by the rule, with the base plus their two effects. That is the largest
+    relative difference of the two (the rule's measure, over the larger size, section 5)
+    over items and indicators, leaving out the items the rule calls near zero on both sides
+    (`fixes.size_of`). `"no size"` where no tolerance is enough: at some item the two lie on
+    two sides of zero, one is zero, or one has no result. Null where it was not measured.
+    "No size" and "not measured" are kept apart: one is a finding, the other a gap.
+
+  A ratio over |h_ab| has no value where h_ab is 0 and grows without bound for items under
+  the floor; such a share would swamp the pair terms of every set holding the pair and make
+  the check of its build (16.7) pass anything. The rule's own measure has neither fault, and
+  it is the tolerance the check applies. **A pair with no size must be built** (16.7): no set
+  holding it can be bounded by its sum, and with the build the page takes its result where
+  only those two change an item.
 
   A check that only asks whether A⁻¹ links two changes lists nearly every pair in a
   database where electricity and transport reach everything, and every set would be
@@ -1067,15 +1130,18 @@ is, where it is one, or null.
 fixes are a listed pair, the built results must agree with the base plus the sum of the
 effects, by the rule with the set's tolerance and noise, for every item. That sum stands on
 the fixes alone (16.5 without its built sets): a set held to a build inside it, itself held
-to the sum, would stack two tolerances. The noise here is
-the sum of its fixes' noise and the built set's own, where measured: the sum stands on one
-build of each fix, the built results on one more. A file where they
-do not is refused, naming the set, the item and the indicator: its producer called two
-fixes independent that are not. Where the set holds a listed pair, the page shows how far
-the built results lie from the sum, as that set's interaction. Where the set is exactly one
-listed pair with a measured `largest`, the built results must lie within it of the sum (by
-the rule, with the larger of the set's tolerance and `largest` as the tolerance): a file
-that understates a size it could have measured is refused.
+to the sum, would stack two tolerances. The noise here is that of every build the two sides
+stand on (16.5): in the sum, the base and each fix's build and the one it was measured
+against (the base once more for each fix measured against it); on the other side, the built
+set's own. A file where they do not agree is refused, naming the set, the item and the
+indicator: its producer called two fixes independent that are not. Where the set holds a
+listed pair, the page shows how far the built results lie from the sum, as that set's
+interaction. Where the set is exactly one listed pair with a measured `largest`, the built
+results must lie within it of the sum (by the rule, with the larger of the set's tolerance
+and `largest` as the tolerance): a file that understates a size it could have measured is
+refused. Where the file says the pair has no size, its build must have none: a build that
+agrees with its sum under some tolerance has that size, and the check refuses the file and
+gives it.
 
 Building the release with every fix is cheap (it is built anyway) and is the strongest test
 the file can carry: it touches every pair at once. It can refute independence and never
@@ -1084,10 +1150,12 @@ confirm it: cross terms of opposite sign can cancel in the whole and not in a su
 **A built set that names a state is two builds of one thing.** The release with every fix
 is also the last state of the chain. Its `state` names it, a state after the base, and the
 check holds the two to each other: the base with the built results, against the matrix's
-results of that state, by the rule with the set's tolerance and noise (the sum of its
-fixes' noise and its own), for every item; for the listed items where the matrix is not
-beside it. A file whose release does not reproduce the chain's is refused, naming the set,
-the item and the indicator.
+results of that state, by the rule with the largest tolerance of its fixes and the noise of
+the two builds, the built set's and the state's (none where the state is the published
+results), for every item; for the listed items where the matrix is not beside it. A file
+whose release does not reproduce the chain's is refused, naming the set, the item and the
+indicator. A release taken from the same build as the chain's state passes this check by
+construction; the check of independence above is the one that can fail it.
 
 ### 16.8 The page
 
@@ -1099,11 +1167,11 @@ the item and the indicator.
 - One fix reads as a step does today: its claim, its verdicts, its own counts from the file.
 - Any set drives the matrix, the distributions, the worst values and the drawer. Its line
   says its label, its fixes with their claims, its tolerance and its noise.
-- The page works out the classes of a set, the one place where it judges a pair itself
-  (section 10 says it works out none of its own; a set is the exception). It does so with
-  a port of `rule.judge` that is held to the Python rule by the shared cases
-  (`tests/acceptance/cases.json`) and by boundary values the Python generates: every
-  class edge, the floor, a sign crossing, every band edge, a factor too large for a float.
+- The page works out the classes of a set, as it does those of a run of steps (section
+  10): with the port of `rule.judge` that the shared cases (`tests/acceptance/cases.json`)
+  and the boundary pairs the Python writes (`tests/test_boundaries.py`: every class edge,
+  the floor, a sign crossing, every band edge, a factor too large for a float) hold to the
+  Python rule. It works out a set's noise as 16.5 says, in the same order.
   Before it composes a set it works out each chosen fix's own classes again and compares
   them with the file's; where one differs, it composes nothing and says so.
 - In the drawer, an item's difference in a set splits into its fixes' effects, exactly
@@ -1116,7 +1184,10 @@ the item and the indicator.
 wrong (as section 4.3), and further one where:
 
 - `of` does not name the diagnostics file beside it, its title or one of its states, or its
-  items, indicators, floors or words differ from that file's;
+  items, indicators, floors or words differ from that file's (with a floor of 0 from nothing
+  for each unit only an added item has); the diagnostics file says no noise of its states;
+  `base_noise` is not the base state's noise, is missing where the base is a build, or is
+  given where it is the published results;
 - its items are not the matrix's in the matrix's order, followed by items a fix brings, or
   an item a fix brings has a base result, or no fix or built set gives it one;
 - the base results differ from the matrix's results of the base state, where the matrix is
@@ -1126,17 +1197,19 @@ wrong (as section 4.3), and further one where:
 - an effect or a built set names an item or indicator it does not hold, holds an entry
   equal to the result it was measured against, or holds one item twice;
 - a fix's counts or verdicts are not what its effect and the build it was measured against
-  give, by the rule, with its own tolerance and noise. With every item at hand, the counts
-  must be exact;
+  give, by the rule, with its own tolerance and the noise of the two builds. With every item
+  at hand, the counts must be exact;
 - a pair names a fix it does not hold, a fix twice, or a fix and one it requires, or is
-  listed twice; its kind is not one of the five, its reach not a count of items; `checked`
+  listed twice; its kind is not one of the five, its reach not a count of items, its
+  `largest` not a share, `"no size"` or null; a pair with no size has no build; `checked`
   is false and pairs are listed; a pair holds any other key; the method holds text shaped
   like an identifier;
 - a built set holds fewer than two fixes, a fix twice, a fix without one it requires,
   exactly one fix with what it requires, or the same fixes as another; or disagrees with the
   sum of its effects where the file says its fixes are independent, or lies further from it
-  than the measured size of the one pair it is; or names a state that is not after the base,
-  or that its results do not reproduce.
+  than the measured size of the one pair it is, or has a size where the file says that pair
+  has none; or names a state that is not after the base, or that its results do not
+  reproduce.
 
 `check` also prints what the file is made of: how many entries its fixes and built sets
 hold, and its largest fixes (a fix to a market everything uses holds about one entry per
@@ -1151,8 +1224,8 @@ characterisation factor about 12,000 (about 250 KB), a fix to a market everythin
 to about 300,000 (6 to 7 MB). 64 MB holds about ten dense fixes and thousands of sparse
 ones; effects move to one file per fix only if dense fixes become common. Checked on a
 made-up file of that base with 100 fixes of 500 items each in every indicator, ten of them
-requiring the fix before them (39.5 MB), the check takes about 2.7 seconds, and counting a
-set of 50 of them under one.
+requiring the fix before them, every build's noise measured (39.5 MB), the check takes
+about 2.2 seconds, and counting a set of 50 of them under one.
 
 ### 16.11 Acceptance cases
 
@@ -1165,12 +1238,14 @@ Each is a test before the code is written.
 | F3 | Interactions not checked: every set of two fixes or more that was not built is estimated, none exact |
 | F4 | A built set that disagrees with the sum where the file calls its fixes independent is refused, naming the set, item and indicator |
 | F5 | A fix's verdicts are the same whichever fixes are chosen with it |
-| F6 | The noise of a set is the sum of its fixes' noise; noise measured for some fixes only is said, and not measured is never identical |
+| F6 | The noise of a set is the sum, over its fixes, of the noise of each fix's build and of the one it was measured against (the base once for each fix), or that of a build it takes a result from and the base's where larger; the builds whose noise is known are counted, and not measured is never identical |
 | F7 | The page's rule agrees with the Python rule on every shared case and generated boundary value, and the page refuses to compose where it cannot reproduce a fix's own classes |
 | F8 | A file of fixes holds nothing of the model in a pair: its kind comes from a closed list, and any text in it is refused |
 | F9 | A fix that requires another is measured against their build; choosing it chooses what it requires; in a set, each effect adds on top of what it was measured with, so what two fixes build on counts once; where a build inside the set holds every fix that changes an item, its result is taken, measured, not summed |
 | F10 | A built set that names a state of the chain is refused where its results do not reproduce that state |
-| F11 | A fix may bring an item no state holds: it follows the matrix's items, with no base result, and a fix gives it one |
+| F11 | A fix may bring an item no state holds: it follows the matrix's items, with no base result, and a fix gives it one; in a unit no item of the chain has, it takes a floor of 0 from nothing |
+| F12 | A fix is judged with the noise of its build and of the build it was measured against; a built set is held to its sum with the noise of every build both stand on, and to its state with its noise and the state's; the base's noise is its state's, and the published results are exact |
+| F13 | A pair with no size is built, and its build has none; "no size" and "not measured" read apart |
 
 ### 16.12 Who does what, and in which order
 
