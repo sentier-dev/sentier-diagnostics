@@ -590,3 +590,232 @@ test('steps count from 1 where the chain does not start from the published resul
   assert.doesNotMatch(drawer, /Step 0\b/);
 });
 
+
+// ------------------------------------------------------------------ reviewing one step
+
+const chips = (drawn) => drawn.byId.comparison.querySelectorAll('button[data-comp]');
+
+test('choosing a step says its claim and what the claim found, under the chips, and the address keeps it', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  assert.match(drawn.byId['step-said'].textContent, /^The whole way: /);
+  const k = data.steps.findIndex((s) => s.claim && s.claim.scope.length);
+  const step = data.steps[k];
+  chips(drawn)[k + 1].dispatch('click', {});
+  const said = drawn.byId['step-said'].textContent;
+  assert.ok(said.includes(step.claim.text), said);
+  // what the claim found, from the file's own counts
+  const look = ['off claim', 'not claimed', 'claimed, not moved'];
+  const found = look.filter((v) => Object.values(data.counts.steps[step.id]).some((b) => b.verdicts[v]));
+  if (found.length) found.forEach((v) => assert.ok(said.includes(v), v));
+  else assert.match(said, /as claimed/);
+  assert.equal(drawn.context.location.hash, 'step=' + encodeURIComponent(step.id));
+  assert.equal(chips(drawn)[k + 1].getAttribute('aria-pressed'), 'true');
+});
+
+test('the matrix shows first the indicators in which the chosen comparison moved most', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  const moves = ['differs', 'beyond 10x', 'zero reference', 'zero result', 'sign change'];
+  // what moved, and the missing values with it: missing is a finding, not stillness
+  const moved = (comp, id) => moves.concat(['missing']).reduce((m, c) => m + (comp === 'total' ? data.counts.total : data.counts.steps[comp])[id].classes[c], 0);
+  for (const comp of ['total'].concat(data.steps.map((s) => s.id))) {
+    drawn.byId.comparison.querySelectorAll('button[data-comp="' + comp + '"]')[0].dispatch('click', {});
+    const heads = drawn.byId['grid-table'].querySelectorAll('th[scope="col"]').slice(2);
+    const counts = heads.map((th) => moved(comp, data.indicators.find((i) => th.getAttribute('title').indexOf(i.name) === 0).id));
+    for (let k = 1; k < counts.length; k++) assert.ok(counts[k - 1] >= counts[k], comp + ': ' + counts.join());
+    heads.forEach((th, k) => assert.equal(/sd-still/.test(th.className), counts[k] === 0, comp));
+    // the cells of a quiet column are quiet too
+    const row = gridRows(drawn)[0];
+    const cells = row.childNodes.filter((n) => n.tagName === 'TD').slice(1); // after the group
+    cells.forEach((td, k) => assert.equal(/sd-still/.test(td.className), counts[k] === 0, comp + ' cell ' + k));
+  }
+});
+
+test('an address with a step opens the page on that step, and with an item on that item', () => {
+  const data = example();
+  const step = data.steps[2];
+  const drawn = dom.page(data);
+  drawn.open('step=' + encodeURIComponent(step.id) + '&item=' + encodeURIComponent(data.items[0].id));
+  assert.equal(chips(drawn).find((c) => c.getAttribute('aria-pressed') === 'true').getAttribute('data-comp'), step.id);
+  assert.equal(drawn.byId.item.hidden, false);
+  // closing the item keeps the step
+  drawn.byId['item-close'].dispatch('click', {});
+  assert.equal(drawn.byId.item.hidden, true);
+  assert.equal(drawn.context.location.hash, 'step=' + encodeURIComponent(step.id));
+  // an unknown step falls back to the whole way
+  drawn.open('step=nothing-of-the-kind');
+  assert.equal(chips(drawn)[0].getAttribute('aria-pressed'), 'true');
+});
+
+test('the arrow keys move between the chips', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  drawn.byId.comparison.dispatch('keydown', { key: 'ArrowRight' });
+  assert.equal(chips(drawn)[1].getAttribute('aria-pressed'), 'true');
+  drawn.byId.comparison.dispatch('keydown', { key: 'ArrowLeft' });
+  assert.equal(chips(drawn)[0].getAttribute('aria-pressed'), 'true');
+  drawn.byId.comparison.dispatch('keydown', { key: 'ArrowLeft' }); // nothing before the whole way
+  assert.equal(chips(drawn)[0].getAttribute('aria-pressed'), 'true');
+});
+
+const cards = (drawn) => drawn.byId['dist-cards'].childNodes;
+
+test('a distribution card per indicator, in the order of the matrix, its bars the file\'s counts', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  for (const comp of ['total'].concat(data.steps.map((s) => s.id))) {
+    drawn.byId.comparison.querySelectorAll('button[data-comp="' + comp + '"]')[0].dispatch('click', {});
+    const heads = drawn.byId['grid-table'].querySelectorAll('th[scope="col"]').slice(2).map((th) => th.getAttribute('title'));
+    const ids = cards(drawn).map((card) => card.getAttribute('data-indicator'));
+    assert.equal(ids.length, data.indicators.length);
+    ids.forEach((id, k) => assert.ok(heads[k].indexOf(data.indicators.find((i) => i.id === id).name) === 0, comp + ' ' + k));
+    for (const card of cards(drawn)) {
+      const block = (comp === 'total' ? data.counts.total : data.counts.steps[comp])[card.getAttribute('data-indicator')];
+      const bars = card.childNodes[2].childNodes;
+      const sum = bars.reduce((s, bar) => s + Number(bar.getAttribute('title').match(/: ([\d,]+) of/)[1].replace(/,/g, '')), 0);
+      // every pair is in one bar: the bands split what moved and what agrees, the rest is a class
+      assert.equal(sum, block.pairs, comp + ' ' + card.getAttribute('data-indicator'));
+    }
+  }
+});
+
+test('a median of after ÷ before only from every item, never from the listed ones', () => {
+  const data = local();
+  const listed = dom.page(data);
+  for (const card of cards(listed)) assert.doesNotMatch(card.textContent, /Median/);
+  assert.match(listed.byId['dist-said'].textContent, /need every product/);
+  const loaded = dom.page(data, undefined, { globals: { SENTIER_DIAGNOSTICS_MATRIX: full() } });
+  const rows = page.matrixRows(full(), data);
+  const k = data.steps.length; // the whole way
+  const card = cards(loaded)[0];
+  const id = card.getAttribute('data-indicator');
+  const ratios = rows.filter((r) => ['agrees', 'within noise', 'differs', 'beyond 10x'].includes(r.classes[id][k]))
+    .map((r) => [r.values[id][0], r.values[id][r.values[id].length - 1]])
+    .filter(([a, b]) => a && b && (a > 0) === (b > 0)).map(([a, b]) => b / a).sort((a, b) => a - b);
+  const x = 0.5 * (ratios.length - 1), lo = Math.floor(x), hi = Math.ceil(x);
+  const median = ratios[lo] + (ratios[hi] - ratios[lo]) * (x - lo);
+  assert.ok(ratios.length > 0);
+  const shown = Number(card.textContent.match(/Median of [\d ]+ ratios? ([\d.e−]+)/)[1].replace('−', '-'));
+  assert.ok(Math.abs(shown - median) <= 5e-3 * Math.abs(median), shown + ' vs ' + median);
+});
+
+test('percentiles share one precision: the fewest digits that keep apart the ones that differ', () => {
+  // a spread only the fifth digit shows
+  const text = page.quantileTexts({ p10: 0.99981, median: 1.0, p90: 1.00042 });
+  assert.notEqual(text[0], text[2]);
+  assert.deepEqual(text, ['0.99981', '1.0000', '1.0004']);
+  // never mixed: a 10th percentile that reads as exactly 1 beside a six-digit median
+  assert.deepEqual(page.quantileTexts({ p10: 1.00004, median: 1.00005, p90: 1.00006 }), ['1.00004', '1.00005', '1.00006']);
+  assert.deepEqual(page.quantileTexts({ p10: 0.999, median: 1, p90: 1.0001 }), ['0.99900', '1.0000', '1.0001']);
+  assert.deepEqual(page.quantileTexts({ p10: 0.5, median: 1, p90: 2 }), ['0.500', '1.00', '2.00']);
+  assert.deepEqual(page.quantileTexts({ p10: 1, median: 1, p90: 1 }), ['1.00', '1.00', '1.00']);
+});
+
+test('a card sorts the matrix by its indicator, and a heading marks its card', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  const card = cards(drawn)[1];
+  const id = card.getAttribute('data-indicator');
+  card.childNodes[0].childNodes[0].dispatch('click', {});
+  const sorted = drawn.byId['grid-table'].querySelectorAll('th[aria-sort]');
+  assert.equal(sorted.length, 1);
+  assert.ok(sorted[0].getAttribute('title').indexOf(data.indicators.find((i) => i.id === id).name) === 0);
+  assert.equal(cards(drawn)[1].childNodes[0].childNodes[0].getAttribute('aria-pressed'), 'true');
+  assert.match(cards(drawn)[1].className, /sd-chosen/);
+  // the heading of another indicator moves the mark to its card
+  const other = cards(drawn)[0].getAttribute('data-indicator');
+  const head = drawn.byId['grid-table'].querySelectorAll('th[scope="col"]').slice(2)
+    .find((th) => th.getAttribute('title').indexOf(data.indicators.find((i) => i.id === other).name) === 0);
+  head.childNodes[0].dispatch('click', {});
+  assert.equal(cards(drawn)[0].childNodes[0].childNodes[0].getAttribute('aria-pressed'), 'true');
+  assert.equal(cards(drawn)[1].childNodes[0].childNodes[0].getAttribute('aria-pressed'), 'false');
+});
+
+test('the bars of every card can be put on one scale, the share of all values (A21)', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  const heights = () => cards(drawn).map((card) => card.childNodes[2].childNodes.map((bar) => parseFloat(/height:([\d.]+)%/.exec(bar.getAttribute('style'))[1])));
+  // each card to its own tallest bar: every card that has values reaches the top
+  heights().forEach((h) => assert.equal(Math.max(...h), 100));
+  const select = drawn.byId['dist-scale'];
+  select.value = 'one';
+  select.dispatch('change', { target: select });
+  const one = heights();
+  assert.equal(Math.max(...one.flat()), 100);
+  // on one scale, a bar's height is its share of the values of its card, the same factor in every card
+  const shares = cards(drawn).map((card, i) => {
+    const block = data.counts.total[card.getAttribute('data-indicator')];
+    // a bar is at least 2% high, so that one value is seen: those are left out
+    return card.childNodes[2].childNodes.map((bar, j) => {
+      const n = Number(bar.getAttribute('title').match(/: ([\d,]+) of/)[1].replace(/,/g, ''));
+      return n && one[i][j] > 2 ? one[i][j] / (n / block.pairs) : null;
+    }).filter((x) => x !== null);
+  }).flat();
+  for (const f of shares) assert.ok(Math.abs(f - shares[0]) < 0.06 * shares[0], f + ' vs ' + shares[0]);
+  assert.match(drawn.byId['dist-said'].textContent, /one scale/);
+});
+
+test('the claim line names every verdict on a move, "as claimed" first, in words and without colour', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  const k = data.steps.findIndex((s) => s.claim && s.claim.scope.length);
+  const step = data.steps[k];
+  chips(drawn)[k + 1].dispatch('click', {});
+  const said = drawn.byId['step-said'].textContent;
+  const total = (v) => Object.values(data.counts.steps[step.id]).reduce((a, b) => a + b.verdicts[v], 0);
+  for (const v of ['as claimed', 'off claim', 'not claimed', 'claimed, not moved']) {
+    const word = v === 'as claimed' ? 'moved as claimed' : v;
+    if (total(v)) assert.ok(said.includes(total(v) + ' value' + (total(v) === 1 ? '' : 's') + ' ' + word), v + ': ' + said);
+    else assert.ok(!said.includes(word), v);
+  }
+  if (total('as claimed')) assert.ok(said.indexOf('moved as claimed') < Math.max(said.indexOf('off claim'), said.indexOf('not claimed')) || !/off claim|not claimed/.test(said));
+  assert.doesNotMatch(said, /moves as claimed/);
+  const all = drawn.byId['step-said'].all();
+  assert.ok(!all.some((node) => /sd-good|sd-look/.test(node.className || '')));
+});
+
+test('a column whose only change is a missing value is not quietened as if nothing moved', () => {
+  const data = example();
+  const step = data.steps[0].id;
+  const id = data.indicators[data.indicators.length - 1].id;
+  const block = data.counts.steps[step][id];
+  // nothing moved in this indicator, two values went missing
+  for (const c of ['differs', 'beyond 10x', 'zero reference', 'zero result', 'sign change']) block.classes[c] = 0;
+  block.classes.missing = 2;
+  const drawn = dom.page(data);
+  drawn.byId.comparison.querySelectorAll('button[data-comp="' + step + '"]')[0].dispatch('click', {});
+  const name = data.indicators.find((i) => i.id === id).name;
+  const head = drawn.byId['grid-table'].querySelectorAll('th[scope="col"]').slice(2).find((th) => th.getAttribute('title').indexOf(name) === 0);
+  assert.doesNotMatch(head.className, /sd-still/);
+  assert.match(head.getAttribute('title'), /2 missing/);
+  const card = cards(drawn).find((c) => c.getAttribute('data-indicator') === id);
+  assert.doesNotMatch(card.className, /sd-still/);
+});
+
+test('two percentiles that six digits cannot part are said to lie just under or over the median', () => {
+  const t = page.quantileTexts({ p10: 1 - 1e-9, median: 1, p90: 5.94545 });
+  assert.equal(t[0], 'just under the median');
+  assert.notEqual(t[2], t[1]);
+  assert.equal(t[2], '5.95'); // the pair (median, 90th) never blurred
+  assert.equal(t[1], '1.00'); // the words took the place of the six digits: the rest go back to three
+  // only the pair that blurs is widened: 5.94545 needs no six digits beside 1
+  assert.equal(page.quantileTexts({ p10: 0.5, median: 1, p90: 1 + 1e-9 })[0], '0.500');
+  assert.equal(page.quantileTexts({ p10: 0.5, median: 1, p90: 1 + 1e-9 })[2], 'just over the median');
+});
+
+test('a card says over how many ratios its median is, how many have none, and what full height is', () => {
+  const data = local();
+  const loaded = dom.page(data, undefined, { globals: { SENTIER_DIAGNOSTICS_MATRIX: full() } });
+  for (const card of cards(loaded)) {
+    const text = card.textContent;
+    const block = data.counts.total[card.getAttribute('data-indicator')];
+    const m = text.match(/Median of ([\d ]+) ratios?/);
+    if (!m) { assert.match(text, /No value with a ratio/); continue; }
+    const n = Number(m[1].replace(/ /g, ''));
+    const left = block.pairs - n;
+    if (left) assert.ok(text.includes(left + ' without a ratio'), text);
+    else assert.doesNotMatch(text, /without a ratio/);
+    assert.match(card.childNodes[1].textContent, /^tallest bar: \d/);
+  }
+});

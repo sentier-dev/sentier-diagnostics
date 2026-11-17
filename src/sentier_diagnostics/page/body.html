@@ -22,6 +22,7 @@
       <span class="sd-chips-label">Comparison</span>
       <div class="sd-chip-row" data-sd="comparison"></div>
     </div>
+    <div class="sd-step" data-sd="step-said" aria-live="polite"></div>
     <p class="sd-note sd-grid-note">Each cell is the result after divided by the result before, for one <span data-sd-word="one">item</span> and <span data-sd-word="indicator">indicator</span>, in the comparison chosen above;
       the grid opens with the <span data-sd-word="many">items</span> furthest apart. A heading sorts by that column. Choose a row (click it, or press Enter on it) to open the <span data-sd-word="one">item</span>.</p>
     <div class="sd-controls">
@@ -45,6 +46,17 @@
     </div>
   </div>
 
+  <section class="sd-dists-part" data-sd="distributions">
+    <h3>Distributions per <span data-sd-word="indicator">indicator</span></h3>
+    <p class="sd-note" data-sd="dist-said"></p>
+    <div class="sd-controls sd-dist-controls">
+      <label class="sd-field"><span>Bar heights</span>
+        <select data-sd="dist-scale"><option value="card">each card to its own tallest bar</option><option value="one">one scale for every card</option></select></label>
+      <p class="sd-legend" data-sd="dist-legend" aria-hidden="true"></p>
+    </div>
+    <div class="sd-dists" data-sd="dist-cards"></div>
+  </section>
+
   <aside class="sd-drawer" data-sd="item" hidden>
     <div class="sd-drawer-head">
       <p class="sd-label" data-sd="item-meta"></p>
@@ -66,13 +78,6 @@
       "spread over steps" counts the <span data-sd-word="many">items</span> whose whole way moved while no single step did.
       The split is exact up to rounding, and it depends on the order of the steps where two steps touch the same results.</p>
     <div class="sd-wrap"><table class="sd-table" data-sd="total-table"></table></div>
-  </details>
-
-  <details class="sd-section" data-sd="distributions">
-    <summary><h3>Distributions</h3></summary>
-    <p class="sd-note">Values per class and band, as a share of all values of the <span data-sd-word="indicator">indicator</span>, in the comparison chosen above. Every <span data-sd-word="indicator">indicator</span> is drawn on the same scale.</p>
-    <p class="sd-legend" data-sd="dist-legend"></p>
-    <div class="sd-wrap"><table class="sd-table" data-sd="dist-table"></table></div>
   </details>
 
   <details class="sd-section" data-sd="worst">

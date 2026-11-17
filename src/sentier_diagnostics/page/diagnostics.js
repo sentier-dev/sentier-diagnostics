@@ -122,6 +122,37 @@
     return s.replace(/-/g, '−');
   }
 
+  // the 10th, 50th and 90th percentile in one precision: the smallest (three digits at
+  // least, six at most) at which every two that differ read differently. "1.00, 1.00, 1.00"
+  // over values that moved would hide the spread a reader looks for, and one line in mixed
+  // precisions reads a rounded number as exact. Where six digits still read a percentile
+  // as the median, the line says how it lies, and the numbers left take the digits they need.
+  function quantileTexts(qs) {
+    var values = [qs.p10, qs.median, qs.p90];
+    var one = function (v, digits) {
+      if (v !== 0 && (Math.abs(v) < 0.01 || Math.abs(v) >= 1e4)) return v.toExponential(digits - 1).replace(/\.?0+e/, 'e').replace('e+', 'e').replace(/-/g, '−');
+      return v.toPrecision(digits).replace(/-/g, '−');
+    };
+    var pairs = [[0, 1], [1, 2], [0, 2]];
+    var digitsFor = function (kept) {
+      for (var d = 3; d <= 6; d++) {
+        var apart = pairs.every(function (p) {
+          return kept.indexOf(p[0]) < 0 || kept.indexOf(p[1]) < 0 || values[p[0]] === values[p[1]] || one(values[p[0]], d) !== one(values[p[1]], d);
+        });
+        if (apart) return d;
+      }
+      return null;
+    };
+    var words = {};
+    var d = digitsFor([0, 1, 2]);
+    if (d === null) {
+      if (values[0] !== values[1] && one(values[0], 6) === one(values[1], 6)) words[0] = 'just under the median';
+      if (values[2] !== values[1] && one(values[2], 6) === one(values[1], 6)) words[2] = 'just over the median';
+      d = digitsFor([0, 1, 2].filter(function (i) { return !(i in words); })) || 6;
+    }
+    return [0, 1, 2].map(function (i) { return i in words ? words[i] : one(values[i], d); });
+  }
+
   // Steps whose differences add up to more than this many times the whole difference
   // cancel: their shares would be large and of both signs, and in floating point the
   // whole may be mostly rounding. The page says so instead of printing them.
@@ -420,7 +451,7 @@
 
     var D = null, B = {}, LISTED = [], M = null;
     var matrix = { state: 'none', said: '' };
-    var view = { comp: null, worstN: 20, worstIndicator: '', find: '', cls: '', verdict: '', group: '', limit: PAGE, size: 0, sort: 'worst', open: null };
+    var view = { comp: null, worstN: 20, worstIndicator: '', find: '', cls: '', verdict: '', group: '', limit: PAGE, size: 0, sort: 'worst', open: null, distScale: 'card' };
     var lastFocus = null;
 
     function q(name) { return root.querySelector('[data-sd="' + name + '"]'); }
@@ -569,6 +600,7 @@
       q('steps-zero').hidden = D.states[0].kind !== 'published';
       q('made-by').textContent = 'Written by ' + D.made_by + '. ' + FORMAT + '.';
       renderChips();
+      renderStepSaid();
     }
 
     // the comparison is chosen from a row of chips: the whole way, then each step with its
@@ -599,6 +631,46 @@
         });
         chip(s.id, parts, said.join('. ') + '.');
       });
+    }
+
+    // under the chips: what the chosen comparison is, the claim of its step and who made it,
+    // and its rule, so that a reviewer reads what a step said beside what it did
+    function renderStepSaid() {
+      var node = q('step-said');
+      if (!node) return;
+      clear(node);
+      if (view.comp === 'total') {
+        node.appendChild(el('p', null, [el('strong', { text: 'The whole way: ' }), D.states[0].label + ' → ' + D.states[D.states.length - 1].label + '. ',
+          el('span', { cls: 'sd-quiet', text: 'Each cell holds the last result divided by the first. Choose a step to see what one change did; "Steps and the whole way" below splits the whole difference between them.' })]));
+        return;
+      }
+      var k = stepIndex(view.comp);
+      var s = D.steps[k];
+      var line = [el('strong', { text: 'Step ' + stepNo(k) + ': ' + s.label + '. ' }), el('span', { cls: 'sd-quiet', text: D.states[k].label + ' → ' + D.states[k + 1].label + '. ' })];
+      if (s.about) line.push(el('span', { cls: 'sd-quiet', text: s.about }));
+      node.appendChild(el('p', null, line));
+      if (k === 0 && D.states[0].kind === 'published') {
+        node.appendChild(el('p', { cls: 'sd-quiet', text: 'What moves here was not reproduced within the tolerance: the residual the chain starts from, not a regression.' }));
+      }
+      if (!s.explained) node.appendChild(el('p', { cls: 'sd-error', text: 'Nothing explains this step.' }));
+      var claim = [el('span', { cls: 'sd-claim-label', text: 'Claim' })];
+      if (s.claim) {
+        claim.push(s.claim.text, ' ', badge(s.claim.by));
+        // every verdict on a move, "as claimed" first, each with its count; the ones worth a
+        // look carry their mark, as on the chips. No colour: a verdict is not an approval.
+        var found = ['as claimed'].concat(LOOK).map(function (name) { return [name, sumOver(s.id, function (b) { return b.verdicts[name]; })]; })
+          .filter(function (p) { return p[1]; });
+        claim.push(el('span', { cls: 'sd-verdicts', text: found.length
+          ? ' ' + found.map(function (p) { return n(p[1]) + ' ' + (p[1] === 1 ? 'value' : 'values') + ' ' + (p[0] === 'as claimed' ? 'moved as claimed' : p[0]) + (LOOK_MARK[p[0]] ? ' ' + LOOK_MARK[p[0]] : ''); }).join(', ') + '.'
+          : ' Nothing moved, as claimed.' }));
+        if (s.claim.scope.some(function (e) { return e.items === null; })) {
+          claim.push(el('span', { cls: 'sd-quiet', text: ' Its list of ' + D.item.many + ' is not in this file' + (s.claim.reach !== null ? ' (' + n(s.claim.reach) + ')' : '') + ': its verdicts were worked out by its writer.' }));
+        }
+      } else {
+        claim.push(el('span', { cls: 'sd-quiet', text: 'none: what moves here is counted, not judged.' }));
+      }
+      node.appendChild(el('p', { cls: 'sd-claim' }, claim));
+      node.appendChild(el('p', { cls: 'sd-quiet', text: 'Tolerance ' + s.tolerance.value + ' (' + s.tolerance.basis + '). Noise ' + noiseText(s.noise, indicatorIds(), indWord(true)) + '.' }));
     }
 
     function markChips() {
@@ -690,39 +762,142 @@
       total.appendChild(tbody);
     }
 
+    // the bars of a distribution, left to right: across zero, down from far to near, the
+    // band around 1 (agrees, within noise), up from near to far, then the values with no
+    // ratio. [kind, key, tone]
+    function distBins(block) {
+      var bands = Object.keys(block.bands);
+      return [['class', 'sign change', 'aside']]
+        .concat(bands.filter(function (b) { return b.indexOf('down') === 0; }).map(function (b) { return ['band', b, 'down']; }))
+        .concat([['class', 'agrees', 'mid'], ['class', 'within noise', 'mid']])
+        .concat(bands.filter(function (b) { return b.indexOf('up') === 0; }).map(function (b) { return ['band', b, 'up']; }))
+        .concat(['zero reference', 'zero result', 'near zero', 'missing'].map(function (c) { return ['class', c, 'aside']; }));
+    }
+    // the words under a histogram, each under its run of bars
+    function axis(bins) {
+      var runs = [];
+      bins.forEach(function (b, i) {
+        var last = runs[runs.length - 1];
+        if (last && last.tone === b[2] && !(b[2] === 'aside' && i > 0 && bins[i - 1][2] !== 'aside')) last.n += 1;
+        else runs.push({ tone: b[2], n: 1, first: !runs.length });
+      });
+      var words = { down: '↓ ÷10', mid: '1', up: '×10 ↑' };
+      return el('div', { cls: 'sd-axis', 'aria-hidden': 'true' }, runs.map(function (run) {
+        var word = run.tone === 'aside' ? (run.first ? '±' : '0 ∅') : words[run.tone];
+        return el('span', { cls: 'sd-axis-' + run.tone, style: 'flex-grow:' + run.n, text: word });
+      }));
+    }
+    function distLegend() {
+      var node = clear(q('dist-legend'));
+      [['down', 'went down'], ['mid', 'agrees or within noise (the band around 1)'], ['up', 'went up'], ['aside', 'across zero, from or to zero, near zero, missing: no ratio']].forEach(function (k) {
+        node.appendChild(el('span', null, [el('span', { cls: 'sd-bin-key ' + k[0] }), k[1]]));
+      });
+    }
+    function binWords(bin) {
+      if (bin[0] === 'band') return bin[1];
+      return bin[1] + (SAID[bin[1]] ? ' (' + SAID[bin[1]] + ')' : '');
+    }
+
+    // after ÷ before at its 10th, 50th and 90th percentile, over the values of one indicator
+    // that have a ratio (the same sign on both sides, neither zero nor near it). Only from
+    // every item: the listed ones are the furthest apart, and would make a median of them
+    // say more than the whole holds.
+    function quantiles(indicator, k) {
+      var held = M || (D.items_count.listed === D.items_count.all && D.tier !== 'counts' ? LISTED : null);
+      if (!held) return null;
+      var found = [];
+      held.forEach(function (row) {
+        var cls = row.classes[indicator][k];
+        if (RATIO_CLASSES.indexOf(cls) < 0) return;
+        var pair = pairOf(row, indicator, k);
+        if (pair[0] === null || pair[1] === null || pair[0] === 0 || pair[1] === 0 || (pair[0] > 0) !== (pair[1] > 0)) return;
+        var r = pair[1] / pair[0];
+        if (isFinite(r)) found.push(r);
+      });
+      if (!found.length) return { n: 0 };
+      found.sort(function (a, b) { return a - b; });
+      var at = function (p) { // linear between the two nearest ranks
+        var x = p * (found.length - 1), lo = Math.floor(x), hi = Math.ceil(x);
+        return found[lo] + (found[hi] - found[lo]) * (x - lo);
+      };
+      return { n: found.length, p10: at(0.1), median: at(0.5), p90: at(0.9) };
+    }
+
+    // the card of the indicator the matrix is sorted by is marked, wherever the sort was chosen
+    function markChosenCard() {
+      var cards = q('dist-cards').childNodes;
+      for (var i = 0; i < cards.length; i++) {
+        var card = cards[i];
+        var chosen = card.getAttribute('data-indicator') === view.sort;
+        card.className = card.className.replace(/ sd-chosen/g, '') + (chosen ? ' sd-chosen' : '');
+        var button = card.childNodes[0].childNodes[0];
+        button.setAttribute('aria-pressed', chosen ? 'true' : 'false');
+      }
+    }
+
+    // one card per indicator, in the order of the matrix's columns: a histogram of the classes
+    // and bands of the comparison chosen above, each card on the scale of its own tallest bar
     function renderDistributions() {
       var comp = view.comp;
+      var k = stepIndex(comp);
       var blocks = comp === 'total' ? D.counts.total : D.counts.steps[comp];
-      var first = blocks[D.indicators[0].id];
-      var bands = Object.keys(first.bands);
-      var down = bands.filter(function (b) { return b.indexOf('down') === 0; });
-      var up = bands.filter(function (b) { return b.indexOf('up') === 0; });
-      var middle = ['agrees', 'within noise'];
-      var aside = ['zero reference', 'zero result', 'sign change', 'near zero', 'missing'];
-      var columns = down.map(function (b) { return ['band', b, 'down']; })
-        .concat(middle.map(function (c) { return ['class', c, '']; }))
-        .concat(up.map(function (b) { return ['band', b, 'up']; }))
-        .concat(aside.map(function (c) { return ['class', c, '']; }));
-      var table = clear(q('dist-table'));
-      var head = [el('th', { scope: 'col', text: capital(indWord(false)) })];
-      columns.forEach(function (c) {
-        var label = c[0] === 'band' ? (c[2] === 'up' ? '↑ ' : '↓ ') + bandStep(c[1]) : (SHORT[c[1]] || c[1]);
-        head.push(el('th', { scope: 'col', cls: 'num', text: label, title: c[1] + (SAID[c[1]] ? ': ' + SAID[c[1]] : '') }));
-      });
-      table.appendChild(el('thead', null, [el('tr', null, head)]));
-      var body = el('tbody');
+      var held = M || (D.items_count.listed === D.items_count.all && D.tier !== 'counts');
+      q('dist-said').textContent = 'How many ' + D.item.many + ' fall in each band of after ÷ before, in the comparison chosen above, one card per ' + indWord(false) +
+        ' in the order of the matrix: from across zero, through down by more than ten times, the band around 1 (dark), to up by more than ten times; then the values with no ratio. ' +
+        (view.distScale === 'one' ? 'Every card is drawn on one scale, the share of all values, so that a bar of one height means as many in each; ' :
+          'Each card is drawn on the scale of its own tallest bar, so that a few values that moved are seen beside many that agree; ') + 'a bar\'s title holds its count. ' +
+        (held ? 'The median and percentiles are of after ÷ before over every ' + D.item.one + ' with a ratio, in as many digits as keep apart the ones that differ. '
+          : 'The median and percentiles need every ' + D.item.one + ', and this page holds the ' + groupThousands(D.items_count.listed) + ' listed, the furthest apart: it gives none. ') +
+        'Choose a card to sort the matrix by that ' + indWord(false) + '.';
+      var box = clear(q('dist-cards'));
+      var countsOf = function (block) {
+        return distBins(block).map(function (b) { return (b[0] === 'band' ? block.bands[b[1]] : block.classes[b[1]]) || 0; });
+      };
+      // on one scale: the largest share of any bar of any card is the full height
+      var topShare = 0;
       D.indicators.forEach(function (ind) {
         var block = blocks[ind.id];
-        var row = [el('th', { scope: 'row', text: indicatorName(ind.id) })];
-        columns.forEach(function (c) {
-          var count = c[0] === 'band' ? block.bands[c[1]] : block.classes[c[1]];
-          var share = block.pairs ? count / block.pairs : 0;
-          var bar = el('div', { cls: 'bar ' + c[2] }, [el('span', { style: 'height:' + (count ? Math.max(1, Math.round(share * 100)) : 0) + '%' })]);
-          row.push(el('td', { cls: 'bar-cell', title: c[1] + ': ' + count + ' of ' + block.pairs }, [bar, el('div', { cls: 'bar-n', text: groupThousands(count) })]));
-        });
-        body.appendChild(el('tr', null, row));
+        if (block.pairs) topShare = Math.max(topShare, Math.max.apply(null, countsOf(block)) / block.pairs);
       });
-      table.appendChild(body);
+      columns(comp).forEach(function (c) {
+        var ind = c.ind, block = blocks[ind.id];
+        var bins = distBins(block);
+        var counts = countsOf(block);
+        var top = view.distScale === 'one' ? Math.max(1e-12, topShare) * block.pairs : Math.max.apply(null, counts.concat([1]));
+        var said = bins.map(function (b, i) { return b[1] + ': ' + groupThousands(counts[i]); }).join('; ');
+        var bars = bins.map(function (b, i) {
+          return el('span', { cls: 'sd-bin ' + b[2] + (i && bins[i - 1][2] !== b[2] && (b[2] === 'aside' || bins[i - 1][2] === 'aside') ? ' sd-gap' : ''),
+            style: 'height:' + (counts[i] ? Math.max(2, 100 * counts[i] / top).toFixed(1) : 0) + '%',
+            title: binWords(b) + ': ' + groupThousands(counts[i]) + ' of ' + groupThousands(block.pairs) });
+        });
+        var qs = quantiles(ind.id, k);
+        var meta = c.active ? capital(activeSaid(c)) + ', of ' + groupThousands(block.pairs) : 'Nothing moved';
+        var said3 = qs && qs.n ? quantileTexts(qs) : null;
+        var left = qs ? block.pairs - qs.n : 0;
+        var stats = qs === null ? null : (said3
+          ? 'Median of ' + groupThousands(qs.n) + ' ' + (qs.n === 1 ? 'ratio' : 'ratios') + ' ' + said3[1] + ', 10th percentile ' + said3[0] + ', 90th ' + said3[2] +
+            (left ? '; ' + groupThousands(left) + ' without a ratio' : '')
+          : 'No value with a ratio');
+        var button = el('button', { type: 'button', cls: 'sd-dist-pick', 'aria-pressed': view.sort === ind.id ? 'true' : 'false',
+          title: 'Sort the matrix by ' + ind.name }, [ind.name]);
+        button.addEventListener('click', function () {
+          view.sort = view.sort === ind.id ? 'worst' : ind.id;
+          view.limit = PAGE;
+          renderGrid();
+          markChosenCard();
+          var region = q('grid-region');
+          if (region && region.scrollIntoView) region.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        });
+        box.appendChild(el('div', { cls: 'sd-dist' + (c.active ? '' : ' sd-still') + (view.sort === ind.id ? ' sd-chosen' : ''), 'data-indicator': ind.id }, [
+          el('h4', null, [button]),
+          el('p', { cls: 'sd-top', 'aria-hidden': 'true', text: view.distScale === 'one'
+            ? 'full height: ' + groupThousands(Math.round(top)) + ' of ' + groupThousands(block.pairs)
+            : 'tallest bar: ' + groupThousands(Math.max.apply(null, counts)) }),
+          el('div', { cls: 'sd-hist', role: 'img', 'aria-label': said }, bars),
+          axis(bins),
+          el('p', { cls: 'sd-dist-meta' }, [el('strong', { text: meta }), stats ? el('br') : null, stats])
+        ]));
+      });
     }
 
     function sizeSaid() {
@@ -816,12 +991,32 @@
         view.sort = view.sort === key ? 'worst' : key;
         view.limit = PAGE;
         renderGrid();
+        markChosenCard();
       });
       return button;
     }
 
+    // the columns of the matrix: the indicators in which the comparison moved most first, so
+    // that what a step did is in view without scrolling; the file's order among equals, and
+    // an indicator in which nothing moved last, quietened
+    function columns(comp) {
+      var blocks = comp === 'total' ? D.counts.total : D.counts.steps[comp];
+      // a missing value is a finding, not stillness: it counts with what moved
+      return D.indicators.map(function (ind, at) {
+        var block = blocks[ind.id];
+        return { ind: ind, moved: moved(block), missing: block.classes.missing || 0, at: at };
+      }).map(function (c) { c.active = c.moved + c.missing; return c; })
+        .sort(function (a, b) { return b.active - a.active || a.at - b.at; });
+    }
+
+    function activeSaid(c) {
+      if (!c.active) return 'nothing moved and nothing is missing';
+      return [c.moved ? groupThousands(c.moved) + ' moved' : null, c.missing ? groupThousands(c.missing) + ' missing' : null].filter(Boolean).join(', ');
+    }
+
     function renderGrid() {
       var k = stepIndex(view.comp);
+      var cols = columns(view.comp);
       var found = gridRows();
       var shown = found.slice(0, view.limit);
       q('grid-said').textContent = D.tier === 'counts'
@@ -836,8 +1031,10 @@
         el('th', { scope: 'col', cls: 'sd-name', 'aria-sort': sorted('name') }, [sortButton(capital(D.item.one), 'name', 'Sort by name')]),
         el('th', { scope: 'col', cls: 'sd-group', text: 'Group' })
       ];
-      D.indicators.forEach(function (ind) {
-        head.push(el('th', { scope: 'col', cls: 'num', 'aria-sort': sorted(ind.id), title: ind.name + (ind.unit ? ' (' + ind.unit + ')' : '') },
+      cols.forEach(function (c) {
+        var ind = c.ind;
+        head.push(el('th', { scope: 'col', cls: 'num' + (c.active ? '' : ' sd-still'), 'aria-sort': sorted(ind.id),
+          title: ind.name + (ind.unit ? ' (' + ind.unit + ')' : '') + ': ' + activeSaid(c) + ' here' },
           [sortButton(indicatorName(ind.id), ind.id, 'Sort by how far the two lie apart, the furthest first')]));
       });
       table.appendChild(el('thead', null, [el('tr', null, head)]));
@@ -848,7 +1045,11 @@
           el('th', { scope: 'row', title: name + ', per ' + (row.unit || 'unknown unit') }, [M && row.item ? el('span', { cls: 'sd-listed', title: 'listed in this file' }) : null, name]),
           el('td', { cls: 'sd-group', text: row.group || '' })
         ];
-        D.indicators.forEach(function (ind) { cells.push(valueCell(row, ind.id, k, true)); });
+        cols.forEach(function (c) {
+          var td = valueCell(row, c.ind.id, k, true);
+          if (!c.active) td.className += ' sd-still';
+          cells.push(td);
+        });
         body.appendChild(el('tr', { cls: 'sd-row', tabindex: '0', 'data-item': row.id, 'aria-current': view.open === row.id ? 'true' : null }, cells));
       });
       table.appendChild(body);
@@ -1067,9 +1268,7 @@
       drawer.hidden = true;
       view.open = null;
       markOpen();
-      if (/^#item=/.test(win.location.hash || '') && win.history && win.history.replaceState) {
-        win.history.replaceState(null, '', win.location.pathname + win.location.search);
-      }
+      if (hashParts().item) setHash({ step: view.comp });
       if (lastFocus && lastFocus.focus && root.contains && root.contains(lastFocus)) lastFocus.focus();
       lastFocus = null;
     }
@@ -1232,7 +1431,7 @@
         renderExplanations();
         renderRule();
         legend(q('grid-legend'), true);
-        legend(q('dist-legend'), false);
+        distLegend();
         renderComparison();
         matrixSaid();
         route();
@@ -1243,10 +1442,41 @@
       if (checked) loadMatrix();
     }
 
+    // the address holds the chosen step and the open item, `#step=<id>&item=<id>`, each
+    // optional, so that a reviewer can send someone to exactly what they look at
+    function hashParts() {
+      var out = {};
+      (win.location.hash || '').slice(1).split('&').forEach(function (part) {
+        var at = part.indexOf('=');
+        if (at > 0) out[part.slice(0, at)] = decodeURIComponent(part.slice(at + 1));
+      });
+      return out;
+    }
+    function setHash(parts) {
+      var said = [];
+      if (parts.step && parts.step !== 'total') said.push('step=' + encodeURIComponent(parts.step));
+      if (parts.item) said.push('item=' + encodeURIComponent(parts.item));
+      var wanted = said.join('&');
+      if ((win.location.hash || '').replace(/^#/, '') === wanted) return false;
+      if (wanted) win.location.hash = wanted;
+      else if (win.history && win.history.replaceState) win.history.replaceState(null, '', win.location.pathname + win.location.search);
+      return true;
+    }
+
+    function choose(comp) {
+      if (comp === view.comp) return;
+      view.comp = comp; view.cls = ''; view.verdict = ''; view.limit = PAGE; view.sort = 'worst';
+      markChips();
+      renderStepSaid();
+      renderComparison();
+    }
+
     function route() {
       if (!D) return;
-      var hash = decodeURIComponent((win.location.hash || '').slice(1));
-      if (hash.indexOf('item=') === 0) renderItem(hash.slice(5));
+      var parts = hashParts();
+      var step = parts.step && stepIndex(parts.step) < D.steps.length ? parts.step : 'total';
+      choose(step);
+      if (parts.item) renderItem(parts.item);
       else closeItem();
     }
 
@@ -1254,8 +1484,7 @@
       var row = event.target.closest ? event.target.closest('tr[data-item]') : null;
       if (!row) return;
       var id = row.getAttribute('data-item');
-      if (win.location.hash === '#item=' + encodeURIComponent(id)) renderItem(id);
-      else win.location.hash = 'item=' + encodeURIComponent(id);
+      if (!setHash({ step: view.comp, item: id })) renderItem(id);
     }
 
     function readScript(name) {
@@ -1268,12 +1497,23 @@
       q('comparison').addEventListener('click', function (e) {
         var chip = e.target.closest ? e.target.closest('button[data-comp]') : null;
         if (!chip || chip.getAttribute('data-comp') === view.comp) return;
-        view.comp = chip.getAttribute('data-comp'); view.cls = ''; view.verdict = ''; view.limit = PAGE;
-        markChips();
-        renderComparison();
+        choose(chip.getAttribute('data-comp'));
+        setHash({ step: view.comp, item: view.open });
+      });
+      // the arrow keys move between the chips
+      q('comparison').addEventListener('keydown', function (e) {
+        if (!D || (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft')) return;
+        var comps = ['total'].concat(D.steps.map(function (s) { return s.id; }));
+        var at = comps.indexOf(view.comp) + (e.key === 'ArrowRight' ? 1 : -1);
+        if (at < 0 || at >= comps.length) return;
+        choose(comps[at]);
+        setHash({ step: view.comp, item: view.open });
+        var next = q('comparison').querySelector('button[data-comp="' + comps[at] + '"]');
+        if (next && next.focus) next.focus();
       });
       q('size').addEventListener('change', function (e) { view.size = +e.target.value; view.limit = PAGE; renderWorst(); renderGrid(); });
       q('worst-n').addEventListener('change', function (e) { view.worstN = +e.target.value; renderWorst(); });
+      q('dist-scale').addEventListener('change', function (e) { view.distScale = e.target.value === 'one' ? 'one' : 'card'; renderDistributions(); });
       q('worst-indicator').addEventListener('change', function (e) { view.worstIndicator = e.target.value; renderWorst(); });
       q('grid-find').addEventListener('input', function (e) { view.find = e.target.value; view.limit = PAGE; renderGrid(); });
       q('grid-class').addEventListener('change', function (e) { view.cls = e.target.value; view.limit = PAGE; renderGrid(); });
@@ -1341,7 +1581,7 @@
   var api = { formatNumber: formatNumber, percentText: percentText, shareText: shareText, ratioText: ratioText, ratioShort: ratioShort, noiseText: noiseText,
     sizeAtLeast: sizeAtLeast, cellView: cellView, ratioView: ratioView, severityKey: severityKey, compareKeys: compareKeys,
     bandStep: bandStep, bandOf: bandOf, checkShape: checkShape, checkMatrix: checkMatrix, matrixRows: matrixRows,
-    safeLink: safeLink, safeName: safeName, splitOf: splitOf, splitText: splitText, distance: distance, RANK: RANK,
+    safeLink: safeLink, safeName: safeName, splitOf: splitOf, splitText: splitText, distance: distance, quantileTexts: quantileTexts, RANK: RANK,
     mount: mount, mountAll: mountAll };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else if (typeof global.document !== 'undefined') {
