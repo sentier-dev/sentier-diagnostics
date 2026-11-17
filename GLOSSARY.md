@@ -33,7 +33,7 @@ The words this repository uses, each in one line. [SPEC.md](SPEC.md) says the re
 - **Drawer**: the panel of one item, at the right of the page, opened from a row.
 - **Base**: the one state of a chain that every fix is measured against (SPEC section 16).
 - **Fix**: one change applied to the base alone and built, with a step's kind, claim and tolerance, and the noise of its build.
-- **Build** (of fixes): a set of results the producer made, the base, a fix with what it requires, or a built set; noise belongs to it, as to a state. A fix is judged with the noise of its build and of the one it was measured against; a set with the sum, over its fixes, of both.
+- **Build** (of fixes): a set of results the producer made, the base, a fix with what it requires, or a built set; noise belongs to it, as to a state. A fix is judged with the noise of its build and of the one it was measured against; a set, item by item, with that of the builds the item's result stands on.
 - **Requires**: the fixes a fix cannot be applied without. Its effect is measured with them applied, and choosing it chooses them.
 - **Effect**: what a fix does, per item and indicator: its result with the fix minus its result without it, both with what it requires.
 - **Set**: the fixes a reader chooses together, with what they require; its result is the base plus the sum of their effects. It has no verdict.

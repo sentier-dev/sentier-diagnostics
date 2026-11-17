@@ -452,13 +452,13 @@ class Acceptance(unittest.TestCase):
 
     def test_f6_the_noise_of_a_set_is_the_sum_said_with_how_many_were_measured(self):
         """The base (s1) was not measured: it adds nothing, and is one build of three whose
-        noise is not known."""
+        noise is not known. Where a set changes nothing, it stands on no build."""
         noise = chain.noise(["one", "two"], {A: 1e-3})
         f, *_ = made(noise_a=noise, noise_b=noise, interactions="none", built=False)
         self.assertEqual(fixes.noise_of(f, ["a", "b"])[A], {"value": 2e-3, "known": 2, "builds": 3})
         self.assertEqual(fixes.noise_of(f, ["a", "c"])[A], {"value": 1e-3, "known": 1, "builds": 3})
         self.assertEqual(fixes.noise_of(f, ["c"])[A], {"value": None, "known": 0, "builds": 2})
-        self.assertEqual(fixes.noise_of(f, ["a"])[B], {"value": None, "known": 0, "builds": 2})
+        self.assertEqual(fixes.noise_of(f, ["a"])[B], {"value": None, "known": 0, "builds": 0})
         # the sum, not the largest: 1.3e-3 apart is within 2e-3 and beyond 1e-3
         self.assertEqual(fixes.counts(f, ["a", "b"])["by"][A]["classes"][rule.WITHIN_NOISE], 1)
 
@@ -838,7 +838,7 @@ class Noise(unittest.TestCase):
                         results={"a": {A: {"p1": 1.5}}})  # fmt: skip
         self.assertNotIn("base_noise", f["of"])
         self.assertEqual(fixes.noise_of(f, ["a"])[A], {"value": 1e-3, "known": 2, "builds": 2})
-        self.assertEqual(fixes.noise_of(f, ["a"])[B], {"value": None, "known": 1, "builds": 2})
+        self.assertEqual(fixes.noise_of(f, ["a"])[B], {"value": None, "known": 0, "builds": 0}, "a changes nothing in B")
         noisy = changed(f, lambda g: g["of"].__setitem__("base_noise", chain.noise()))
         self.assertTrue(said(fixes.against(noisy, data, full), "the base is the published results, which are exact"))
 
@@ -872,26 +872,75 @@ class Noise(unittest.TestCase):
         again = dense(f, "d", {A: {at(f, "p1"): 1.5}}, under_noise=measured(1e-3))
         self.assertEqual(counts, again[A]["classes"])
 
-    def test_a_set_counts_the_base_once_for_each_fix_measured_against_it(self):
-        """a and b each moved p1 from the base: a rebuild of the base moves both differences."""
+    def test_a_sum_counts_the_base_once_for_each_fix_measured_against_it(self):
+        """a and b each moved p1 from the base: a rebuild of the base moves both differences.
+        With a and c, no item is a sum: p1 is a's build and p3 c's, each against the base."""
         f, *_ = made(noise_a=measured(1e-3), noise_b=measured(1e-3), interactions="none", built=False,
                      state_noise={"s1": measured(1e-4)})  # fmt: skip
         self.assertEqual(fixes.noise_of(f, ["a", "b"])[A], {"value": 1e-4 + 1e-3 + 1e-4 + 1e-3, "known": 3, "builds": 3})
-        self.assertEqual(fixes.noise_of(f, ["a", "c"])[A], {"value": 1e-4 + 1e-3 + 1e-4, "known": 2, "builds": 3})
+        self.assertEqual(fixes.noise_of(f, ["a", "c"])[A], {"value": 1e-4 + 1e-3, "known": 2, "builds": 3})
         self.assertEqual(fixes.noise_of(f, ["c"])[A], {"value": 1e-4, "known": 1, "builds": 2}, "one fix: its build")
+        drawn = fixes.compose(f, ["a", "c"])
+        self.assertEqual(named(f, [drawn["item_noise"][A].get(k) for k in range(len(f["items"]))]),
+                         {"p1": 1e-4 + 1e-3, "p2": None, "p3": 1e-4, "p4": None})  # fmt: skip
+
+    def test_an_item_takes_the_noise_of_the_builds_its_result_stands_on_never_another_fixs(self):
+        """sentier-bafu's probe: three fixes on three items, each build at 1 %, the base at
+        0.5 %; c moves p3 by 2.9 %. At p3 the set's result is c's build, so its noise is the
+        base's and c's (1.5 %) whichever fixes are ticked with c: p3 differs in every set. A
+        noise summed over every fix (4.5 % for three) would put it within noise as soon as a
+        is ticked."""
+        f = disjoint()
+        for names in (["c"], ["a", "c"], ["a", "b", "c"]):
+            with self.subTest(names=names):
+                self.assertEqual(fixes.compose(f, names)["item_noise"][A][at(f, "p3")], 0.005 + 0.01)
+                classes = fixes.counts(f, names)["by"][A]["classes"]
+                self.assertEqual((classes[rule.DIFFERS], classes[rule.WITHIN_NOISE]), (len(names), 0))
+        self.assertEqual(fixes.noise_of(f, ["a", "b", "c"])[A], {"value": 0.005 + 0.01, "known": 4, "builds": 4})
+
+    def test_a_set_counts_each_item_with_its_own_noise(self):
+        """a moves p1 by 2.9 % with its build at 1 %; c moves p3 by 10 % with its build at 4 %.
+        In the set of both, p1 is judged with 1.5 % and differs; the set's largest noise (4.5 %)
+        would put it within noise."""
+        data, full = chain_and_matrix(noise={"s1": measured(0.005)})
+        f = fixes.build("Two noises", data=data, full=full, base="s1",
+                        fixes=[fixes.fix("a", "Fix a", kind="amount", noise=measured(0.01)),
+                               fixes.fix("c", "Fix c", kind="amount", noise=measured(0.04))],
+                        results={"a": {A: {"p1": 1.029}}, "c": {A: {"p3": 3.3}}},
+                        interactions=checked_pairs())  # fmt: skip
+        self.assertEqual(fixes.errors(f), [])
+        noise = fixes.compose(f, ["a", "c"])["item_noise"][A]
+        self.assertEqual((noise[at(f, "p1")], noise[at(f, "p3")]), (0.005 + 0.01, 0.005 + 0.04))
+        classes = fixes.counts(f, ["a", "c"])["by"][A]["classes"]
+        self.assertEqual((classes[rule.DIFFERS], classes[rule.WITHIN_NOISE]), (2, 0))
 
     def test_a_built_set_is_compared_as_its_own_build(self):
         f, *_ = made(noise_ab=measured(5e-3), interactions="none", state_noise={"s1": measured(1e-4)})
         self.assertEqual(fixes.label(f, ["a", "b"]), fixes.BUILT)
         self.assertEqual(fixes.noise_of(f, ["a", "b"])[A], {"value": 1e-4 + 5e-3, "known": 2, "builds": 2})
 
-    def test_a_build_a_result_is_taken_from_counts_where_its_noise_is_larger(self):
-        """In A the set of a, b and c takes p1 from the build of a and b; in B no build is used."""
+    def test_a_sum_runs_in_the_order_of_the_file(self):
+        """Three fixes change p1, their builds' noise 0.1, 0.2 and 0.3: summed in the order of
+        the file it is 0.6000000000000001, in the other order 0.6. The page's port sums in the
+        same order, so the two agree bit for bit."""
+        data, full = chain_and_matrix()
+        f = fixes.build("Three on one item", data=data, full=full, base="s1",
+                        fixes=[fixes.fix(x, f"Fix {x}", kind="amount", noise=measured(n))
+                               for x, n in (("x", 0.1), ("y", 0.2), ("z", 0.3))],
+                        results={"x": {A: {"p1": 1.1}}, "y": {A: {"p1": 1.2}}, "z": {A: {"p1": 1.3}}},
+                        interactions=checked_pairs())  # fmt: skip
+        drawn = fixes.compose(f, ["z", "y", "x"])
+        self.assertEqual(drawn["item_noise"][A][at(f, "p1")], 0.1 + 0.2 + 0.3)
+        self.assertNotEqual(0.1 + 0.2 + 0.3, 0.3 + 0.2 + 0.1)
+
+    def test_a_result_taken_from_a_build_inside_the_set_takes_that_builds_noise(self):
+        """The set of a, b and c takes p1 in A from the build of a and b: p1 stands on that
+        build and the base, not on a's and b's own builds; p3 on c's and the base."""
         f, *_ = made(noise_ab=measured(5e-2), interactions="none")
         self.assertEqual(fixes.label(f, ["a", "b", "c"]), fixes.EXACT)
         noise = fixes.noise_of(f, ["a", "b", "c"])
-        self.assertEqual(noise[A], {"value": 5e-2, "known": 1, "builds": 5})
-        self.assertEqual(noise[B], {"value": None, "known": 0, "builds": 4})
+        self.assertEqual(noise[A], {"value": 5e-2, "known": 1, "builds": 3})
+        self.assertEqual(noise[B], {"value": None, "known": 0, "builds": 2})
         self.assertEqual(fixes.compose(f, ["a", "b", "c"])["noise"], noise)
         self.assertEqual(fixes.counts(f, ["a", "b", "c"])["by"][A]["classes"][rule.WITHIN_NOISE], 1)
 
@@ -907,6 +956,23 @@ class Noise(unittest.TestCase):
         self.assertTrue(said(fixes.errors(gone), "built set 'ab', item 'p1', x:a: built 1.00406"))
         own = changed(f, lambda g: g["built"][0].__setitem__("noise", chain.noise()))
         self.assertTrue(said(fixes.errors(own), "built set 'ab', item 'p1', x:a: built 1.00406"))
+
+    def test_a_built_set_is_held_at_each_item_to_the_builds_its_sum_stands_on_there(self):
+        """The three fixes built together, p3 1.8 % from c's build: within the noise of that
+        build and the built set's (2 %), not of the base's and the built set's (1.5 %). At
+        2.4 % it is refused, where every fix's noise and the base's (6 %) would let it pass."""
+        f = disjoint()
+        self.assertEqual(fixes.errors(f), [])
+        p1, p2, p3 = (at(f, p) for p in ("p1", "p2", "p3"))
+
+        def add(value):
+            return lambda g: g["built"].append({"id": "abc", "label": "All three", "fixes": ["a", "b", "c"], "state": None,
+                                                "results": {A: sorted([[p1, 1.5], [p2, 2.5], [p3, value]]), B: []},
+                                                "noise": measured(0.01)})  # fmt: skip
+
+        self.assertEqual(fixes.errors(changed(f, add(3.09 * 1.018))), [], "1.8 % from c's build: within 2 %")
+        found = fixes.errors(changed(f, add(3.09 * 1.025)))
+        self.assertTrue(said(found, "built set 'abc', item 'p3', x:a"), found)
 
     def test_a_release_is_held_to_its_state_with_the_noise_of_both(self):
         """1.0028 is 1.5e-3 from the state's 1.0013: within the two builds' noise (2e-3),
@@ -928,6 +994,18 @@ class Noise(unittest.TestCase):
             fixes.build("x", data=old, full=full, base="s1", fixes=[fixes.fix("a", "A", kind="mapping")], results={})
         self.assertIn(fixes.NO_STATE_NOISE, str(caught.exception))
         self.assertEqual(fixes.against(f, old, full), [fixes.NO_STATE_NOISE])
+
+
+def disjoint():
+    """Three fixes on three items in A, each built twice and measured at 1 %, the base at
+    0.5 %: a moves p1 to 1.5, b p2 to 2.5, c p3 from 3.0 to 3.09 (2.9 %). No pair is listed."""
+    data, full = chain_and_matrix(noise={"s1": measured(0.005)})
+    return fixes.build(
+        "Three fixes apart", data=data, full=full, base="s1",
+        fixes=[fixes.fix(x, f"Fix {x}", kind="amount", noise=measured(0.01)) for x in ("a", "b", "c")],
+        results={"a": {A: {"p1": 1.5}}, "b": {A: {"p2": 2.5}}, "c": {A: {"p3": 3.09}}},
+        interactions=checked_pairs(),
+    )  # fmt: skip
 
 
 class Matrix(unittest.TestCase):

@@ -20,11 +20,11 @@ A set has no verdict: each claim is judged in its own fix. A set's tolerance is 
 of its fixes'. Noise belongs to a build, as it belongs to a state of a chain (SPEC 5.3): the
 base's is that state's (none where the base is the published results, which are exact), a
 fix's is that of the build with it, a built set's that of its build. A fix is judged with the
-sum of the noise of its build and of the one it was measured against. A set's result is a
-build's, or a sum over its fixes, so its noise is the sum, over its fixes, of the noise of each
-fix's build and of the one it was measured against; or that of a build it takes a result from,
-and of the base, where that is larger. It says at how many of those builds the noise is known,
-never reading not measured as none.
+sum of the noise of its build and of the one it was measured against. A set is judged item by
+item with the noise of the builds the item's result stands on, never with that of a fix that
+does not touch it: a build's result, with that build's and the base's; a sum, with each
+summed fix's build and the one it was measured against. It says at how many of those builds
+the noise is known, never reading not measured as none.
 
 A listed pair holds no text: its kind of interaction (one of `PAIR_KINDS`, from where the
 two changes meet in h = c·B·A⁻¹·f), how many items it can reach and the measured size of
@@ -91,6 +91,8 @@ MAX_FIXES, MAX_BUILT = 1000, 500
 MAX_ITEMS, MAX_BYTES = matrix.MAX_ITEMS, matrix.MAX_BYTES
 
 BUILT, EXACT, ESTIMATED = "built", "exact", "estimated"
+#: What a set's result at an item stands on (`_Builds.composed`): one build, or a sum of fixes.
+BUILD, SUM = "build", "sum"
 LABELS = (BUILT, EXACT, ESTIMATED)
 
 #: The shape of an identifier of a model (a UUID, or 32 hexadecimal digits): refused in the
@@ -514,16 +516,17 @@ class _Builds:
         return found
 
     def composed(self, fixes: frozenset, ind: str, *, built: bool = True,
-                 used: set | None = None) -> dict[int, tuple[float | None, bool]]:  # fmt: skip
+                 how: dict | None = None) -> dict[int, tuple[float | None, bool]]:  # fmt: skip
         """A closed set's result in one indicator, at every item one of its fixes changes:
-        `{item index: (result, whether it could be formed)}`. Where the fixes that change an
-        item all lie in one build inside the set (`covers`), the first such build's result is
-        the set's: measured, not summed. Otherwise the base plus each fix's difference against
-        what it was measured against. `built=False` leaves the built sets out: the sum a built
-        set is held to stands on the fixes alone. `used` gathers the builds a result was taken
-        from."""
+        `{item index: (result, whether it could be formed)}`. Where one fix changes an item,
+        its build's result is the set's; where several do and all lie in one build inside the
+        set (`covers`), the first such build's: measured, not summed. Otherwise the base plus
+        each fix's difference against what it was measured against. `built=False` leaves the
+        built sets out: the sum a built set is held to stands on the fixes alone. `how` gathers
+        what each result stands on, `{item index: ("build", its fixes) or ("sum", the fixes
+        summed)}`, for its noise (`_item_ends`)."""
         touching: dict[int, list[str]] = {}
-        for y in fixes:
+        for y in (y for y in self.closures if y in fixes):  # in the order of the file: one sum, one float
             for k in self.entries[y][ind]:
                 touching.setdefault(k, []).append(y)
         covers = self.covers(fixes, built=built)
@@ -533,16 +536,19 @@ class _Builds:
         for k, ys in touching.items():
             if len(ys) == 1:
                 out[k] = (mine[ys[0]][k], True)
-                continue
-            here = set(ys)
-            cover = next((c for c in covers if here <= c), None)
-            if cover is not None:
-                if used is not None:
-                    used.add(cover)
-                column = self.column(cover)[ind]
-                out[k] = (column[k] if k in column else base[k], True)
+                stands = (BUILD, self.closures[ys[0]] | {ys[0]})
             else:
-                out[k] = _sum(base[k], [(mine[y][k], under[y][k] if k in under[y] else base[k]) for y in ys])
+                here = set(ys)
+                cover = next((c for c in covers if here <= c), None)
+                if cover is not None:
+                    column = self.column(cover)[ind]
+                    out[k] = (column[k] if k in column else base[k], True)
+                    stands = (BUILD, cover)
+                else:
+                    out[k] = _sum(base[k], [(mine[y][k], under[y][k] if k in under[y] else base[k]) for y in ys])
+                    stands = (SUM, tuple(ys))
+            if how is not None:
+                how[k] = stands
         return out
 
 
@@ -610,10 +616,12 @@ def _side(before, after) -> str:
 
 
 def _block(base: _Base, ind: str, changed: Mapping[int, float | None], tolerance: float,
-           noise: float | None, claim: Mapping | None, under: Mapping[int, float | None] | None = None) -> dict:  # fmt: skip
+           noise: float | Mapping[int, float | None] | None, claim: Mapping | None,
+           under: Mapping[int, float | None] | None = None) -> dict:  # fmt: skip
     """The counts of one indicator over every item: the column `under` (the base, with the
     items `under` names laid over it) against that column with `changed` laid over it, judged
-    by the rule with `tolerance` and `noise`, and against `claim` where there is one. Only the
+    by the rule with `tolerance` and `noise` (one for every item, or one per changed item), and
+    against `claim` where there is one. Only the
     items the two columns name are judged one by one: every other pair is the base against
     itself, counted from the base's own classes."""
     under = under or {}
@@ -644,7 +652,8 @@ def _block(base: _Base, ind: str, changed: Mapping[int, float | None], tolerance
         classes[was] -= 1
         if was == rule.MISSING:
             missing["both"] -= 1
-        kind, way, band = rule.judge(before, after, floor=floors[k], tolerance=tolerance, noise=noise)
+        level = noise.get(k) if isinstance(noise, Mapping) else noise
+        kind, way, band = rule.judge(before, after, floor=floors[k], tolerance=tolerance, noise=level)
         classes[kind] += 1
         if kind == rule.MISSING:
             missing[_side(before, after)] += 1
@@ -776,62 +785,82 @@ def tolerance_of(f: Mapping, ids: Iterable[str]) -> float:
 
 
 def noise_of(f: Mapping, ids: Iterable[str]) -> dict[str, dict]:
-    """The noise of a set against the base, per indicator (SPEC 16.5): `{value, known, builds}`.
-
-    A built set's is the sum of the noise of its build and of the base. Any other set's result
-    at an item is a build's, or the base plus each fix's difference against what it was
-    measured against: its value is the sum, over its fixes, of the noise of each fix's build and
-    of the one it was measured against (the base once for each fix measured against it), or,
-    where larger, that of a build a result is taken from and of the base. `builds` counts the
-    builds that enter it, `known` those whose noise is known there (the published results are
-    exact); None where none measured it: not measured is never none."""
+    """The noise of a set against the base, per indicator (SPEC 16.5): `{value, known,
+    builds}`. Each item it changes is judged with the noise of the builds its result stands on
+    (`_against_base`), never with that of a fix that does not touch it; `value` is the largest
+    of those, `builds` counts the builds they stand on and `known` those whose noise is known
+    there (the published results are exact). None where none measured it: not measured is never
+    none. A set that changes nothing in an indicator stands on no build there."""
     names = chosen(f, ids)[0]
     builds = _Builds.of(f)
-    return _set_noise(builds, names, _changed(builds, names)[2])
+    return _set_noise(builds, _changed(builds, names)[2])[0]
 
 
-def _set_noise(builds: _Builds, names: list[str], used: Mapping[str, set]) -> dict[str, dict]:
-    whole = builds.end(names)
-    base = ("", builds.base_end)
-    out = {}
+def _sum_side(builds: _Builds, fixes: Iterable[str]) -> list[tuple]:
+    """The builds a sum over these fixes stands on, `(name, end)`: each fix's build and the one
+    it was measured against (the base, for a fix that requires nothing)."""
+    return [end for y in fixes for end in (builds.end(builds.closures[y]), (y, _built(builds.noise[y])))]
+
+
+def _against_base(builds: _Builds, stands: tuple) -> list[tuple]:
+    """The builds a set's result at one item and the base result there stand on, `(name, end)`:
+    the build the result is taken from, and the base; for a sum, the builds of the sum alone,
+    since the base it starts from is the base it is compared with, and cancels."""
+    kind, what = stands
+    if kind == BUILD:
+        return [("", builds.base_end), builds.end(what)]
+    return _sum_side(builds, what)
+
+
+def _set_noise(builds: _Builds, how: Mapping[str, Mapping[int, tuple]]) -> tuple[dict, dict]:
+    """A set's noise per indicator, `{value, known, builds}`, and the noise each item it changes
+    is judged with, `{indicator: {item index: noise or None}}`."""
+    summary, per_item = {}, {}
     for ind in builds.base.ids:
-        if whole is not None:
-            sums = [[base, whole]]
-        else:
-            terms = [end for y in names for end in (builds.end(builds.closures[y]), (y, _built(builds.noise[y])))]
-            sums = [terms, *([base, builds.end(cover)] for cover in sorted(used[ind], key=sorted))]
-        levels = [lv for lv in (_level([end for _, end in one], ind) for one in sums) if lv is not None]
-        every = {name: end for one in sums for name, end in one}
-        out[ind] = {"value": max(levels) if levels else None,
-                    "known": sum(_known(end, ind) for end in every.values()), "builds": len(every)}  # fmt: skip
-    return out
+        levels, every, seen = {}, {}, {}
+        for k, stands in how[ind].items():
+            if stands not in seen:  # most items share what they stand on: one fix's build
+                ends = _against_base(builds, stands)
+                seen[stands] = _level([end for _, end in ends], ind)
+                every.update(ends)
+            levels[k] = seen[stands]
+        found = [lv for lv in levels.values() if lv is not None]
+        summary[ind] = {"value": max(found) if found else None,
+                        "known": sum(_known(end, ind) for end in every.values()), "builds": len(every)}  # fmt: skip
+        per_item[ind] = levels
+    return summary, per_item
 
 
 def _changed(builds: _Builds, names: list[str]) -> tuple[dict, dict, dict]:
     """The items a closed set changes, per indicator, with its result at each; the items
-    where no sum can be formed; and the builds inside the set a result was taken from."""
+    where no sum can be formed; and what each result stands on (`_Builds.composed`)."""
     column = builds.column(names)
     if column is not None:
-        return column, {ind: [] for ind in builds.base.ids}, {ind: set() for ind in builds.base.ids}
-    changed, cannot, used = {}, {}, {}
+        whole = frozenset(names)
+        return (column, {ind: [] for ind in builds.base.ids},
+                {ind: dict.fromkeys(column[ind], (BUILD, whole)) for ind in builds.base.ids})  # fmt: skip
+    changed, cannot, how = {}, {}, {}
     for ind in builds.base.ids:
-        used[ind] = set()
-        cells = builds.composed(frozenset(names), ind, used=used[ind])
+        how[ind] = {}
+        cells = builds.composed(frozenset(names), ind, how=how[ind])
         changed[ind] = {k: v for k, (v, _) in cells.items()}
         cannot[ind] = sorted(k for k, (_, ok) in cells.items() if not ok)
-    return changed, cannot, used
+    return changed, cannot, how
 
 
 def compose(f: Mapping, ids: Iterable[str]) -> dict:
     """What a page draws for a set: its fixes in the order of the file (each with its own
     claim and counts), the fixes added because a chosen one requires them, its label, the
-    listed pairs it holds and their pair terms, its tolerance and noise, and its result for
-    every item, `{indicator: [result or None, ...]}` in the order of `items`. `cannot_add`
+    listed pairs it holds and their pair terms, its tolerance and noise (`noise_of`), the noise
+    each item it changes is judged with (`item_noise`, `{indicator: {item index: noise or
+    None}}`), and its result for every item, `{indicator: [result or None, ...]}` in the order
+    of `items`. `cannot_add`
     names, per indicator, the item indices whose result is None because no sum can be formed
     there, so that it reads apart from a missing result. A set has no verdict."""
     names, added = chosen(f, ids)
     builds = _Builds.of(f)
-    changed, cannot, used = _changed(builds, names)
+    changed, cannot, how = _changed(builds, names)
+    noise, item_noise = _set_noise(builds, how)
     results = {}
     for ind in builds.base.ids:
         column = list(builds.base.values[ind])
@@ -845,7 +874,8 @@ def compose(f: Mapping, ids: Iterable[str]) -> dict:
         "pairs": held_pairs(f, names),
         "pair_terms": pair_terms(f, names),
         "tolerance": tolerance_of(f, names),
-        "noise": _set_noise(builds, names, used),
+        "noise": noise,
+        "item_noise": item_noise,
         "results": results,
         "cannot_add": cannot,
     }
@@ -856,11 +886,11 @@ def counts(f: Mapping, ids: Iterable[str]) -> dict:
     estimated set's counts are estimates ("estimated: 153 would differ"). No verdicts."""
     names = chosen(f, ids)[0]
     builds = _Builds.of(f)
-    changed, _, used = _changed(builds, names)
-    tol, noise = tolerance_of(f, names), _set_noise(builds, names, used)
+    changed, _, how = _changed(builds, names)
+    tol, item_noise = tolerance_of(f, names), _set_noise(builds, how)[1]
     return {
         "label": _label(f, builds, names),
-        "by": {ind: _block(builds.base, ind, changed[ind], tol, noise[ind]["value"], None) for ind in builds.base.ids},
+        "by": {ind: _block(builds.base, ind, changed[ind], tol, item_noise[ind], None) for ind in builds.base.ids},
     }
 
 
@@ -1344,32 +1374,35 @@ def _number(value: float | None) -> str:
     return "null" if value is None else f"{value:.10g}"
 
 
-def _sum_ends(builds: _Builds, fixes: Iterable[str]) -> list[Mapping]:
-    """The builds a sum over these fixes stands on, as ends: each fix's build and the one it was
-    measured against (the base, once for each fix measured against it)."""
-    return [end for y in sorted(fixes) for end in (builds.end(builds.closures[y])[1], _built(builds.noise[y]))]
-
-
 def _disagreements(builds: _Builds, where: str, key: frozenset, by_id: Mapping, one: Mapping, results: Mapping,
                    largest: float | None = None) -> list[str]:  # fmt: skip
     """Where a built set is further from the sum of its effects than the file says, by the
-    rule, with the largest tolerance of its fixes and the noise of every build the two sides
-    stand on: the base and each fix's build and what it was measured against, in the sum; the
-    built set, on the other side."""
+    rule, with the largest tolerance of its fixes and, item by item, the noise of the builds
+    the two sides stand on: the built set's, and the build the sum takes the item from, or the
+    base with each fix's build and what it was measured against where it adds the fixes that
+    touch the item, or the base alone where none does."""
     base = builds.base
-    ends = [builds.base_end, *_sum_ends(builds, key), _built(one["noise"])]
+    own, from_base = _built(one["noise"]), [builds.base_end]
+    tol = max(by_id[x]["tolerance"]["value"] for x in key)
+    if largest is not None:
+        tol = max(tol, largest)
     found, more = [], 0
     for ind in base.ids:
-        tol, level = max(by_id[x]["tolerance"]["value"] for x in key), _level(ends, ind)
-        if largest is not None:
-            tol = max(tol, largest)
-        cells = builds.composed(key, ind, built=False)
+        how: dict[int, tuple] = {}
+        cells = builds.composed(key, ind, built=False, how=how)
         for k in sorted(set(cells) | set(results[ind])):
             before = base.values[ind][k]
             summed, ok = cells.get(k, (before, True))
             if not ok:
                 continue  # no sum to hold the build to
             got = results[ind].get(k, before)
+            if k not in how:
+                side = from_base
+            elif how[k][0] == BUILD:
+                side = [builds.end(how[k][1])[1]]
+            else:
+                side = from_base + [end for _, end in _sum_side(builds, how[k][1])]
+            level = _level([own, *side], ind)
             kind = rule.classify(summed, got, floor=base.floor[ind][k], tolerance=tol, noise=level)
             if kind in claims.STILL or (kind == rule.MISSING and summed is None and got is None):
                 continue

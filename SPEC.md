@@ -971,10 +971,12 @@ base result bit for bit. The base is held to the chain bit for bit and every ent
 differs is kept, so an effect computed another way fills up with the route's own
 differences, each read as a change: sentier-bafu built one release twice, a pinned copy
 against today's importer with no change meant, and 294,590 of 298,675 results moved, 722 of
-them by 1e-5 or more. **Results are read exactly**, as they were written: a reader that
-rounds the last bit drops changes and adds others (a default CSV reader misread 134,743 of
-the 298,675 results of one build in the last bit, and lost 7 of the 86 changes of one patch;
-read round-trip, every result matches its text).
+them by 1e-5 or more. **Results are read exactly**, as they were written, and both sides the
+same way. A reader that rounds the last bit merges distinct results and drops changes: a
+default CSV reader misread 134,743 of the 298,675 results of one build in the last bit, and
+lost 7 of the 86 changes of one patch; read round-trip, every result matches its text. Where
+the two sides are read differently (effects read exactly, against a base held to a chain whose
+results went through a rounding reader), every misread result reads as a change.
 
 A fix's `counts` is one block per indicator (section 4.2), its pairs being the result it was
 measured against and the result with the fix, judged with the fix's own tolerance and the
@@ -1024,27 +1026,32 @@ it), the set has no result there, and the page says the sum cannot be formed, ap
 result that is missing. It is judged by the rule (section 5) against the base:
 
 - its **tolerance** is the largest of its fixes';
-- its **noise** follows section 5.3, per indicator: noise belongs to a build, and a
-  comparison takes the sum of the noise of the builds it stands on. The base's is its
+- its **noise** follows section 5.3: noise belongs to a build, and a comparison takes the
+  sum of the noise of the builds it stands on, never of one it does not. The base's is its
   state's (`of.base_noise`; the published results are exact and add nothing), a fix's that
-  of the build with it and what it requires, a built set's that of its build.
-  - A set that is a build (one fix with what it requires, or a built set) takes the sum of
-    its noise and the base's.
-  - Any other set's difference from the base is a sum of its fixes' differences, each
-    against what that fix was measured against. Its noise is the sum, over its fixes, of the
-    noise of each fix's build and of the build it was measured against: the base once for
-    each fix measured against it, since a rebuild of the base moves every one of those
-    differences the same way. Where it takes a result from a build inside it, that build's
-    noise and the base's bound the result there, and the set's noise is the larger of the
-    two. The sum runs in the order of the file's fixes, each fix's measured-against build
-    before its own, so that the page's port gives the same number bit for bit.
+  of the build with it and what it requires, a built set's that of its build. A set is
+  judged **item by item**, with the builds that item's result stands on:
+  - where its result is a build's (one fix changes it, or a build inside the set covers
+    it, or the set is a build), that build's noise and the base's;
+  - where it is a sum, the sum over the fixes that change the item of the noise of each
+    fix's build and of the build it was measured against: the base once for each of them
+    measured against it, since a rebuild of the base moves each of those differences the
+    same way. The base the sum starts from is the base it is compared with, and cancels.
 
-  A build whose noise was not measured adds nothing, and the page says at how many of the
-  builds the noise is known ("noise known at 3 of 5 builds"; the published results are
-  known, and exact), never reading not measured as none; where no build measured it the page
-  says "not measured", never "identical". A noise names its two builds (`between`): two
-  builds in one process on one solve route measure the engine's determinism and read 0, two
-  routes measure how a result moves with the route; the note says which;
+  A fix that does not change an item adds nothing to it. This is the fixes file's form of
+  "a state inside a run adds nothing" (5.3): summed over every fix ticked, the noise of
+  three fixes on three items, each built at 1 %, was 6 %, and ticking an unrelated fix put
+  an item that moved 2.9 % "within noise" (sentier-bafu's probe; A30 again). The sum runs in
+  the order of the file's fixes, each fix's measured-against build before its own, so that
+  the page's port gives the same number bit for bit.
+
+  Per indicator the page says the largest noise an item is judged with, and at how many of
+  the builds those items stand on the noise is known ("noise known at 3 of 5 builds"; the
+  published results are known, and exact), never reading not measured as none; where no
+  build measured it the page says "not measured", never "identical". A noise names its two
+  builds (`between`): two builds in one process on one solve route measure the engine's
+  determinism and read 0, two routes measure how a result moves with the route; the note
+  says which;
 - it has **no verdict**: each claim is judged in its own fix.
 
 Each set carries one of three labels, and the page shows it wherever the set is drawn:
@@ -1130,10 +1137,12 @@ is, where it is one, or null.
 fixes are a listed pair, the built results must agree with the base plus the sum of the
 effects, by the rule with the set's tolerance and noise, for every item. That sum stands on
 the fixes alone (16.5 without its built sets): a set held to a build inside it, itself held
-to the sum, would stack two tolerances. The noise here is that of every build the two sides
-stand on (16.5): in the sum, the base and each fix's build and the one it was measured
-against (the base once more for each fix measured against it); on the other side, the built
-set's own. A file where they do not agree is refused, naming the set, the item and the
+to the sum, would stack two tolerances. The noise is taken item by item, as in 16.5: the
+built set's own, and that of the builds the sum stands on at that item (the build it takes
+the result from; or the base, with each fix that changes the item, its build and the one it
+was measured against; or the base alone where no fix changes it). A fix that does not change
+the item adds nothing: otherwise a large built set would pass a real disagreement as within
+noise. A file where they do not agree is refused, naming the set, the item and the
 indicator: its producer called two fixes independent that are not. Where the set holds a
 listed pair, the page shows how far the built results lie from the sum, as that set's
 interaction. Where the set is exactly one listed pair with a measured `largest`, the built
@@ -1225,7 +1234,8 @@ to about 300,000 (6 to 7 MB). 64 MB holds about ten dense fixes and thousands of
 ones; effects move to one file per fix only if dense fixes become common. Checked on a
 made-up file of that base with 100 fixes of 500 items each in every indicator, ten of them
 requiring the fix before them, every build's noise measured (39.5 MB), the check takes
-about 2.2 seconds, and counting a set of 50 of them under one.
+about 2.4 seconds, and counting a set of 50 of them, each item with its own noise, about
+one.
 
 ### 16.11 Acceptance cases
 
@@ -1238,13 +1248,13 @@ Each is a test before the code is written.
 | F3 | Interactions not checked: every set of two fixes or more that was not built is estimated, none exact |
 | F4 | A built set that disagrees with the sum where the file calls its fixes independent is refused, naming the set, item and indicator |
 | F5 | A fix's verdicts are the same whichever fixes are chosen with it |
-| F6 | The noise of a set is the sum, over its fixes, of the noise of each fix's build and of the one it was measured against (the base once for each fix), or that of a build it takes a result from and the base's where larger; the builds whose noise is known are counted, and not measured is never identical |
+| F6 | A set is judged item by item with the noise of the builds the item's result stands on: a build's and the base's, or for a sum, each summed fix's build and the one it was measured against (the base once for each fix). A fix that does not change the item adds nothing; the builds whose noise is known are counted, and not measured is never identical |
 | F7 | The page's rule agrees with the Python rule on every shared case and generated boundary value, and the page refuses to compose where it cannot reproduce a fix's own classes |
 | F8 | A file of fixes holds nothing of the model in a pair: its kind comes from a closed list, and any text in it is refused |
 | F9 | A fix that requires another is measured against their build; choosing it chooses what it requires; in a set, each effect adds on top of what it was measured with, so what two fixes build on counts once; where a build inside the set holds every fix that changes an item, its result is taken, measured, not summed |
 | F10 | A built set that names a state of the chain is refused where its results do not reproduce that state |
 | F11 | A fix may bring an item no state holds: it follows the matrix's items, with no base result, and a fix gives it one; in a unit no item of the chain has, it takes a floor of 0 from nothing |
-| F12 | A fix is judged with the noise of its build and of the build it was measured against; a built set is held to its sum with the noise of every build both stand on, and to its state with its noise and the state's; the base's noise is its state's, and the published results are exact |
+| F12 | A fix is judged with the noise of its build and of the build it was measured against; a built set is held to its sum, item by item, with the noise of the builds both sides stand on there, and to its state with its noise and the state's; the base's noise is its state's, and the published results are exact |
 | F13 | A pair with no size is built, and its build has none; "no size" and "not measured" read apart |
 
 ### 16.12 Who does what, and in which order
