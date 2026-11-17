@@ -16,12 +16,16 @@ The fixture `fixtures/boundaries.json` is written by
 
 from __future__ import annotations
 
+import contextlib
+import copy
+import io
 import json
 import math
+import tempfile
 import unittest
 from pathlib import Path
 
-from sentier_diagnostics import rule
+from sentier_diagnostics import chain, claims, cli, example, fileformat, from_tables, rule, summary
 
 FIXTURE = Path(__file__).parent / "fixtures" / "boundaries.json"
 TOLERANCE = 1e-5
@@ -131,6 +135,72 @@ class Boundaries(unittest.TestCase):
                     "the noise, exactly", "the tolerance, exactly"):  # fmt: skip
             with self.subTest(why):
                 self.assertGreater(len(by_edge[why]), 1, why)
+
+
+class OtherEdges(unittest.TestCase):
+    """The other edges a reader meets, each taken on it and just past it (issue 15: one-line
+    mutations of `<=` to `<` or `>` to `>=` here went unnoticed): a claim's largest change,
+    the floor a noise is measured beyond, the mark of a large noise, closer and further, the
+    12 MB of a file and the 200 items a description lists unless it says otherwise."""
+
+    def test_a_change_of_exactly_a_claims_largest_is_within_it(self):
+        entry = claims.scope(["a"], "*", "up", 0.5, claims.MAY)
+        self.assertEqual(rule.change(1.0, 1.5), 0.5)
+        self.assertTrue(claims.fits(entry, 1.0, 1.5, "up"))
+        self.assertFalse(claims.fits(entry, 1.0, math.nextafter(1.5, 2.0), "up"))
+
+    def test_a_noise_is_measured_beyond_its_floor_not_on_it(self):
+        self.assertIsNone(chain.noise_of({"a": 0.01}, {"a": 0.02}, floor=0.01))
+        self.assertIsNotNone(chain.noise_of({"a": math.nextafter(0.01, 1.0)}, {"a": 0.02}, floor=0.01))
+
+    def test_a_noise_of_exactly_the_large_mark_is_not_called_large(self):
+        names = {"a": "A"}
+        said = lambda size: summary.noise_text({"measured": True, "between": ["x", "y"], "by": {"a": size}}, names)  # noqa: E731
+        self.assertEqual(chain.LARGE_NOISE, 0.01)  # SPEC 5.3: above 1 % a noise is large
+        self.assertNotIn("(large)", said(0.01))
+        self.assertIn("(large)", said(math.nextafter(0.01, 1.0)))
+
+    def test_closer_and_further_may_add_up_to_what_moved_and_no_more(self):
+        data = example.build()
+        step = next(s for s in data["steps"] if s["id"] == "fix-1")
+        block = copy.deepcopy(data["counts"]["steps"]["fix-1"]["x:climate"])
+        moved = sum(block["classes"][k] for k in rule.MOVES)
+        self.assertGreater(moved, 0)
+        block.update(closer=moved, further=0)
+        self.assertEqual([e for e in fileformat._block(block, "b", step) if "closer" in e], [])
+        block.update(further=1)
+        self.assertIn("b: more came closer or went further than moved", fileformat._block(block, "b", step))
+
+    def test_a_file_of_12_mb_is_checked_and_one_byte_more_refused(self):
+        # written as SPEC says it, not taken from the constant, so that a change of the
+        # constant is a change a test sees
+        limit = 12 * 1024 * 1024
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "d.json"
+            text = chain.dumps(example.build())
+            for size, code in ((limit, 0), (limit + 1, 1)):
+                path.write_text(text + " " * (size - len(text.encode())), encoding="utf-8")
+                self.assertEqual(path.stat().st_size, size)
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(cli.check([path]), code, size)
+
+    def test_a_description_lists_200_items_unless_it_says_otherwise(self):
+        many = 205
+        spec = {"title": "t", "item": {"one": "i", "many": "is"},
+                "indicators": [{"id": "x:a", "name": "A", "short": "A", "unit": "m3"}], "items": "items.csv",
+                "states": [{"id": "s0", "label": "0", "results": "s0.csv"}, {"id": "s1", "label": "1", "results": "s1.csv"}],
+                "steps": [{"id": "st", "label": "step", "kind": "method"}]}  # fmt: skip
+        tables_ = {"items.csv": ["item,unit"] + [f"p{k},kg" for k in range(many)],
+                   "s0.csv": ["item,x:a"] + [f"p{k},{1.0 + k}" for k in range(many)],
+                   "s1.csv": ["item,x:a"] + [f"p{k},{2.0 * (1.0 + k)}" for k in range(many)]}  # fmt: skip
+        with tempfile.TemporaryDirectory() as folder:
+            for name, lines in tables_.items():
+                (Path(folder) / name).write_text("\n".join(lines) + "\n", encoding="utf-8")
+            (Path(folder) / "d.json").write_text(json.dumps(spec), encoding="utf-8")
+            data = from_tables.build(Path(folder) / "d.json")
+        self.assertEqual(data["items_count"]["qualifying"], many)
+        self.assertEqual(data["items_count"]["listed"], 200)
+        self.assertEqual(len(data["items"]), 200)
 
 
 if __name__ == "__main__":

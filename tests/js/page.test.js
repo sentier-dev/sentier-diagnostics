@@ -370,6 +370,34 @@ test('the whole way and the steps are drawn with each count in its own column (i
   });
 });
 
+test('the page takes each edge it shares with the Python where the Python does: ten times, a zero, a large noise (issue 15)', () => {
+  // steps cancel beyond ten times the whole difference, not at it
+  const ten = page.splitOf([1, 6.5, 2], [true, true], 'differs');
+  assert.equal(ten.factor, 10);
+  assert.ok(!page.splitText(ten).includes('cancel'), page.splitText(ten));
+  assert.match(page.splitText(page.splitOf([1, 6.75, 2], [true, true], 'differs')), /the steps cancel: their differences add up to 10\.5 times/);
+  // a result of exactly 0 is "0"; one within the floor, of either sign, is "≈ 0"
+  assert.equal(page.cellView(0, 5, 'zero reference', 'up').text, 'from 0');
+  assert.equal(page.cellView(-1e-12, 5, 'zero reference', 'up').text, 'from ≈ 0');
+  assert.equal(page.cellView(5, 0, 'zero result', 'down').text, 'to 0');
+  assert.equal(page.cellView(5, -1e-12, 'zero result', 'down').text, 'to ≈ 0');
+  // a noise of exactly 1 % is not large (chain.LARGE_NOISE)
+  const noise = (size) => page.noiseText({ measured: true, between: ['a', 'b'], by: { x: size }, note: null }, ['x']);
+  assert.ok(!noise(0.01).includes('large'), noise(0.01));
+  assert.match(noise(0.010000000000000002), /large: up to 1 %/);
+  // and where a step's noise is the sum of its two states'
+  const said = (sizes) => {
+    const d = example();
+    d.states.filter((s) => s.noise && s.noise.measured).forEach((s, k) => { s.noise.by = { [d.indicators[0].id]: sizes[k] }; });
+    const drawn = dom.page(d);
+    drawn.open('sd.step=rebuilt');
+    return drawn.byId['step-said'].textContent;
+  };
+  assert.match(said([0.005, 0.005]), /the sum of its two ends'/);
+  assert.ok(!said([0.005, 0.005]).includes('large'), said([0.005, 0.005]));
+  assert.match(said([0.005, 0.0051]), /large: up to 1\.01 %/);
+});
+
 test('the item view splits only what can be split and draws the breakdown of its own step', () => {
   const drawn = dom.page(example(), { 'p01-fix-1.json': wheat() });
   drawn.open('sd.item=p01');
