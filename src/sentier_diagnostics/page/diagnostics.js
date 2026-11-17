@@ -27,7 +27,7 @@
     'sign change': 0, 'zero reference': 1, 'zero result': 2, 'beyond 10x': 3, 'differs': 4,
     'missing': 5, 'within noise': 6, 'agrees': 7, 'near zero': 8
   };
-  var STRENGTH = { '1-1.1': 0.3, '1.1-1.25': 0.5, '1.25-2': 0.7, '2-10': 0.85, 'over 10': 1 };
+  var STRENGTH = { '1-1.1': 0.25, '1.1-1.25': 0.45, '1.25-2': 0.65, '2-10': 0.85, 'over 10': 1 };
   // the ends of the bands, as rule.SIZE_STEPS: the distance (|log10| of the factor) at which each ends
   var SIZE_STEPS = [[Math.log10(1.1), '1-1.1'], [Math.log10(1.25), '1.1-1.25'], [Math.log10(2), '1.25-2'], [1, '2-10']];
   var LOOK = ['off claim', 'not claimed', 'claimed, not moved'];
@@ -107,6 +107,18 @@
     var d = r - 1;
     if (d !== 0 && Math.abs(d) < 1e-3) return '1 ' + (d > 0 ? '+ ' : '− ') + formatNumber(Math.abs(d));
     return formatNumber(r);
+  }
+
+  // a ratio as the grid shows it, compact enough for a column: three significant digits
+  // ("1.00", "0.984", "2.27"), a power of ten below 0.01 and from 1000 on, and "1e600" where
+  // the quotient leaves the floats. "1.00" is a rounding, not a claim of agreement: the
+  // class says whether the two agree, and the cell's title holds both results exactly.
+  function ratioShort(before, after) {
+    var r = after / before;
+    if (!isFinite(r) || r === 0) return ratioText(before, after);
+    var s = r.toPrecision(3);
+    if (r < 0.01 || s.indexOf('e') >= 0) s = r.toExponential(2).replace(/\.?0+e/, 'e').replace('e+', 'e');
+    return s.replace(/-/g, '−');
   }
 
   // Steps whose differences add up to more than this many times the whole difference
@@ -254,13 +266,18 @@
     return view;
   }
 
-  // a value of the matrix grid: the ratio after ÷ before where the two share a sign, else
-  // what cellView says. Its colour is its direction's, its strength the band's; the ratio
-  // is a display, the class stays the file's.
+  // a value of the matrix grid: the ratio after ÷ before in every cell that has one, agreeing
+  // pairs included ("1.00"), so that a column reads as numbers; else what cellView says
+  // ("≈ 0", "from 0", "− → +", "missing"). The class shows as the tint and a mark, never in
+  // place of the number: the colour is the direction's, its strength the band's. The ratio is
+  // a display; the class stays the file's.
+  var RATIO_CLASSES = ['agrees', 'within noise', 'differs', 'beyond 10x'];
   function ratioView(before, after, cls, dir, band) {
     var view = cellView(before, after, cls, dir, band);
-    if (cls === 'differs' || cls === 'beyond 10x' || cls === 'within noise') {
-      view.text = (cls === 'within noise' ? '~ ' : '') + ratioText(before, after);
+    var ratio = before !== null && after !== null && before !== 0 && after !== 0 && (before > 0) === (after > 0);
+    if (ratio && RATIO_CLASSES.indexOf(cls) >= 0) {
+      view.text = ratioShort(before, after);
+      if (cls === 'within noise') view.mark = '~';
       view.title += ' After ÷ before: ' + String(after / before) + '.';
     }
     return view;
@@ -402,7 +419,7 @@
 
     var D = null, B = {}, LISTED = [], M = null;
     var matrix = { state: 'none', said: '' };
-    var view = { comp: null, worstN: 20, worstIndicator: '', find: '', cls: '', verdict: '', group: '', limit: PAGE, size: 0, sort: null, open: null };
+    var view = { comp: null, worstN: 20, worstIndicator: '', find: '', cls: '', verdict: '', group: '', limit: PAGE, size: 0, sort: 'worst', open: null };
     var lastFocus = null;
 
     function q(name) { return root.querySelector('[data-sd="' + name + '"]'); }
@@ -507,8 +524,8 @@
         ['tone-up', ratio ? '1.3' : 'up', 'went up (as signed numbers)'],
         ['tone-down', ratio ? '0.77' : 'down', 'went down: two results below zero that go further below zero went down'],
         ['tone-up no-ratio', '0 →', 'from zero, to zero or across zero: no ratio'],
-        ['tone-none', '=', 'agrees within the tolerance'],
-        ['tone-noise', '~', 'within the measured noise'],
+        ['tone-none', ratio ? '1.00' : '=', 'agrees within the tolerance' + (ratio ? ': no tint' : '')],
+        ['tone-noise', ratio ? '1.00~' : '~', 'within the measured noise'],
         ['tone-near', '≈ 0', 'near zero on both sides'],
         ['tone-missing', 'missing', 'a side has no result']
       ];
@@ -729,9 +746,9 @@
         if (view.size && !ids.some(function (id) { return QUIET.indexOf(row.classes[id][k]) < 0 && sizeAtLeast(row.classes[id][k], bandAt(row, id, k), view.size); })) return false;
         return true;
       });
-      if (!view.sort) return found;
       var keyed = found.map(function (row, at) {
         if (view.sort === 'name') return { row: row, key: [row.name.toLowerCase(), row.place || '', at] };
+        if (view.sort === 'worst') return { row: row, key: worstKey(row, k, ids).concat([at]) };
         var pair = pairOf(row, view.sort, k);
         return { row: row, key: severityKey(pair[0], pair[1], row.classes[view.sort][k]).concat([at]) };
       });
@@ -739,10 +756,30 @@
       return keyed.map(function (one) { return one.row; });
     }
 
+    // where a row stands when the grid opens: the largest factor between its two results over
+    // every indicator, among the values that moved and have a ratio, the furthest from 1
+    // first; a row whose moves have no ratio (from or to zero, a sign change) follows, by its
+    // worst value as severityKey orders values; a row that did not move comes last. Kept on
+    // the row per comparison.
+    function worstKey(row, k, ids) {
+      if (row.worst && row.worst.k === k) return row.worst.key;
+      var furthest = 0, worst = null;
+      ids.forEach(function (id) {
+        var pair = pairOf(row, id, k), cls = row.classes[id][k];
+        if (cls === 'differs' || cls === 'beyond 10x') furthest = Math.max(furthest, distance(pair[0], pair[1]));
+        var one = severityKey(pair[0], pair[1], cls);
+        if (worst === null || compareKeys(one, worst) < 0) worst = one;
+      });
+      var key = [-furthest].concat(worst);
+      row.worst = { k: k, key: key };
+      return key;
+    }
+
+    // a heading sorts by itself; a second click goes back to the furthest apart first
     function sortButton(label, key, title) {
       var button = el('button', { type: 'button', cls: 'sd-sort', text: label, title: title });
       button.addEventListener('click', function () {
-        view.sort = view.sort === key ? null : key;
+        view.sort = view.sort === key ? 'worst' : key;
         view.limit = PAGE;
         renderGrid();
       });
@@ -756,13 +793,12 @@
       q('grid-said').textContent = D.tier === 'counts'
         ? 'This file holds counts only: it names no ' + D.item.one + '.'
         : 'Showing ' + groupThousands(shown.length) + ' of ' + groupThousands(found.length) + ' ' + many(found.length) + ', among ' + heldSaid() + '. ' +
-          compLabel(view.comp) + '.' + sizeSaid();
+          compLabel(view.comp) + '.' + (view.sort === 'worst' ? ' The furthest apart first.' : '') + sizeSaid();
       var table = clear(q('grid-table'));
       var sorted = function (key) { return view.sort === key ? (key === 'name' ? 'ascending' : 'descending') : null; };
       var head = [
         el('th', { scope: 'col', cls: 'sd-name', 'aria-sort': sorted('name') }, [sortButton(capital(D.item.one), 'name', 'Sort by name')]),
-        el('th', { scope: 'col', cls: 'sd-group', text: 'Group' }),
-        el('th', { scope: 'col', text: 'Unit' })
+        el('th', { scope: 'col', cls: 'sd-group', text: 'Group' })
       ];
       D.indicators.forEach(function (ind) {
         head.push(el('th', { scope: 'col', cls: 'num', 'aria-sort': sorted(ind.id), title: ind.name + (ind.unit ? ' (' + ind.unit + ')' : '') },
@@ -773,9 +809,8 @@
       shown.forEach(function (row) {
         var name = row.name + (row.place ? ' (' + row.place + ')' : '');
         var cells = [
-          el('th', { scope: 'row', title: name }, [M && row.item ? el('span', { cls: 'sd-listed', title: 'listed in this file' }) : null, name]),
-          el('td', { cls: 'sd-group', text: row.group || '' }),
-          el('td', { text: row.unit || '?' })
+          el('th', { scope: 'row', title: name + ', per ' + (row.unit || 'unknown unit') }, [M && row.item ? el('span', { cls: 'sd-listed', title: 'listed in this file' }) : null, name]),
+          el('td', { cls: 'sd-group', text: row.group || '' })
         ];
         D.indicators.forEach(function (ind) { cells.push(valueCell(row, ind.id, k, true)); });
         body.appendChild(el('tr', { cls: 'sd-row', tabindex: '0', 'data-item': row.id, 'aria-current': view.open === row.id ? 'true' : null }, cells));
@@ -1253,7 +1288,7 @@
     }
   }
 
-  var api = { formatNumber: formatNumber, percentText: percentText, shareText: shareText, ratioText: ratioText, noiseText: noiseText,
+  var api = { formatNumber: formatNumber, percentText: percentText, shareText: shareText, ratioText: ratioText, ratioShort: ratioShort, noiseText: noiseText,
     sizeAtLeast: sizeAtLeast, cellView: cellView, ratioView: ratioView, severityKey: severityKey, compareKeys: compareKeys,
     bandStep: bandStep, bandOf: bandOf, checkShape: checkShape, checkMatrix: checkMatrix, matrixRows: matrixRows,
     safeLink: safeLink, safeName: safeName, splitOf: splitOf, splitText: splitText, distance: distance, RANK: RANK,

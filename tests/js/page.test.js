@@ -342,10 +342,81 @@ test('a grid cell is the ratio after ÷ before, coloured by its direction', () =
   const wheat = gridRows(drawn).find((tr) => tr.getAttribute('data-item') === 'p01');
   const item = example().items.find((i) => i.id === 'p01');
   const values = item.values['x:climate'];
-  const cell = wheat.childNodes[3];
+  const cell = wheat.childNodes[2]; // name, group, then the first indicator: no unit column
   assert.equal(item.classes['x:climate'][4], 'differs');
-  assert.equal(cell.textContent, page.ratioText(values[0], values[values.length - 1]));
+  assert.equal(cell.textContent, page.ratioShort(values[0], values[values.length - 1]));
   assert.match(cell.className, new RegExp('tone-' + item.directions['x:climate'][4]));
+  const heads = drawn.byId['grid-table'].querySelectorAll('th[scope="col"]').map((th) => th.textContent);
+  assert.equal(heads.length, 2 + example().indicators.length);
+  assert.ok(!heads.includes('Unit'));
+});
+
+test('a ratio in the grid has three significant digits, and never "Infinity"', () => {
+  assert.equal(page.ratioShort(1, 1), '1.00');
+  assert.equal(page.ratioShort(1, 1.0000003), '1.00');
+  assert.equal(page.ratioShort(1, 0.984), '0.984');
+  assert.equal(page.ratioShort(-2, -4.54), '2.27');
+  assert.equal(page.ratioShort(1, 25), '25.0');
+  assert.equal(page.ratioShort(1, 999.7), '1e3');
+  assert.equal(page.ratioShort(1, 12345), '1.23e4');
+  assert.equal(page.ratioShort(1, 0.004), '4e−3');
+  assert.equal(page.ratioShort(1e-300, 1e300), '1e600');
+  const noise = page.ratioView(1, 1.001, 'within noise', 'up', null);
+  assert.deepEqual([noise.text, noise.mark, noise.tone], ['1.00', '~', 'noise']);
+  const agrees = page.ratioView(2, 2, 'agrees', null, null);
+  assert.deepEqual([agrees.text, agrees.tone, agrees.strength], ['1.00', 'none', 0]);
+  assert.equal(page.ratioView(0, 0, 'agrees', null, null).text, '=');
+  assert.equal(page.ratioView(-1, 2, 'sign change', 'up', null).text, '− → +');
+});
+
+test('every grid cell with a ratio shows it, agreeing ones too; the class is the tint and a mark', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  let agrees = 0, noise = 0;
+  for (const tr of gridRows(drawn)) {
+    const item = data.items.find((i) => i.id === tr.getAttribute('data-item'));
+    data.indicators.forEach((ind, at) => {
+      const cell = tr.childNodes[2 + at];
+      const v = item.values[ind.id], before = v[0], after = v[v.length - 1], cls = item.classes[ind.id][4];
+      const shared = before !== null && after !== null && before !== 0 && after !== 0 && (before > 0) === (after > 0);
+      if (shared && ['agrees', 'within noise', 'differs', 'beyond 10x'].includes(cls)) {
+        assert.ok(cell.textContent.startsWith(page.ratioShort(before, after)), item.id + ' ' + ind.id + ': ' + cell.textContent);
+        if (cls === 'agrees') { agrees += 1; assert.match(cell.className, /tone-none/); }
+        if (cls === 'within noise') { noise += 1; assert.match(cell.textContent, /~$/); }
+      } else {
+        assert.doesNotMatch(cell.textContent, /^\d/, item.id + ' ' + ind.id + ' (' + cls + '): ' + cell.textContent);
+      }
+      assert.notEqual(cell.textContent, '=');
+    });
+  }
+  assert.ok(agrees > 5, 'agreeing cells were checked');
+});
+
+test('the grid opens with the items that lie furthest apart, and a second click goes back to that', () => {
+  const data = example();
+  data.items.reverse(); // the file lists them worst first already: the page must order them itself
+  const drawn = dom.page(data);
+  // the largest factor among the values that moved with a ratio first, then the worst value
+  const worst = (id) => {
+    const i = data.items.find((x) => x.id === id);
+    let furthest = 0;
+    const keys = data.indicators.map((ind) => {
+      const v = i.values[ind.id], cls = i.classes[ind.id][4];
+      if (cls === 'differs' || cls === 'beyond 10x') furthest = Math.max(furthest, Math.abs(Math.log10(Math.abs(v[v.length - 1] / v[0]))));
+      return page.severityKey(v[0], v[v.length - 1], cls);
+    });
+    return [-furthest].concat(keys.sort(page.compareKeys)[0]);
+  };
+  const order = () => gridRows(drawn).map((tr) => tr.getAttribute('data-item'));
+  const first = order();
+  for (let k = 1; k < first.length; k++) assert.ok(page.compareKeys(worst(first[k - 1]), worst(first[k])) <= 0, first.join());
+  assert.notDeepEqual(first, data.items.map((i) => i.id), 'the example is not already in that order');
+  assert.match(drawn.byId['grid-said'].textContent, /The furthest apart first\./);
+  const button = () => drawn.byId['grid-table'].querySelectorAll('th[scope="col"]')[0].querySelector('button[type="button"]');
+  button().dispatch('click', {});
+  assert.doesNotMatch(drawn.byId['grid-said'].textContent, /furthest apart first/);
+  button().dispatch('click', {});
+  assert.deepEqual(order(), first);
 });
 
 test('a heading sorts the grid by how far the two lie apart, the furthest first, and says so', () => {

@@ -25,8 +25,8 @@
   --sd-s4: var(--s4, 1rem);
   --sd-s5: var(--s5, 1.5rem);
   --sd-s6: var(--s6, 2rem);
-  --sd-up: #1f6fb2;      /* went up: blue */
-  --sd-down: #b4560f;    /* went down: orange; the pair reads for colour-blind readers */
+  --sd-up: #b07a1b;      /* went up: amber */
+  --sd-down: #1d625e;    /* went down: teal; the pair reads for colour-blind readers */
   --sd-noise: #8a939c;
   --sd-drawer: clamp(22rem, 42vw, 52rem);
   color: var(--sd-ink);
@@ -34,7 +34,7 @@
   line-height: 1.45;
 }
 @media (prefers-color-scheme: dark) {
-  .sentier-diagnostics { --sd-up: #6fb0ec; --sd-down: #f0a065; --sd-noise: #77818b; }
+  .sentier-diagnostics { --sd-up: #d9a441; --sd-down: #5fa29d; --sd-noise: #77818b; }
 }
 
 /* a class that sets `display` would otherwise show an element marked hidden */
@@ -100,12 +100,13 @@
 .sentier-diagnostics .sd-count { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
 .sentier-diagnostics .sd-grid-wrap { position: relative; max-height: max(24rem, calc(100vh - 6rem)); overflow: auto; border: 1px solid var(--sd-line); border-radius: var(--sd-radius); }
 .sentier-diagnostics table.sd-grid { border-collapse: separate; border-spacing: 0; font-size: var(--sd-t-xs); line-height: 1.35; }
-.sentier-diagnostics .sd-grid th, .sentier-diagnostics .sd-grid td { padding: 0.3rem 0.4rem; vertical-align: middle; }
-.sentier-diagnostics .sd-grid thead th { position: sticky; top: 0; z-index: 2; vertical-align: bottom; border-bottom-color: var(--sd-line-strong); white-space: normal; min-width: 4.5rem; }
-.sentier-diagnostics .sd-grid thead th.sd-name { left: 0; z-index: 3; min-width: 14rem; }
+.sentier-diagnostics .sd-grid th, .sentier-diagnostics .sd-grid td { padding: 0.28rem 0.35rem; vertical-align: middle; }
+.sentier-diagnostics .sd-grid thead th { position: sticky; top: 0; z-index: 2; vertical-align: bottom; border-bottom-color: var(--sd-line-strong); white-space: normal; min-width: 3.4rem; max-width: 6.5rem; overflow-wrap: break-word; hyphens: auto; font-size: 0.75rem; line-height: 1.2; }
+.sentier-diagnostics .sd-grid thead th.sd-name { left: 0; z-index: 3; min-width: 12rem; }
+.sentier-diagnostics .sd-grid thead th.sd-name, .sentier-diagnostics .sd-grid thead th.sd-group { max-width: none; overflow-wrap: normal; }
 .sentier-diagnostics .sd-grid tbody th { position: sticky; left: 0; z-index: 1; max-width: 18rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: var(--sd-surface); font-weight: 600; }
 .sentier-diagnostics .sd-grid tbody th .sd-listed { display: inline-block; width: 0.45rem; height: 0.45rem; margin-right: 0.35rem; border-radius: 50%; background: var(--sd-accent); vertical-align: 0.1em; }
-.sentier-diagnostics .sd-grid td.sd-group { color: var(--sd-muted); white-space: nowrap; }
+.sentier-diagnostics .sd-grid td.sd-group { max-width: 8rem; overflow: hidden; text-overflow: ellipsis; color: var(--sd-muted); white-space: nowrap; }
 .sentier-diagnostics .sd-sort { display: block; width: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit; font-weight: 700; text-align: right; cursor: pointer; }
 .sentier-diagnostics .sd-name .sd-sort { text-align: left; }
 .sentier-diagnostics .sd-sort:hover { color: var(--sd-accent); }
@@ -115,8 +116,8 @@
 
 /* a value: colour from its direction only, strength from how far the two lie apart */
 .sentier-diagnostics .cell { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.sentier-diagnostics .tone-up { background: color-mix(in srgb, var(--sd-up) calc(var(--s, 0.5) * 50%), var(--sd-surface)); }
-.sentier-diagnostics .tone-down { background: color-mix(in srgb, var(--sd-down) calc(var(--s, 0.5) * 50%), var(--sd-surface)); }
+.sentier-diagnostics .tone-up { background: color-mix(in srgb, var(--sd-up) calc(var(--s, 0.5) * 55%), var(--sd-surface)); }
+.sentier-diagnostics .tone-down { background: color-mix(in srgb, var(--sd-down) calc(var(--s, 0.5) * 55%), var(--sd-surface)); }
 .sentier-diagnostics .tone-up.no-ratio, .sentier-diagnostics .tone-down.no-ratio { background-image: repeating-linear-gradient(135deg, transparent 0 4px, rgba(127, 127, 127, 0.35) 4px 6px); font-weight: 700; }
 .sentier-diagnostics .tone-noise { color: var(--sd-noise); background-image: repeating-linear-gradient(135deg, transparent 0 5px, rgba(127, 127, 127, 0.18) 5px 7px); }
 .sentier-diagnostics .tone-near { color: var(--sd-muted); }

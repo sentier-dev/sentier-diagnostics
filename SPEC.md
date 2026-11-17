@@ -458,8 +458,15 @@ site does to bare tables (borders, phone layouts that turn rows into blocks). It
 are `--sd-*` properties that take the site's tokens where the site sets them
 (`--sd-ink: var(--ink, #1d232a)`, and so on for `--muted`, `--surface`, `--paper-deep`,
 `--line`, `--line-strong`, `--index`, `--fail`, `--radius`, `--t-*`, `--s*`); up, down and
-noise keep colours of their own, so that a direction never takes a site's accent. A test
-reads the sheet and holds this.
+noise keep colours of their own (amber up, teal down), so that a direction never takes a
+site's accent. A test reads the sheet and holds this.
+
+**A host lets the body be wide.** The matrix needs the page's width, and a site that caps
+the children of an article at a reading measure (`.prose > * { max-width: 44rem }`) caps
+the body with them, which leaves a 25-indicator grid a few columns wide. A host lifts that
+cap for the body, as sentier-bafu does:
+`.prose > .sentier-diagnostics { max-width: none }` (and the same for any wrapper of the
+page that holds a measure).
 
 `sentier-diagnostics page FILE --out FOLDER` writes a page of its own: `index.html` with
 the body in it, the two assets, and `standalone.css`, which sets the tokens and font a site
@@ -507,15 +514,23 @@ ratio). The page always says how many it shows of how many, and how many items w
 look the file does not hold.
 
 ### 10.5 Matrix
-Items by indicator for one comparison: each cell is the result after divided by the result
-before, where the two share a sign (`1 + 3e−7` rather than a `1` that is not one), and what
-the class says where they do not (from 0, to 0, + → −, missing, ≈ 0, =). The cell's colour
-is its direction's and its strength the band's; for a matrix row, which holds no band, the
+Items by indicator for one comparison: each cell with a ratio shows the result after
+divided by the result before in three significant digits (`1.00`, `0.984`, `2.27`,
+`1.01e−3`), agreeing pairs included, so that a column reads as numbers; a cell without one
+says what the class says (from 0, to 0, + → −, missing, ≈ 0). The class shows as the tint
+and a mark, never in place of the number: an agreeing cell has no tint, one within noise
+is marked `~`, one beyond 10x `»`. A `1.00` with a tint is a pair that moved by less than
+the rounding shows; its title holds both results exactly. The cell's colour is its
+direction's and its strength the band's; for a matrix row, which holds no band, the
 band is named from the results as the rule names it (a test holds the two equal). The ratio
 and the shading are a display: they change no class. The listed items, or every item once
 the matrix is loaded, a dot marking the listed ones; the page says which it holds and why
-(none named, loading, loaded, or the reason it was not loaded). A heading sorts by how far
-the two lie apart in that indicator, the furthest first (the order of 10.4), or by name;
+(none named, loading, loaded, or the reason it was not loaded). **The grid opens with the
+items furthest apart**: by the largest factor between the two results over every
+indicator, among the values that moved and have a ratio; then the items whose moves have
+none (from or to zero, a sign change), by their worst value in the order of 10.4; then
+those that did not move. A heading sorts by how far the two lie apart in that indicator,
+the furthest first (the order of 10.4), or by name, and a second click goes back;
 filters by text, group, class and verdict; 300 rows at a time with "show more". The
 reader's **size filter** ("size at least ×1.1 ... ×10") hides smaller changes here and in
 the worst list; zeros, sign changes and missing values always show, and the page says the
@@ -665,6 +680,7 @@ sentier-bafu-agribalyse wrote their requirements. What became of each:
 | A formatter target at the lowest Python | bafu | yes: `py310`, CI runs 3.10 to 3.14 |
 | Standard library only; assets as package data with their paths | bafu, bafu-agribalyse | yes: `page.assets()` |
 | A page without a frame, with a list of tokens for a site's frame | bafu, bafu-agribalyse | yes: `page.body`, a scoped style whose `--sd-*` take the site's tokens (section 10) |
+| The grid as the trial dashboard reads: a ratio in every cell, a strong tint, the furthest apart first, compact columns | bafu (from Manuel, 17 November 2026) | yes (section 10.5); 25 indicators still scroll sideways at a laptop's width |
 | The look of the trial dashboard: a sortable grid, a drawer for an item | bafu-agribalyse | yes: its look and structure; none of its values, and not its two definitions of agreement, its hand-written labels or a "none" over a top-N list (section 10) |
 | Reading version 1 and 2 files, or a converter | bafu | no: see section 13 and the migration plan |
 | A tier a site check can refuse on | bafu, bafu-agribalyse | yes: `tier` (items or counts) and `audience` (public or local) |
