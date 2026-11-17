@@ -1123,6 +1123,30 @@ class Chain(unittest.TestCase):
         self.assertEqual(sorted(e.split(":")[-1] for e in fileformat.errors(stopped)),
                          [" `unit` is not a text", " about an item the file does not list"])
 
+    def test_where_the_check_of_the_items_stops_it_still_knows_the_items_it_read(self):
+        """A place or group fault does not stop the check of the items: a unit fault on a later
+        item is said too. Where the check stops (an item that is not a table, a count of items
+        that cannot be read), no explanation about a listed item is said to be about an item
+        the file does not list, and a count that cannot be read is said once, not once per
+        block of counts (review of 9a11c09)."""
+        data = example.build()
+        first, last = data["items"][0]["id"], data["items"][-1]["id"]
+        explained = {e["about"]["item"] for e in data["explanations"] if e["about"].get("item")}
+        self.assertTrue(explained - {first, last})
+        for field, value in (("place", "x" * 61), ("group", ["g"])):
+            with self.subTest(field):
+                found = fileformat.errors(helpers.mutated(data, lambda d, f=field, v=value: (
+                    d["items"][0].update({f: v}), d["items"][-1].update(unit=5))))
+                self.assertEqual([e.split(":")[0] for e in found], [f"item {first!r}", f"item {last!r}"], found)
+        # an item that is not a table, which no explanation is about
+        broken = next(k for k, i in enumerate(data["items"]) if 0 < k and i["id"] not in explained)
+        found = fileformat.errors(helpers.mutated(data, lambda d: d["items"].__setitem__(broken, 5)))
+        self.assertTrue(any(e.startswith("an item is not {") for e in found), found)
+        self.assertFalse([e for e in found if "does not list" in e], found)
+        # a count of items that cannot be read
+        found = fileformat.errors(helpers.mutated(data, lambda d: d.update(items_count=5)))
+        self.assertEqual(found, ["`items_count` is not {all, qualifying, listed, not_listed} in counts"])
+
     def test_a_lone_surrogate_is_not_a_text(self):
         data = example.build()
         data["title"] = "half \ud800 a character"

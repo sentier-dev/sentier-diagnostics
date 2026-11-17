@@ -695,7 +695,8 @@ def _counts(data, found, indicators, steps, total_pairs):
             found += errors
             if errors:
                 continue
-            if table[indicator]["pairs"] != total_pairs:
+            # an unreadable count of items is said once, by `_items`, not once per block
+            if is_count(total_pairs) and table[indicator]["pairs"] != total_pairs:
                 found.append(f"{where}: not every item is counted")
             if counted_closer != (table[indicator]["closer"] is not None) or counted_closer != (
                 table[indicator]["further"] is not None
