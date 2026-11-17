@@ -29,6 +29,7 @@ built states: what those steps did together, never a sum of steps it cannot see.
 from __future__ import annotations
 
 import json
+import warnings
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 
@@ -177,6 +178,14 @@ def _ranges(said, out_steps: list[dict]) -> list[dict]:
     n = len(ids)
     if said == "auto":
         said = "all" if n <= AUTO_RANGES else None
+        if said is None:
+            # a chain that grows past the limit loses its ranges: never without a word
+            warnings.warn(
+                f"a chain of {n} steps has no ranges unless asked (more than {AUTO_RANGES} steps): "
+                "pass ranges=\"all\", chain.ranges_within(steps, first, last) or (first, last) pairs, "
+                "or ranges=None to say that none is wanted",
+                stacklevel=4,
+            )
     if said is None:
         return []
     if said == "all":
@@ -430,8 +439,7 @@ def _build(
         "steps": {s["id"]: {i: block(k, i) for i in ids} for k, s in enumerate(out_steps)},
         "total": {i: block(nsteps, i) for i in ids},
     }
-    if out_ranges:
-        counts["ranges"] = {r["id"]: {i: block(nsteps + 1 + j, i) for i in ids} for j, r in enumerate(out_ranges)}
+    counts["ranges"] = {r["id"]: {i: block(nsteps + 1 + j, i) for i in ids} for j, r in enumerate(out_ranges)}
 
     # attribution: which step carries the largest share of each item's whole difference
     attribution = {}
@@ -533,7 +541,8 @@ def _build(
             for s in states
         ],  # fmt: skip
         "steps": out_steps,
-        **({"ranges": out_ranges} if out_ranges else {}),
+        # [] where none was asked for: only a file made before ranges leaves the key out
+        "ranges": out_ranges,
         "counts": counts,
         "attribution": attribution,
         "items": out_items,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 
 from sentier_diagnostics import chain, claims, fileformat, from_tables, matrix, rule
@@ -88,10 +89,25 @@ class Build(unittest.TestCase):
         p = next(i for i in data["items"] if i["id"] == "p")
         self.assertEqual(len(p["verdicts"][A]), len(STEPS))
 
-    def test_no_ranges_leaves_the_file_as_it_was(self):
+    def test_no_ranges_says_none_was_asked_for(self):
         data, _ = five_states(ranges=None)
-        self.assertNotIn("ranges", data)
-        self.assertNotIn("ranges", data["counts"])
+        self.assertEqual(data["ranges"], [])  # not left out: that is a file made before ranges
+        self.assertEqual(data["counts"]["ranges"], {})
+        self.assertEqual(fileformat.errors(data), [])
+
+    def test_a_file_made_before_ranges_and_one_that_asked_for_none_are_kept_apart(self):
+        data, _ = five_states(ranges=None)
+        before = json.loads(json.dumps(data))
+        del before["ranges"], before["counts"]["ranges"]
+        self.assertEqual(fileformat.errors(before), [])  # a file made before ranges still reads
+        for broken, says in (
+            (lambda d: d.update(ranges=None), "`ranges` is a list"),
+            (lambda d: d["counts"].pop("ranges"), "`counts` is not"),  # [] without its counts
+            (lambda d: d.pop("ranges"), "`counts` is not"),  # counts of ranges, and no key
+        ):
+            one = json.loads(json.dumps(data))
+            broken(one)
+            self.assertTrue(any(says in e for e in fileformat.errors(one)), says)
         self.assertEqual(len(data["items"][0]["classes"][A]), len(STEPS) + 1)
         self.assertNotIn("q", [i["id"] for i in data["items"]])  # nothing moved it without its ranges
 
@@ -100,8 +116,15 @@ class Build(unittest.TestCase):
             return [{"id": f"k{k}", "from": f"s{k}", "to": f"s{k + 1}", "tolerance": {"value": 0.01}}
                     for k in range(n)]  # fmt: skip
 
-        self.assertEqual(len(chain._ranges("auto", steps(chain.AUTO_RANGES))), 8 * 7 // 2 - 1)
-        self.assertEqual(chain._ranges("auto", steps(chain.AUTO_RANGES + 1)), [])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")  # every range up to the limit, and not a word
+            self.assertEqual(len(chain._ranges("auto", steps(chain.AUTO_RANGES))), 8 * 7 // 2 - 1)
+        # past the limit none, and the build says so: a ninth step does not drop them unseen
+        with self.assertWarnsRegex(UserWarning, r"a chain of 9 steps has no ranges unless asked"):
+            self.assertEqual(chain._ranges("auto", steps(chain.AUTO_RANGES + 1)), [])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")  # asked for none: nothing to warn of
+            self.assertEqual(chain._ranges(None, steps(chain.AUTO_RANGES + 1)), [])
         self.assertEqual(chain._ranges("auto", steps(1)), [])
         self.assertEqual(chain._ranges("auto", steps(2)), [])  # the one run of two is the whole way
 
@@ -281,13 +304,13 @@ class Description(unittest.TestCase):
     def test_a_description_chooses_its_ranges(self):
         for said, ids in (
             (None, ["one..two", "two..three"]),
-            ("none", None),
+            ("none", []),
             ([["two", "three"]], ["two..three"]),
             ({"within": ["one", "two"]}, ["one..two"]),
         ):
             with self.subTest(said), tempfile.TemporaryDirectory() as tmp:
                 data = from_tables.build(self.write(tmp, said))
-                self.assertEqual([r["id"] for r in data["ranges"]] if "ranges" in data else None, ids)
+                self.assertEqual([r["id"] for r in data["ranges"]], ids)
 
     def test_a_wrong_choice_is_a_sentence(self):
         for said in ("every", [["one"]], [["one", "nine"]], {"within": ["one"]}, {"from": ["one", "two"]}):

@@ -108,8 +108,11 @@ combination is the producer's business: 11 fixes have 2,047 of them.
 `(first step, last step)` pairs (`chain.ranges_within` gives every run between two steps,
 such as the fixes of a build), or none. Without a choice, a chain of at most 8 steps has
 every range and a longer one none (`chain.AUTO_RANGES`): n steps have n(n-1)/2 - 1 ranges,
-and each is a comparison of every item in every indicator. A description of CSV tables
-says the same in its `ranges` key.
+and each is a comparison of every item in every indicator. A chain that the default leaves
+without ranges is built with a warning that says so, so a chain that gains a ninth step does
+not lose its ranges unseen. A description of CSV tables says the same in its `ranges` key.
+A file where none was asked for holds `ranges: []`; only a file made before ranges leaves
+the key out, and the page says which of the two it is.
 
 **One chain per reference.** A database with two references (sentier-bafu-agribalyse has
 ADEME's published results on ecoinvent and its own build on ecoinvent) gets one file per
@@ -147,8 +150,8 @@ control characters, bounded lengths.
 | `rule` | The floors and the tolerance of the whole way (section 5) |
 | `states` | `[{id, label, about, kind, identity, join}]` in order. `identity` is a short table of texts (commit, release, machine); `join` is what the reader counted when it matched its rows to items: `{compared, unmatched, ambiguous, note}`, or null |
 | `steps` | `[{id, from, to, label, about, kind, explained, link, claim, tolerance, noise}]`, one fewer than the states, each from one state to the next |
-| `ranges` | Optional. `[{id, steps, from, to, tolerance}]`: the runs of consecutive steps compared as one (section 3). `id` is `first..last`, `from` the state before the first step, `to` the state after the last, `tolerance` the largest of its steps. Absent where the file has none |
-| `counts` | `{steps: {step: {indicator: block}}, total: {indicator: block}}`, and `ranges: {range: {indicator: block}}` where, and only where, the file has ranges |
+| `ranges` | Optional. `[{id, steps, from, to, tolerance}]`: the runs of consecutive steps compared as one (section 3). `id` is `first..last`, `from` the state before the first step, `to` the state after the last, `tolerance` the largest of its steps. `[]` where none was asked for; absent only in a file made before ranges |
+| `counts` | `{steps: {step: {indicator: block}}, total: {indicator: block}}`, and `ranges: {range: {indicator: block}}` where, and only where, the file has its `ranges` key (`{}` for `[]`) |
 | `attribution` | `{indicator: {dominant: {step: n}, not_attributable: n, spread: n, unexplained_moved: n}}` (section 7) |
 | `items` | The listed items, worst first (section 10.4) |
 | `items_count` | `{all, qualifying, listed, not_listed}` |

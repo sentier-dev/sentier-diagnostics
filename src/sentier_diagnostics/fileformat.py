@@ -383,12 +383,14 @@ def _steps(data, found, states, indicators, tier) -> list[dict]:
 
 def _ranges(data, found, steps) -> list[dict] | None:
     """The ranges of a file: runs of consecutive steps, each compared as the whole way is
-    (SPEC section 5.5). None where they cannot be read; nothing where the file has none."""
-    said = data.get("ranges")
-    if said is None:
+    (SPEC section 5.5). None where they cannot be read; nothing where the file has none:
+    `[]` where none was asked for, the key left out in a file made before ranges."""
+    if "ranges" not in data:
         return []
-    if not isinstance(said, list) or not 0 < len(said) <= MAX_RANGES:
-        found.append(f"`ranges` is a list of 1 to {MAX_RANGES} ranges, or left out")
+    said = data["ranges"]
+    if not isinstance(said, list) or len(said) > MAX_RANGES:
+        found.append(f"`ranges` is a list of at most {MAX_RANGES} ranges ([] where none was asked for), "
+                     "or left out in a file made before ranges")
         return None
     ids = [s["id"] for s in steps]
     seen = set()
@@ -527,16 +529,16 @@ def _block(block, where, step) -> list[str]:
 
 def _counts(data, found, indicators, steps, ranges, total_pairs):
     counts = data.get("counts")
-    keys = {"steps", TOTAL} | ({"ranges"} if ranges else set())
+    keys = {"steps", TOTAL} | ({"ranges"} if "ranges" in data else set())
     if not isinstance(counts, dict) or set(counts) != keys:
-        found.append(f"`counts` is not {{{', '.join(sorted(keys))}}}: ranges are counted where, and only where, the file has them")
+        found.append(f"`counts` is not {{{', '.join(sorted(keys))}}}: ranges are counted where, and only where, the file has its key")
         return {}
     by_step = counts["steps"]
     if not isinstance(by_step, dict) or set(by_step) != {s["id"] for s in steps}:
         found.append("`counts.steps` does not hold every step")
         return {}
-    by_range = counts.get("ranges") or {}
-    if ranges and (not isinstance(by_range, dict) or set(by_range) != {r["id"] for r in ranges}):
+    by_range = counts.get("ranges", {})
+    if not isinstance(by_range, dict) or set(by_range) != {r["id"] for r in ranges}:
         found.append("`counts.ranges` does not hold every range")
         return {}
     published_first = data["states"][0]["kind"] == "published"

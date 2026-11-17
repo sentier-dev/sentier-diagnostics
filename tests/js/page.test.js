@@ -966,14 +966,23 @@ test('Shift and an arrow key grow the run, and a file without ranges offers no s
   assert.deepEqual(pressed(drawn), data.steps.slice(1, 3).map((s) => s.id));
   drawn.byId.comparison.dispatch('keydown', { key: 'ArrowLeft', shiftKey: true });
   assert.deepEqual(pressed(drawn), [data.steps[1].id]);
+  // none asked for, and a file made before ranges: both offer no several steps, said apart
   const none = example();
-  delete none.ranges;
-  delete none.counts.ranges;
+  none.ranges = [];
+  none.counts.ranges = {};
   const shown = dom.page(none);
   assert.equal(shown.byId.pick.hidden, true);
   chipOf(shown, none.steps[1].id).dispatch('click', {});
   chipOf(shown, none.steps[2].id).dispatch('click', { shiftKey: true });
-  assert.match(shown.byId['step-said'].textContent, /This file compares no run of steps/);
+  assert.match(shown.byId['step-said'].textContent, /This file compares no run of steps: none was asked for when it was made/);
+  const older = example();
+  delete older.ranges;
+  delete older.counts.ranges;
+  const old = dom.page(older);
+  assert.equal(old.byId.pick.hidden, true);
+  chipOf(old, older.steps[1].id).dispatch('click', {});
+  chipOf(old, older.steps[2].id).dispatch('click', { shiftKey: true });
+  assert.match(old.byId['step-said'].textContent, /This file was made before runs of steps could be compared/);
 });
 
 test('a matrix result written "=" is the result before it, and a "=" that stands first is refused', () => {

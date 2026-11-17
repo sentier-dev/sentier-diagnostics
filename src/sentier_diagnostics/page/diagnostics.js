@@ -364,7 +364,7 @@
         typeof d.indicator.many === 'string')) return 'the indicator word of the file is not {one, many}';
     if (d.steps.length !== d.states.length - 1) return 'the file has not one step fewer than states';
     if (!d.counts.steps || !d.counts.total) return 'the counts of the file are not {steps, total}';
-    if (d.ranges !== undefined && d.ranges !== null) {
+    if (d.ranges !== undefined) {
       if (!Array.isArray(d.ranges)) return 'the ranges of the file are not a list';
       if (!d.counts.ranges || typeof d.counts.ranges !== 'object') return 'the file has ranges and no counts of them';
       for (var r = 0; r < d.ranges.length; r++) {
@@ -564,7 +564,9 @@
     // which runs the file compares, in words, for a page that is asked for one it has not
     function rangesSaid() {
       var all = ranges();
-      if (!all.length) return 'This file compares no run of steps: choose one step, or the whole way.';
+      // a file made before ranges, and one whose writer asked for none, are said apart
+      if (!('ranges' in D)) return 'This file was made before runs of steps could be compared: choose one step, or the whole way.';
+      if (!all.length) return 'This file compares no run of steps: none was asked for when it was made. Choose one step, or the whole way.';
       var lo = D.steps.length, hi = -1, counted = {};
       all.forEach(function (r) { var run = runOf(r.id); lo = Math.min(lo, run[0]); hi = Math.max(hi, run[1]); counted[run[0] + ':' + run[1]] = true; });
       var every = true;
