@@ -852,6 +852,49 @@ test('Shift-click chooses the steps from one to another together: the range the 
   heads.forEach((ind, k) => assert.equal(cls[k], item.classes[ind][at], ind));
 });
 
+test('Shift-click chooses every step of the run: none of them lies between', () => {
+  const data = example();
+  const id = data.steps[1].id + '..' + data.steps[3].id;
+  assert.ok(data.ranges.some((r) => r.id === id));
+  const drawn = dom.page(data);
+  chipOf(drawn, data.steps[1].id).dispatch('click', {});
+  chipOf(drawn, data.steps[3].id).dispatch('click', { shiftKey: true });
+  assert.deepEqual(pressed(drawn), data.steps.slice(1, 4).map((s) => s.id));
+  for (const s of data.steps.slice(1, 4)) assert.doesNotMatch(chipOf(drawn, s.id).className, /sd-between/, s.id);
+  assert.doesNotMatch(drawn.byId['step-said'].textContent, /between the steps chosen/);
+  // an address names a run, not how it was chosen: every step of it is chosen
+  drawn.open('step=' + encodeURIComponent(data.steps[0].id + '..' + data.steps[2].id));
+  for (const s of data.steps.slice(0, 3)) assert.doesNotMatch(chipOf(drawn, s.id).className, /sd-between/, s.id);
+});
+
+test('in a run, the steps where nothing moved and nothing was judged fold into one line', () => {
+  const tagged = (node, tag) => (node.tagName === tag ? [node] : []).concat(...(node.childNodes || []).map((c) => tagged(c, tag)));
+  const data = example();
+  const range = data.ranges.find((r) => r.steps.length === 3);
+  const at = range.steps.map((id) => data.steps.findIndex((s) => s.id === id));
+  const drawn = dom.page(data);
+  drawn.open('step=' + encodeURIComponent(range.id));
+  // the example's steps move something: nothing folds, every step has its own line
+  assert.equal(tagged(drawn.byId['step-said'], 'DETAILS').length, 0);
+  for (const k of at) assert.ok(drawn.byId['step-said'].textContent.includes('Step ' + k + ': ' + data.steps[k].label), k);
+  // the first two steps made quiet in the file's counts: a claim, nothing moved, no verdict
+  const calm = example();
+  for (const id of range.steps.slice(0, 2)) {
+    for (const block of Object.values(calm.counts.steps[id])) {
+      for (const name of Object.keys(block.classes)) block.classes[name] = 0;
+      for (const name of Object.keys(block.verdicts)) block.verdicts[name] = 0;
+    }
+  }
+  const shown = dom.page(calm);
+  shown.open('step=' + encodeURIComponent(range.id));
+  const folded = tagged(shown.byId['step-said'], 'DETAILS');
+  assert.equal(folded.length, 1);
+  assert.match(folded[0].textContent, new RegExp('^Steps ' + at[0] + ' and ' + at[1] + ': nothing moved in any of them, as each claims\\.'));
+  for (const k of at.slice(0, 2)) assert.ok(folded[0].textContent.includes('Step ' + k + ': ' + calm.steps[k].label), 'each is still there to open');
+  assert.ok(!folded[0].textContent.includes('Step ' + at[2] + ': '), 'the step that moved stays outside');
+  assert.ok(shown.byId['step-said'].textContent.includes('Step ' + at[2] + ': ' + calm.steps[at[2]].label));
+});
+
 test('steps chosen apart take in the steps between them, and the page says so', () => {
   const data = example();
   const drawn = dom.page(data);

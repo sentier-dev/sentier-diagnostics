@@ -733,11 +733,16 @@
     // what a step claims, who claimed it, and what the claim found in that step: every verdict
     // on a move, "as claimed" first, each with its count; the ones worth a look carry their
     // mark, as on the chips. No colour: a verdict is not an approval (ADR 0010).
+    // each verdict on a step's moves with its count, the ones with none left out
+    function verdictsOf(s) {
+      return ['as claimed'].concat(LOOK).map(function (name) { return [name, sumOver(s.id, function (b) { return b.verdicts[name]; })]; })
+        .filter(function (p) { return p[1]; });
+    }
+
     function claimParts(s) {
       if (!s.claim) return [el('span', { cls: 'sd-quiet', text: 'none: what moves here is counted, not judged.' })];
       var claim = [s.claim.text, ' ', badge(s.claim.by)];
-      var found = ['as claimed'].concat(LOOK).map(function (name) { return [name, sumOver(s.id, function (b) { return b.verdicts[name]; })]; })
-        .filter(function (p) { return p[1]; });
+      var found = verdictsOf(s);
       claim.push(el('span', { cls: 'sd-verdicts', text: found.length
         ? ' ' + found.map(function (p) { return n(p[1]) + ' ' + (p[1] === 1 ? 'value' : 'values') + ' ' + (p[0] === 'as claimed' ? 'moved as claimed' : p[0]) + (LOOK_MARK[p[0]] ? ' ' + LOOK_MARK[p[0]] : ''); }).join(', ') + '.'
         : ' Nothing moved, as claimed.' }));
@@ -791,16 +796,26 @@
         node.appendChild(el('p', { cls: 'sd-quiet', text: (between.length === 1 ? 'Step ' : 'Steps ') + stepList(between) + (between.length === 1 ? ' lies' : ' lie') +
           ' between the steps chosen and ' + (between.length === 1 ? 'is' : 'are') + ' taken in: each state is built on the one before it, so steps are compared together only as a run.' }));
       }
+      // the steps where something moved or was judged come first; the quiet ones (a claim,
+      // nothing moved, no verdict) fold into one line, each still there to open
       var list = el('ul', { cls: 'sd-claims' });
+      var quiet = [], folded = el('ul', { cls: 'sd-claims' });
       for (k = run[0]; k <= run[1]; k++) {
         var s = D.steps[k];
         var alone = sumOver(s.id, moved);
-        list.appendChild(el('li', null, [el('strong', { text: 'Step ' + stepNo(k) + ': ' + s.label + '. ' }),
+        var row = el('li', null, [el('strong', { text: 'Step ' + stepNo(k) + ': ' + s.label + '. ' }),
           s.explained ? null : el('span', { cls: 'sd-error', text: 'Nothing explains it. ' }),
           el('span', { cls: 'sd-claim-label', text: 'Claim' })].concat(claimParts(s),
-          [el('span', { cls: 'sd-quiet', text: ' In this step alone: ' + (alone === 1 ? '1 value' : n(alone) + ' values') + ' moved.' })])));
+          [el('span', { cls: 'sd-quiet', text: ' In this step alone: ' + (alone === 1 ? '1 value' : n(alone) + ' values') + ' moved.' })]));
+        if (s.claim && s.explained && !alone && !verdictsOf(s).length) { quiet.push(k); folded.appendChild(row); }
+        else list.appendChild(row);
       }
-      node.appendChild(list);
+      if (quiet.length < 2) { while (folded.childNodes.length) list.appendChild(folded.childNodes[0]); quiet = []; }
+      if (list.childNodes.length) node.appendChild(list);
+      if (quiet.length) {
+        node.appendChild(el('details', { cls: 'sd-quiet-steps' }, [el('summary', { text: 'Steps ' + stepList(quiet) +
+          ': nothing moved in any of them, as each claims.' }), folded]));
+      }
       node.appendChild(el('p', { cls: 'sd-quiet', text: 'Tolerance ' + r.tolerance + ', the largest of these steps; no noise, and no verdict: a run is judged as the whole way is, and each claim is judged in its own step.' }));
     }
 
@@ -1618,12 +1633,19 @@
       return true;
     }
 
+    // every step of the steps a to b
+    function stepsFrom(a, b) {
+      var out = [];
+      for (var k = a; k <= b; k++) out.push(k);
+      return out;
+    }
+
     // `picked`: the steps chosen by hand, of a run; the others of it lie between. Without
-    // it, a new comparison has its ends picked and the same one keeps what it had
+    // it, a new comparison has every step of it picked and the same one keeps what it had
     function choose(comp, picked) {
       var same = comp === view.comp;
       if (picked) view.picked = picked;
-      else if (!same) view.picked = comp === 'total' ? [] : runOf(comp);
+      else if (!same) view.picked = comp === 'total' ? [] : stepsFrom(runOf(comp)[0], runOf(comp)[1]);
       view.comp = comp;
       markChips();
       renderStepSaid();
@@ -1633,16 +1655,16 @@
       if (view.open) renderItem(view.open, true);
     }
 
-    // a click on a step's chip ("one"): that step alone. "to" (Shift, or a second click with
-    // "Several steps" on): the steps from the one chosen before to this one. "toggle" (⌘ or
-    // Ctrl): the chosen steps grown to this one or, where it is an end of them, shrunk by it.
-    // Steps chosen together are a run: what lies between them is taken in, and the step line
-    // says so. A run the file does not compare is said, and nothing changes.
+    // a click on a step's chip ("one"): that step alone. "to" (Shift): every step from the one
+    // chosen before to this one. "toggle" (⌘ or Ctrl, or a plain click with "Several steps"
+    // on): the chosen steps grown to this one or, where it is an end of them, shrunk by it;
+    // what lies between steps chosen apart is taken in, and the step line says so. A run the
+    // file does not compare is said, and nothing changes.
     function pick(k, how) {
       var run = view.comp === 'total' ? null : runOf(view.comp);
       var a = k, b = k, picked = [k];
       if (how === 'to' && view.anchor !== null) {
-        a = Math.min(view.anchor, k); b = Math.max(view.anchor, k); picked = [view.anchor, k];
+        a = Math.min(view.anchor, k); b = Math.max(view.anchor, k); picked = stepsFrom(a, b);
       } else if (how === 'toggle' && run) {
         if (k < run[0] || k > run[1]) {
           a = Math.min(run[0], k); b = Math.max(run[1], k); picked = view.picked.concat([k]);

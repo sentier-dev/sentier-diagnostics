@@ -547,7 +547,10 @@ step taken in only because it lies between two chosen ones is hatched. The matri
 distributions, the worst values and the drawer then show the range: the file's own counts
 and classes of it, never a sum of its steps. Its line says which states it goes between,
 which steps lie between the chosen ones and why they are taken in, and each step's claim
-with what it found in that step alone; it says that a range has no noise and no verdict.
+with what it found in that step alone (two or more steps with a claim where nothing moved
+fold into one line, each still there to open); it says that a range has no noise and no
+verdict. An address names a run, not how it was chosen: opened from one, every step of the
+run is chosen.
 Every step chosen is the whole way. A run the file does not compare is said, with the runs
 it does, and nothing changes; a step inside a run cannot be taken off, and the page says
 so. The address keeps a range by its id (`#step=first..last`); an address that names a run
