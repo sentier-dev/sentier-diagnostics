@@ -103,13 +103,17 @@
     return value;
   }
 
+  // Each number writer below chooses its style by the number as it will be written, never
+  // by the number before rounding: what rounds across a threshold is written as the numbers
+  // beyond it are ("+100 %" for 99.96 %, never "+100.0 %"; "0.001" for 0.00099996).
+
   // a result as a reader reads it: four significant digits; never "0" for a value that is not 0
   function formatNumber(v) {
     if (v === null || v === undefined) return 'missing';
     if (v === 0) return '0';
-    var a = Math.abs(v), s = v.toPrecision(4);
-    // one style from 1e4 on, and for what rounds to it: toPrecision writes 9999.5 "1.000e+4"
-    if (a >= 1e4 || a < 1e-3 || s.indexOf('e') >= 0) return powerText(v, 3);
+    var s = v.toPrecision(4), shown = Math.abs(Number(s));
+    // one style from 1e4 on: toPrecision writes 9999.5 "1.000e+4"
+    if (shown >= 1e4 || shown < 1e-3) return powerText(v, 3);
     if (s.indexOf('.') >= 0) s = s.replace(/0+$/, '').replace(/\.$/, '');
     return s.replace('-', '−');
   }
@@ -120,10 +124,10 @@
     var size = Math.abs(c);
     var text;
     if (size === 0) text = '0';
-    else if (size < 0.01) text = powerText(size, 1);
+    else if (Number(size.toExponential(1)) < 0.01) text = powerText(size, 1);
     else if (Math.round(size) >= 1e4) text = formatNumber(size);
-    else if (size >= 1000) text = groupThousands(Math.round(size));
-    else text = size.toFixed(size >= 100 ? 0 : size >= 1 ? 1 : 2);
+    else if (Math.round(size) >= 1000) text = groupThousands(Math.round(size));
+    else text = size.toFixed(Number(size.toFixed(2)) < 1 ? 2 : Number(size.toFixed(1)) < 100 ? 1 : 0);
     return (c > 0 ? '+' : c < 0 ? '−' : '') + text + ' %';
   }
 
@@ -132,7 +136,8 @@
   // decimal of a percent would print more digits than a float holds (1e18 % as nineteen).
   function shareText(part) {
     var v = part * 100, size = Math.abs(v);
-    var text = size === 0 ? '0' : size < 0.1 ? powerText(size, 1) : size < 1e4 ? size.toFixed(1) : formatNumber(size);
+    var text = size === 0 ? '0' : Number(size.toExponential(1)) < 0.1 ? powerText(size, 1)
+      : Number(size.toFixed(1)) < 1e4 ? size.toFixed(1) : formatNumber(size);
     return (v > 0 ? '' : v < 0 ? '−' : '') + text + ' %';
   }
 
@@ -157,7 +162,7 @@
     var r = after / before;
     if (!isFinite(r) || r === 0) return ratioText(before, after);
     var s = r.toPrecision(3);
-    return r < 0.01 || s.indexOf('e') >= 0 ? powerText(r, 2) : s;
+    return Number(s) < 0.01 || s.indexOf('e') >= 0 ? powerText(r, 2) : s;
   }
 
   // the 10th, 50th and 90th percentile in one precision: the smallest (three digits at
@@ -168,9 +173,9 @@
   function quantileTexts(qs) {
     var values = [qs.p10, qs.median, qs.p90];
     var one = function (v, digits) {
-      var s = v.toPrecision(digits);
+      var s = v.toPrecision(digits), shown = Math.abs(Number(s));
       // toPrecision writes 1234.5 at three digits "1.23e+3" itself
-      if (v !== 0 && (Math.abs(v) < 0.01 || Math.abs(v) >= 1e4 || s.indexOf('e') >= 0)) return powerText(v, digits - 1, true);
+      if (v !== 0 && (shown < 0.01 || shown >= 1e4 || s.indexOf('e') >= 0)) return powerText(v, digits - 1, true);
       return s.replace(/-/g, '−');
     };
     var pairs = [[0, 1], [1, 2], [0, 2]];
@@ -2819,7 +2824,7 @@
     }
   }
 
-  var api = { expandValues: expandValues, formatNumber: formatNumber, percentText: percentText, shareText: shareText, ratioText: ratioText, ratioShort: ratioShort, noiseText: noiseText,
+  var api = { expandValues: expandValues, formatNumber: formatNumber, exactText: exactText, percentText: percentText, shareText: shareText, ratioText: ratioText, ratioShort: ratioShort, noiseText: noiseText,
     sizeAtLeast: sizeAtLeast, cellView: cellView, ratioView: ratioView, severityKey: severityKey, compareKeys: compareKeys,
     bandStep: bandStep, bandOf: bandOf, readJSON: readJSON, checkShape: checkShape, checkMatrix: checkMatrix, matrixRows: matrixRows,
     safeLink: safeLink, safeName: safeName, splitOf: splitOf, splitText: splitText, distance: distance, quantileTexts: quantileTexts, RANK: RANK,

@@ -139,6 +139,38 @@ test('the rule\'s numbers and every tooltip are written with every digit, in the
   assert.ok(!/\de-\d/.test(said.text()), 'no number in the style of String()');
 });
 
+test('a number that rounds across a threshold of its style is written as the numbers beyond it (issue 19)', () => {
+  // each pair: a number just short of a threshold that rounds onto it, and the threshold itself
+  const same = (write, near, at) => assert.equal(write(...near), write(...at), `${write.name}(${near}) and (${at})`);
+  same(page.formatNumber, [9999.5], [1e4]);
+  same(page.formatNumber, [0.00099996], [0.001]);
+  same(page.formatNumber, [-0.00099996], [-0.001]);
+  for (const [near, at] of [[199.96, 200], [1099.6, 1100], [100.996, 101], [100.00996, 100.01], [10099.6, 10100]]) {
+    same(page.percentText, [100, near], [100, at]);
+    same(page.percentText, [100, 200 - near], [100, 200 - at]);
+  }
+  same(page.shareText, [99.99996], [100]);
+  same(page.shareText, [0.000999], [0.001]);
+  same(page.ratioShort, [1, 0.009996], [1, 0.01]);
+  same(page.ratioShort, [1, 999.6], [1, 1000]);
+  const all = (v) => ({ p10: v, median: v, p90: v });
+  assert.deepEqual(page.quantileTexts(all(0.0099996)), page.quantileTexts(all(0.01)));
+  assert.deepEqual(page.quantileTexts(all(-0.0099996)), page.quantileTexts(all(-0.01)));
+  // and the texts themselves: grouped from 1 000 on, whole from 100 on, one decimal from 1 on
+  assert.deepEqual([[100, 1099.6], [100, 199.96], [100, 100.996], [100, 100.00996]].map((p) => page.percentText(...p)),
+    ['+1 000 %', '+100 %', '+1.0 %', '+0.01 %']);
+  assert.equal(page.shareText(99.99996), '1e4 %');
+});
+
+test('a number written with every digit has the page\'s style however large it is (issue 19)', () => {
+  // String() writes "1e+21" from 1e21 on: the tooltips of the largest results
+  assert.equal(page.exactText(1e21), '1e21');
+  assert.equal(page.exactText(-1.5e300), '−1.5e300');
+  assert.equal(page.exactText(1e-7), '1e−7');
+  assert.equal(page.exactText(123.456), '123.456');
+  assert.equal(page.exactText(null), 'missing');
+});
+
 test('every number the page writes has the one style, over the whole range of the floats (issue 19)', () => {
   const values = [9999.5, 99999.5, 999.95, 0.0099995, 0.00099995, 5e-324, Number.MAX_VALUE, 1e21, 123456789012345680000];
   for (let e = -323; e <= 307; e++) for (const m of [1, 1.2345, 9.5, 9.9995, 9.99995]) values.push(m * 10 ** e);

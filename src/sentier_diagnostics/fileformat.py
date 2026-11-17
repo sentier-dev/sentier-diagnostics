@@ -177,10 +177,16 @@ def text_errors(where: str, one: Mapping, limits: Mapping[str, int], optional=()
 #: and a state's free `identity` table is no way round it. A stem is looked for anywhere in
 #: a key, its separators taken out (`reviewed_by`, `peerReviewed`, `sign-off`); a short word
 #: only as a word of its own (`ok`, not `token`). A stem can catch a key that is no approval
-#: (`preview`); such a key is refused, and the state can name it otherwise.
-APPROVAL_STEMS = re.compile(r"status|accept|approv|reject|review|verif|valid|certif|confirm|endors|audit|sign(ed)?off")
+#: (`preview`); such a key is refused, and the state can name it otherwise. A word that sits
+#: inside an ordinary one is a word of its own only (`ratified`, inside `stratified`). The
+#: list deters; it cannot be complete, and values, which are free names, are not read.
+APPROVAL_STEMS = re.compile(
+    r"status|accept|approv|reject|review|verif|valid|certif|confirm|endors|audit|sign(ed)?off|signat|authori[sz]"
+    r"|vetted|vetting|acknowledg|attest|cleared|sanction|verdict|decision|decided|granted"
+)
 APPROVAL_WORDS = frozenset(
-    {"ok", "okay", "lgtm", "qa", "pass", "passed", "passes", "ack", "acked", "checked", "signed", "agreed", "pending"}
+    {"ok", "okay", "lgtm", "qa", "pass", "passed", "passes", "ack", "acked", "checked", "signed", "agreed", "pending",
+     "ratified", "vet"}  # fmt: skip
 )
 
 

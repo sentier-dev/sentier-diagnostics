@@ -1109,13 +1109,18 @@ class Chain(unittest.TestCase):
                    "signed_off", "reviewed_by", "verified", "validated", "\uff53\uff54\uff41\uff54\uff55\uff53", "st\u200batus",
                    "peerReviewed", "sign-off", "QA", "ok", "lgtm", "checked_by", "rejected", "audit",
                    "certified", "confirmed", "endorsed_by", "okay", "pass", "passed", "passes", "ack", "acked", "signed",
-                   "agreed", "pending", "isOk", "qaDone", "peerPassed")  # fmt: skip
+                   "agreed", "pending", "isOk", "qaDone", "peerPassed",
+                   # and what the review of the fix found still let through
+                   "authorized_by", "authorised", "vetted_by", "acknowledged_by", "attested", "cleared_by", "sanctioned",
+                   "signature", "verdict", "decision", "decided_by", "granted", "ratified", "vet", "vetting",
+                   "peerVetted", "unCleared")  # fmt: skip
         said = lambda key: fileformat.errors(  # noqa: E731
             helpers.mutated(example.build(), lambda d: d["states"][1]["identity"].update({key: "yes"})))
         for key in refused:
             with self.subTest(key):
                 self.assertTrue(any("`identity`" in e for e in said(key)))
-        for key in ("solver", "database_version", "brightway-flows", "checksum", "token", "package", "run"):
+        for key in ("solver", "database_version", "brightway-flows", "checksum", "token", "package", "run",
+                    "stratified", "authority", "signal", "nuclear_share", "decimals", "event"):  # fmt: skip
             with self.subTest(key):
                 self.assertEqual(said(key), [])
 

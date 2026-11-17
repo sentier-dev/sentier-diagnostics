@@ -507,7 +507,8 @@ no status, no "accepted by" and no approval of any kind (sentier-bafu-agribalyse
 the validator refuses such keys, and refuses an entry of a state's `identity` whose name
 says a status or an approval (accepted, approved, reviewed, verified, validated, signed
 off, ok, QA, ...), since an identity holds free names. A key there is printable ASCII, so
-that no such word hides behind a lookalike letter or an invisible one.
+that no such word hides behind a lookalike letter or an invisible one. The list of such
+words deters and cannot be complete; the values of `identity`, free names, are not read.
 
 ## 9. Breakdowns
 
@@ -709,7 +710,9 @@ numbers, and the numbers left take the digits they need.
 
 Every number on the page is written in one style. From 1e4 on, and where it rounds to 1e4,
 a number is a power of ten (`1.235e4`, `4.2e−4`, `1.23e3` where three digits are all a
-line holds), never the `e+4` that JavaScript writes of its own accord.
+line holds), never the `e+4` that JavaScript writes of its own accord. Each style is chosen
+by the number as it is written, so that one that rounds across a threshold reads as the
+numbers beyond it do (99.96 % as `+100 %`, 999.6 % as `+1 000 %`).
 
 A card's title sorts the matrix by its indicator; a heading of the matrix marks its card.
 
