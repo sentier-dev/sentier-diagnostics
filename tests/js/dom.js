@@ -92,7 +92,7 @@ class FakeNode {
 
   contains(other) { for (let n = other; n; n = n.parentNode) if (n === this) return true; return false; }
 
-  focus() { this.focused = true; }
+  focus(options) { this.focused = true; this.focusOptions = options; }
 
   scrollIntoView() {}
 
@@ -135,7 +135,7 @@ function body(scripts) {
   return root;
 }
 
-// `options`: {standalone, attributes, globals, fetch, protocol, scripts}
+// `options`: {standalone, attributes, globals, fetch, protocol, scripts, hash, historyState}
 function page(data, breakdowns, options) {
   options = options || {};
   const scripts = options.scripts || {};
@@ -159,8 +159,13 @@ function page(data, breakdowns, options) {
   root.ownerDocument = document;
   const context = {
     document,
-    location: { hash: '', search: '', pathname: '/index.html', protocol: options.protocol || 'file:' },
-    history: { replaceState: () => { context.location.hash = ''; } },
+    location: { hash: options.hash ? '#' + options.hash : '', search: '', pathname: '/index.html', protocol: options.protocol || 'file:' },
+    // replaceState drops the "#"; each call is kept, with the state it was given
+    history: {
+      state: options.historyState === undefined ? null : options.historyState,
+      replaced: [],
+      replaceState: (state, title, url) => { context.history.replaced.push({ state, url }); context.history.state = state; context.location.hash = ''; },
+    },
     addEventListener: (type, listener) => { (listeners[type] = listeners[type] || []).push(listener); },
     URLSearchParams,
     FileReader: class {},
@@ -186,6 +191,8 @@ function page(data, breakdowns, options) {
       context.location.hash = '#' + hash;
       (listeners.hashchange || []).forEach((listener) => listener({}));
     },
+    // the hashchange a browser fires after the page itself wrote the hash
+    changed: () => (listeners.hashchange || []).forEach((listener) => listener({})),
   };
 }
 

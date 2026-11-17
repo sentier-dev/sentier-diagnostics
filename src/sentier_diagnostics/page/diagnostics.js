@@ -59,6 +59,8 @@
     '~': 'within noise', '=': 'unchanged', '?': 'not judged'
   };
   var NO_CLAIM = '.';
+  // what a column's heading sorts by, in the words of its title (furthestKey)
+  var COLUMN_ORDER = 'Sort by this column: the largest factor between the two results first, then the moves that have no factor (from or to zero, a sign change), then the rest';
   var SAME = '='; // matrix.SAME: a result equal to the one of the state before it
 
   // ------------------------------------------------------------------ pure helpers
@@ -379,13 +381,16 @@
   // pairs included ("1.00"), so that a column reads as numbers; else what cellView says
   // ("≈ 0", "from 0", "− → +", "missing"). The class shows as the tint and a mark, never in
   // place of the number: the colour is the direction's, its strength the band's. The ratio is
-  // a display; the class stays the file's.
+  // a display; the class stays the file's. A pair that moved never reads as one that agrees:
+  // where three digits round its ratio to "1.00", it is written as ratioText writes it
+  // ("1 + 2e−4", "1.004"), so that the text, not only the tint, says it moved.
   var RATIO_CLASSES = ['agrees', 'within noise', 'differs', 'beyond 10x'];
   function ratioView(before, after, cls, dir, band) {
     var view = cellView(before, after, cls, dir, band);
     var ratio = before !== null && after !== null && before !== 0 && after !== 0 && (before > 0) === (after > 0);
     if (ratio && RATIO_CLASSES.indexOf(cls) >= 0) {
       view.text = ratioShort(before, after);
+      if (MOVES.indexOf(cls) >= 0 && view.text === '1.00') view.text = ratioText(before, after);
       if (cls === 'within noise') view.mark = '~';
       view.title += ' After ÷ before: ' + String(after / before) + '.';
     }
@@ -404,6 +409,15 @@
       magnitude = size ? Math.abs(after - before) / size : 0;
     }
     return [rank, -magnitude];
+  }
+
+  // whether numbers add up to a total as a breakdown must: to within 1e-9 of the largest of
+  // them, summed from the left (breakdown.CLOSURE and breakdown._adds_up)
+  var CLOSURE = 1e-9;
+  function addsUp(parts, total) {
+    var size = Math.abs(total), sum = 0;
+    parts.forEach(function (p) { size = Math.max(size, Math.abs(p)); sum += p; });
+    return Math.abs(sum - total) <= CLOSURE * size;
   }
 
   function compareKeys(a, b) {
@@ -576,7 +590,12 @@
 
     var D = null, B = {}, LISTED = [], M = null;
     var matrix = { state: 'none', said: '' };
-    var view = { set: [], anchor: null, notice: '', pickOpen: false, pickFind: '', pickMoved: false, worstN: 20, worstIndicator: '', find: '', cls: '', verdict: '', group: '', limit: PAGE, size: 0, sort: 'worst', open: null, distScale: 'card' };
+    // what the grid is sorted by: the page's own orders and an indicator's column are kept in
+    // two spaces, so that an indicator called "name" or "worst" is a column like any other
+    var WORST = { by: 'worst' }, BY_NAME = { by: 'name' };
+    function byColumn(id) { return { by: 'indicator', id: id }; }
+    var view = { set: [], anchor: null, notice: '', pickOpen: false, pickFind: '', pickMoved: false, worstN: 20, worstIndicator: '', find: '', cls: '', verdict: '', group: '', limit: PAGE, size: 0, sort: WORST, open: null, distScale: 'card' };
+    function sortIs(sort) { return view.sort.by === sort.by && view.sort.id === sort.id; }
     var lastFocus = null;
 
     function q(name) { return root.querySelector('[data-sd="' + name + '"]'); }
@@ -1293,7 +1312,7 @@
       var cards = q('dist-cards').childNodes;
       for (var i = 0; i < cards.length; i++) {
         var card = cards[i];
-        var chosen = card.getAttribute('data-indicator') === view.sort;
+        var chosen = sortIs(byColumn(card.getAttribute('data-indicator')));
         card.className = card.className.replace(/ sd-chosen/g, '') + (chosen ? ' sd-chosen' : '');
         var button = card.childNodes[0].childNodes[0];
         button.setAttribute('aria-pressed', chosen ? 'true' : 'false');
@@ -1342,17 +1361,18 @@
           ? 'Median of ' + groupThousands(qs.n) + ' ' + (qs.n === 1 ? 'ratio' : 'ratios') + ' ' + said3[1] + ', 10th percentile ' + said3[0] + ', 90th ' + said3[2] +
             (left ? '; ' + groupThousands(left) + ' without a ratio' : '')
           : 'No value with a ratio');
-        var button = el('button', { type: 'button', cls: 'sd-dist-pick', 'aria-pressed': view.sort === ind.id ? 'true' : 'false',
+        var column = byColumn(ind.id);
+        var button = el('button', { type: 'button', cls: 'sd-dist-pick', 'aria-pressed': sortIs(column) ? 'true' : 'false',
           title: 'Sort the matrix by ' + ind.name }, [ind.name]);
         button.addEventListener('click', function () {
-          view.sort = view.sort === ind.id ? 'worst' : ind.id;
+          view.sort = sortIs(column) ? WORST : column;
           view.limit = PAGE;
           renderGrid();
           markChosenCard();
           var region = q('grid-region');
           if (region && region.scrollIntoView) region.scrollIntoView({ block: 'start', behavior: 'smooth' });
         });
-        box.appendChild(el('div', { cls: 'sd-dist' + (c.active ? '' : ' sd-still') + (view.sort === ind.id ? ' sd-chosen' : ''), 'data-indicator': ind.id }, [
+        box.appendChild(el('div', { cls: 'sd-dist' + (c.active ? '' : ' sd-still') + (sortIs(column) ? ' sd-chosen' : ''), 'data-indicator': ind.id }, [
           el('h4', null, [button]),
           el('p', { cls: 'sd-top', 'aria-hidden': 'true', text: view.distScale === 'one'
             ? 'full height: ' + groupThousands(Math.round(top)) + ' of ' + groupThousands(block.pairs)
@@ -1393,7 +1413,7 @@
       var body = el('tbody');
       shown.forEach(function (one, i) {
         var pair = pairOf(one.row, one.ind, k);
-        body.appendChild(el('tr', { cls: 'sd-row', tabindex: '0', 'data-item': one.row.id }, [
+        body.appendChild(el('tr', { cls: 'sd-row', tabindex: i ? '-1' : '0', 'data-item': one.row.id }, [
           el('td', { cls: 'num', text: String(i + 1) }),
           el('td', { text: one.row.name + (one.row.place ? ' (' + one.row.place + ')' : '') }),
           el('td', { text: indicatorName(one.ind) }),
@@ -1420,23 +1440,21 @@
         return true;
       });
       var keyed = found.map(function (row, at) {
-        if (view.sort === 'name') return { row: row, key: [row.name.toLowerCase(), row.place || '', at] };
-        if (view.sort === 'worst') return { row: row, key: worstKey(row, k, ids).concat([at]) };
-        var pair = pairOf(row, view.sort, k);
-        return { row: row, key: severityKey(pair[0], pair[1], clsAt(row, view.sort, k)).concat([at]) };
+        if (view.sort.by === 'name') return { row: row, key: [row.name.toLowerCase(), row.place || '', at] };
+        if (view.sort.by === 'worst') return { row: row, key: worstKey(row, k, ids).concat([at]) };
+        return { row: row, key: furthestKey(row, k, [view.sort.id]).concat([at]) };
       });
       keyed.sort(function (a, b) { return compareKeys(a.key, b.key); });
       return keyed.map(function (one) { return one.row; });
     }
 
-    // where a row stands when the grid opens: the largest factor between its two results over
-    // every indicator, among the values that moved and have a ratio, the furthest from 1
-    // first; a row whose moves have no ratio (from or to zero, a sign change) follows, by its
-    // worst value as severityKey orders values; a row that did not move comes last. Kept on
-    // the row per comparison.
-    function worstKey(row, k, ids) {
-      var tag = isSet(k) ? 'set:' + C.key : k;
-      if (row.worst && row.worst.k === tag) return row.worst.key;
+    // where a row stands over the indicators `ids`: the largest factor between its two results,
+    // among the values that moved and have a ratio, the furthest from 1 first; a row whose
+    // moves have no ratio (from or to zero, a sign change) follows, by its worst value as
+    // severityKey orders values; a row that did not move comes last. Over every indicator it
+    // is the order the grid opens in; over one, the order of that column's heading: one order,
+    // the one the headings' titles say.
+    function furthestKey(row, k, ids) {
       var furthest = 0, worst = null;
       ids.forEach(function (id) {
         var pair = pairOf(row, id, k), cls = clsAt(row, id, k);
@@ -1444,16 +1462,23 @@
         var one = severityKey(pair[0], pair[1], cls);
         if (worst === null || compareKeys(one, worst) < 0) worst = one;
       });
-      var key = [-furthest].concat(worst);
+      return [-furthest].concat(worst);
+    }
+
+    // the order the grid opens in, kept on the row per comparison
+    function worstKey(row, k, ids) {
+      var tag = isSet(k) ? 'set:' + C.key : k;
+      if (row.worst && row.worst.k === tag) return row.worst.key;
+      var key = furthestKey(row, k, ids);
       row.worst = { k: tag, key: key };
       return key;
     }
 
     // a heading sorts by itself; a second click goes back to the furthest apart first
-    function sortButton(label, key, title) {
+    function sortButton(label, sort, title) {
       var button = el('button', { type: 'button', cls: 'sd-sort', text: label, title: title });
       button.addEventListener('click', function () {
-        view.sort = view.sort === key ? 'worst' : key;
+        view.sort = sortIs(sort) ? WORST : sort;
         view.limit = PAGE;
         renderGrid();
         markChosenCard();
@@ -1489,22 +1514,22 @@
         : 'Showing ' + groupThousands(shown.length) + ' of ' + groupThousands(found.length) + ' ' + many(found.length) +
           (M ? '' : ', among ' + heldSaid()) + '.' + sizeSaid();
       q('grid-region').setAttribute('aria-label', 'After divided by before, per ' + D.item.one + ' and ' + indWord(false) + ': ' + nowLabel() +
-        (view.sort === 'worst' ? ', the furthest apart first' : ''));
+        (view.sort.by === 'worst' ? ', the furthest apart first' : ''));
       var table = clear(q('grid-table'));
-      var sorted = function (key) { return view.sort === key ? (key === 'name' ? 'ascending' : 'descending') : null; };
+      var sorted = function (sort) { return sortIs(sort) ? (sort.by === 'name' ? 'ascending' : 'descending') : null; };
       var head = [
-        el('th', { scope: 'col', cls: 'sd-name', 'aria-sort': sorted('name') }, [sortButton(capital(D.item.one), 'name', 'Sort by name')]),
+        el('th', { scope: 'col', cls: 'sd-name', 'aria-sort': sorted(BY_NAME) }, [sortButton(capital(D.item.one), BY_NAME, 'Sort by name')]),
         el('th', { scope: 'col', cls: 'sd-group', text: 'Group' })
       ];
       cols.forEach(function (c) {
-        var ind = c.ind;
-        head.push(el('th', { scope: 'col', cls: 'num' + (c.active ? '' : ' sd-still'), 'aria-sort': sorted(ind.id),
+        var ind = c.ind, column = byColumn(ind.id);
+        head.push(el('th', { scope: 'col', cls: 'num' + (c.active ? '' : ' sd-still'), 'aria-sort': sorted(column),
           title: ind.name + (ind.unit ? ' (' + ind.unit + ')' : '') + ': ' + activeSaid(c) + ' here' },
-          [sortButton(indicatorName(ind.id), ind.id, 'Sort by how far the two lie apart, the furthest first')]));
+          [sortButton(indicatorName(ind.id), column, COLUMN_ORDER)]));
       });
       table.appendChild(el('thead', null, [el('tr', null, head)]));
       var body = el('tbody');
-      shown.forEach(function (row) {
+      shown.forEach(function (row, i) {
         var name = row.name + (row.place ? ' (' + row.place + ')' : '');
         var cells = [
           el('th', { scope: 'row', title: name + ', per ' + (row.unit || 'unknown unit') }, [M && row.item ? el('span', { cls: 'sd-listed', title: 'listed in this file' }) : null, name]),
@@ -1515,7 +1540,7 @@
           if (!c.active) td.className += ' sd-still';
           cells.push(td);
         });
-        body.appendChild(el('tr', { cls: 'sd-row', tabindex: '0', 'data-item': row.id, 'aria-current': view.open === row.id ? 'true' : null }, cells));
+        body.appendChild(el('tr', { cls: 'sd-row', tabindex: i ? '-1' : '0', 'data-item': row.id, 'aria-current': view.open === row.id ? 'true' : null }, cells));
       });
       table.appendChild(body);
       var more = q('grid-more');
@@ -1640,13 +1665,20 @@
       var list = el('ul', { cls: 'sd-why' });
       var own = D.explanations.filter(function (e) { return e.about.item === row.id; });
       var wider = D.explanations.filter(function (e) { return !e.about.item && movedUnder(row, e.about); });
+      // a file explains the items it lists only: for one that came from the matrix, no
+      // explanation of its own was ever possible, which is not "none given"
+      if (!row.item) {
+        list.appendChild(el('li', { cls: 'sd-none', text: 'Not listed in this file, so it carries no explanation of its own: a file explains only the ' + D.item.many + ' it lists.' }));
+      }
       own.forEach(function (e) { list.appendChild(explanationNode(e, 'This ' + D.item.one)); });
       wider.forEach(function (e) { list.appendChild(explanationNode(e, e.about.step && e.about.indicator ? 'Its step and ' + indWord(false) : e.about.step ? 'A step it moved in' : e.about.indicator ? capital(article(indWord(false))) + ' it moved in' : 'The whole file')); });
       if (!own.length && !wider.length) {
         var any = movedUnder(row, {});
-        list.appendChild(el('li', { cls: 'sd-none', text: any
-          ? 'None given: no explanation in this file is about this ' + D.item.one + ', or about a step or ' + indWord(false) + ' in which it moved.'
-          : 'It moved in no comparison, and no explanation in this file is about it.' }));
+        var text = !row.item
+          ? (any ? 'No explanation in this file is about a step or ' + indWord(false) + ' in which it moved.' : 'It moved in no comparison.')
+          : any ? 'None given: no explanation in this file is about this ' + D.item.one + ', or about a step or ' + indWord(false) + ' in which it moved.'
+            : 'It moved in no comparison, and no explanation in this file is about it.';
+        list.appendChild(el('li', { cls: 'sd-none', text: text }));
       }
       return list;
     }
@@ -1701,6 +1733,7 @@
       if (drawer.hidden) lastFocus = doc.activeElement || null;
       view.open = row.id;
       drawer.hidden = false;
+      popover(drawer, true);
       q('item-title').textContent = row.name;
       q('item-meta').textContent = [row.id, row.place, row.group, row.unit ? 'per ' + row.unit : 'unit unknown',
         row.item ? null : 'from the matrix: not listed in this file'].filter(Boolean).join(' · ');
@@ -1724,22 +1757,32 @@
         var holder = el('div');
         body.appendChild(el('h4', { text: 'What it is made of: ' + compLabel(comp) }));
         body.appendChild(holder);
-        var found = B[name];
-        if (found) {
-          if (breakdownFits(found, row.id, comp)) breakdownInto(holder, found);
-          else holder.appendChild(el('p', { cls: 'sd-error', text: 'The breakdown ' + name + ' is of another ' + D.item.one + ' or another step: not drawn.' }));
-          return;
-        }
+        var drawOrRefuse = function (data) {
+          var problem = breakdownProblem(data, row, comp);
+          clear(holder);
+          if (problem) holder.appendChild(el('p', { cls: 'sd-error', text: 'The breakdown ' + name + ' ' + problem + ': not drawn.' }));
+          else breakdownInto(holder, data);
+        };
+        if (B[name]) { drawOrRefuse(B[name]); return; }
         holder.appendChild(el('p', { cls: 'sd-quiet', text: 'The breakdown ' + name + ' is not with this page.' }));
         if (safeName(name) && /^https?:$/.test(win.location.protocol)) {
           win.fetch(base + name).then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
-            .then(function (data) { if (!breakdownFits(data, row.id, comp)) throw new Error(); clear(holder); breakdownInto(holder, data); })
-            .catch(function () { /* the sentence above stays */ });
+            .then(drawOrRefuse, function () { /* not read: the sentence above stays */ });
         }
       });
       markOpen();
       var title = q('item-title');
-      if (!quiet && title.focus) title.focus();
+      // the title takes the focus without scrolling the host's page to wherever it stands
+      if (!quiet && title.focus) title.focus({ preventScroll: true });
+    }
+
+    // The drawer as a popover, drawn above everything on the host's page, where the browser has
+    // popovers; a fixed element with its z-index where it has not, or where showing it fails.
+    function popover(node, up) {
+      try {
+        if (up && node.showPopover && !node.matches(':popover-open')) node.showPopover();
+        if (!up && node.hidePopover && node.matches(':popover-open')) node.hidePopover();
+      } catch (error) { /* not a popover here: the fixed element stands */ }
     }
 
     function markOpen() {
@@ -1755,6 +1798,7 @@
       var drawer = q('item');
       if (!drawer || drawer.hidden) return;
       drawer.hidden = true;
+      popover(drawer, false);
       view.open = null;
       markOpen();
       if (hashParts().item) setHash(null);
@@ -1762,13 +1806,37 @@
       lastFocus = null;
     }
 
-    // a breakdown is drawn only under the item and the step that it breaks down
-    function breakdownFits(data, itemId, comp) {
-      if (!data || data.format !== 'sentier-diagnostics-breakdown/1' || data.item !== itemId) return false;
+    // Why a breakdown is not drawn under this item for this step, or null. It is drawn only
+    // where it is this item's breakdown of this step, its parts and rest add up to its totals,
+    // and its totals are the item's results in the two states: the checks of breakdown.errors
+    // and breakdown.against, which a breakdown fetched over http has had no Python to pass.
+    function breakdownProblem(data, row, comp) {
+      if (!data || typeof data !== 'object' || data.format !== 'sentier-diagnostics-breakdown/1') return 'is not a breakdown';
       var k = stepIndex(comp);
       var from = comp === 'total' ? D.states[0].id : D.steps[k].from;
       var to = comp === 'total' ? D.states[D.states.length - 1].id : D.steps[k].to;
-      return data.from === from && data.to === to && !!data.indicators && typeof data.indicators === 'object';
+      if (data.item !== row.id || data.from !== from || data.to !== to) return 'is of another ' + D.item.one + ' or another step';
+      if (!data.indicators || typeof data.indicators !== 'object' || Array.isArray(data.indicators)) return 'holds no indicators';
+      var sides = [D.states.map(function (s) { return s.id; }).indexOf(from), D.states.map(function (s) { return s.id; }).indexOf(to)];
+      var pairOk = function (p) { return Array.isArray(p) && p.length === 2 && p.every(function (v) { return typeof v === 'number' && isFinite(v); }); };
+      var keys = Object.keys(data.indicators);
+      for (var i = 0; i < keys.length; i++) {
+        var key = keys[i], entry = data.indicators[key];
+        if (!row.values[key]) return 'names ' + article(indWord(false)) + ' this file does not hold, ' + key;
+        if (!entry || !pairOk(entry.total) || !pairOk(entry.rest) || !Array.isArray(entry.parts) ||
+            !entry.parts.every(function (p) { return p && pairOk(p.values); })) {
+          return 'is not of the shape of a breakdown in ' + indicatorName(key);
+        }
+        for (var side = 0; side < 2; side++) {
+          var parts = entry.parts.map(function (p) { return p.values[side]; }).concat([entry.rest[side]]);
+          if (!addsUp(parts, entry.total[side])) return 'does not add up: in ' + indicatorName(key) + ' its parts are not its total ' + (side ? 'after' : 'before');
+          var result = row.values[key][sides[side]];
+          if (result === null || result === undefined || !addsUp([entry.total[side]], result)) {
+            return 'is not of this file: its total in ' + indicatorName(key) + ' is not the ' + D.item.one + '\'s result in ' + D.states[sides[side]].id;
+          }
+        }
+      }
+      return null;
     }
 
     function breakdownInto(holder, data) {
@@ -1836,14 +1904,35 @@
 
     function refuseMatrix(said) { matrix.state = 'refused'; matrix.said = said; matrixSaid(); if (D) markPicker(); }
 
-    // the matrix comes after the page is drawn: from a global, or from the file the root or
-    // the diagnostics file names, as a script beside the page (which opens from disk too) or
-    // as JSON over http
+    // The matrices handed to the pages of a document: the list the scripts `page.write` puts
+    // beside a page add to (`SENTIER_DIAGNOSTICS_MATRICES`), and a host's single global. A
+    // document may hold several pages, each with its own matrix; a page takes the one of its
+    // own file, never the first it finds.
+    function handed() {
+      var list = Array.isArray(win.SENTIER_DIAGNOSTICS_MATRICES) ? win.SENTIER_DIAGNOSTICS_MATRICES.slice() : [];
+      if (win.SENTIER_DIAGNOSTICS_MATRIX) list.push(win.SENTIER_DIAGNOSTICS_MATRIX);
+      return list;
+    }
+    function ownHanded() {
+      var list = handed();
+      for (var i = 0; i < list.length; i++) if (!checkMatrix(list[i], D)) return list[i];
+      return null;
+    }
+
+    // the matrix comes after the page is drawn: one handed over that is this file's, or the
+    // file the root or the diagnostics file names, as a script beside the page (which opens
+    // from disk too) or as JSON over http
     function loadMatrix() {
       if (given.matrix) { takeMatrix(given.matrix); return; }
-      if (win.SENTIER_DIAGNOSTICS_MATRIX) { takeMatrix(win.SENTIER_DIAGNOSTICS_MATRIX); return; }
+      var mine = ownHanded();
+      if (mine) { takeMatrix(mine); return; }
       var name = root.getAttribute('data-sd-matrix') || (D.matrix ? D.matrix.file : null);
-      if (!name || D.tier === 'counts') { matrixSaid(); return; }
+      if (!name || D.tier === 'counts') {
+        // nothing of its own to load: a matrix handed over that is not this file's is said
+        var other = D.tier === 'counts' ? null : handed()[0];
+        if (other) takeMatrix(other); else matrixSaid();
+        return;
+      }
       if (!safeName(name)) { refuseMatrix('its name is not a plain file name beside the page'); return; }
       matrix.state = 'loading';
       matrix.said = name;
@@ -1853,7 +1942,9 @@
         var script = doc.createElement('script');
         script.setAttribute('src', base + name);
         script.onload = function () {
-          if (win.SENTIER_DIAGNOSTICS_MATRIX) takeMatrix(win.SENTIER_DIAGNOSTICS_MATRIX);
+          var got = ownHanded(), all = handed();
+          if (got) takeMatrix(got);
+          else if (all.length) takeMatrix(all[all.length - 1]); // refused, and said why
           else refuseMatrix(name + ' holds no matrix');
         };
         script.onerror = function () { refuseMatrix(name + ' is not beside the page'); };
@@ -1947,11 +2038,35 @@
     // the whole way, `#steps=<id>:<id>,<id>` for any other set (a run as its first and last
     // step), and `&item=<id>`. The parts are kept as written, each id decoded on its own, so
     // that an id holding a comma or a colon is still one id.
+    //
+    // The address is the host's too, and may hold other pages: a page reads and writes only
+    // its own parts, and leaves every other part where it was. The first page of a document
+    // writes its parts as above; another writes them after its key (`data-sd-key`, or its
+    // place among the pages: `2.step=…`), so that two pages never take each other's step or
+    // item.
+    var OWN_PARTS = ['step', 'steps', 'item'];
+    var KEY = (function () {
+      var named = root.getAttribute('data-sd-key');
+      if (named) return named + '.';
+      var all = doc.querySelectorAll ? doc.querySelectorAll('[data-sentier-diagnostics]') : [];
+      var at = Array.prototype.indexOf.call(all, root);
+      return at > 0 ? (at + 1) + '.' : '';
+    })();
+    function hashList() {
+      var text = (win.location.hash || '').replace(/^#/, '');
+      return text ? text.split('&') : [];
+    }
+    function ownName(part) {
+      var at = part.indexOf('=');
+      if (at <= 0 || part.slice(0, KEY.length) !== KEY) return null;
+      var name = part.slice(KEY.length, at);
+      return OWN_PARTS.indexOf(name) >= 0 ? name : null;
+    }
     function hashParts() {
       var out = {};
-      (win.location.hash || '').slice(1).split('&').forEach(function (part) {
-        var at = part.indexOf('=');
-        if (at > 0) out[part.slice(0, at)] = part.slice(at + 1);
+      hashList().forEach(function (part) {
+        var name = ownName(part);
+        if (name) out[name] = part.slice(part.indexOf('=') + 1);
       });
       return out;
     }
@@ -1976,13 +2091,15 @@
     }
     function setHash(item) {
       var said = [], k = kNow();
-      if (isSet(k)) said.push('steps=' + setText(view.set));
-      else if (k < D.steps.length) said.push('step=' + encodeURIComponent(D.steps[k].id));
-      if (item) said.push('item=' + encodeURIComponent(item));
-      var wanted = said.join('&');
+      if (isSet(k)) said.push(KEY + 'steps=' + setText(view.set));
+      else if (k < D.steps.length) said.push(KEY + 'step=' + encodeURIComponent(D.steps[k].id));
+      if (item) said.push(KEY + 'item=' + encodeURIComponent(item));
+      var others = hashList().filter(function (part) { return ownName(part) === null; });
+      var wanted = others.concat(said).join('&');
       if ((win.location.hash || '').replace(/^#/, '') === wanted) return false;
       if (wanted) win.location.hash = wanted;
-      else if (win.history && win.history.replaceState) win.history.replaceState(null, '', win.location.pathname + win.location.search);
+      // nothing left to say: the address loses its "#", and the host keeps its history state
+      else if (win.history && win.history.replaceState) win.history.replaceState(win.history.state, '', win.location.pathname + win.location.search);
       return true;
     }
 
@@ -2009,7 +2126,7 @@
       markPicker();
       renderStepSaid();
       if (same) return null;
-      view.cls = ''; view.verdict = ''; view.limit = PAGE; view.sort = 'worst';
+      view.cls = ''; view.verdict = ''; view.limit = PAGE; view.sort = WORST;
       renderComparison();
       if (view.open) renderItem(view.open, true);
       return null;
@@ -2076,8 +2193,29 @@
     function openFrom(event) {
       var row = event.target.closest ? event.target.closest('tr[data-item]') : null;
       if (!row) return;
+      takeStop(row, false);
       var id = row.getAttribute('data-item');
       if (!setHash(id)) renderItem(id);
+    }
+
+    // A table of items is one tab stop, the row last moved to (the first when it is drawn);
+    // the arrow keys, Home and End move between its rows, so that Tab leaves the table in one
+    // press however many rows it holds.
+    var ROW_KEYS = { ArrowDown: 1, ArrowUp: -1, Home: -Infinity, End: Infinity };
+    function moveRow(event) {
+      if (!ROW_KEYS.hasOwnProperty(event.key)) return;
+      var row = event.target.closest ? event.target.closest('tr[data-item]') : null;
+      if (!row || !row.parentNode) return;
+      var rows = row.parentNode.childNodes;
+      var at = Array.prototype.indexOf.call(rows, row);
+      var to = Math.max(0, Math.min(rows.length - 1, at + ROW_KEYS[event.key]));
+      if (event.preventDefault) event.preventDefault();
+      if (to !== at) takeStop(rows[to], true);
+    }
+    function takeStop(row, focus) {
+      var rows = row.parentNode ? row.parentNode.childNodes : [row];
+      for (var i = 0; i < rows.length; i++) rows[i].setAttribute('tabindex', rows[i] === row ? '0' : '-1');
+      if (focus && row.focus) row.focus();
     }
 
     function readScript(name) {
@@ -2150,7 +2288,7 @@
       root.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeItem(); });
       ['grid-table', 'worst-table'].forEach(function (name) {
         q(name).addEventListener('click', openFrom);
-        q(name).addEventListener('keydown', function (e) { if (e.key === 'Enter') openFrom(e); });
+        q(name).addEventListener('keydown', function (e) { if (e.key === 'Enter') openFrom(e); else moveRow(e); });
       });
       win.addEventListener('hashchange', route);
       q('file').addEventListener('change', function (e) {

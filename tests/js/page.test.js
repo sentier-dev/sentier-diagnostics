@@ -454,17 +454,25 @@ test('the grid opens with the items that lie furthest apart, and a second click 
   assert.deepEqual(order(), first);
 });
 
-test('a heading sorts the grid by how far the two lie apart, the furthest first, and says so', () => {
+test('a heading sorts its column the furthest apart first, then moves without a factor, as its title says (issue 32)', () => {
+  // climate holds a sign change, a zero result and factors: ordered by class first, the sign
+  // change and the zero would stand above every factor, which the title does not say
   const data = example();
   const drawn = dom.page(data);
   const head = drawn.byId['grid-table'].querySelectorAll('th[scope="col"]');
-  const water = head.find((th) => th.getAttribute('title') && th.getAttribute('title').indexOf('Water') === 0);
-  water.querySelector('button[type="button"]').dispatch('click', {});
+  const climate = head.find((th) => th.getAttribute('title') && th.getAttribute('title').indexOf('Climate') === 0);
+  const button = climate.querySelector('button[type="button"]');
+  assert.match(button.getAttribute('title'), /the largest factor between the two results first, then the moves that have no factor/);
+  button.dispatch('click', {});
   const after = drawn.byId['grid-table'].querySelectorAll('th[scope="col"]').find((th) => th.getAttribute('aria-sort'));
   assert.equal(after.getAttribute('aria-sort'), 'descending');
   const order = gridRows(drawn).map((tr) => tr.getAttribute('data-item'));
-  const key = (id) => { const i = data.items.find((x) => x.id === id); const v = i.values['x:water']; return page.severityKey(v[0], v[v.length - 1], i.classes['x:water'][4]); };
-  for (let k = 1; k < order.length; k++) assert.ok(page.compareKeys(key(order[k - 1]), key(order[k])) <= 0, order.join());
+  const pair = (id) => { const i = data.items.find((x) => x.id === id); const v = i.values['x:climate']; return [v[0], v[v.length - 1], i.classes['x:climate'][4]]; };
+  const furthest = (id) => { const [b, a, c] = pair(id); return [c === 'differs' || c === 'beyond 10x' ? -page.distance(b, a) : -0].concat(page.severityKey(b, a, c)); };
+  const byClass = (id) => { const [b, a, c] = pair(id); return page.severityKey(b, a, c); };
+  for (let k = 1; k < order.length; k++) assert.ok(page.compareKeys(furthest(order[k - 1]), furthest(order[k])) <= 0, order.join());
+  const classFirst = order.slice().sort((x, y) => page.compareKeys(byClass(x), byClass(y)));
+  assert.notDeepEqual(order, classFirst, 'this column tells the two orders apart');
 });
 
 test('the grid draws 300 rows at a time', () => {
@@ -1185,4 +1193,182 @@ test('a matrix result written "=" is the result before it, and a "=" that stands
   const at = broken.values.findIndex((row) => row.includes('='));
   broken.values[at][0] = '=';
   assert.match(page.checkMatrix(broken, local()), /"=" first in an indicator/);
+});
+
+// ------------------------------------------------------------------ a page inside a host (issues 25 to 33)
+
+test('the drawer opens as a popover in the top layer, its title focused without scrolling the host (issue 25)', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'sentier_diagnostics', 'page', 'body.html'), 'utf8');
+  assert.match(html, /<aside class="sd-drawer" data-sd="item" popover="manual" hidden>/);
+  const drawn = dom.page(example());
+  const drawer = drawn.byId.item;
+  let up = false;
+  const calls = [];
+  drawer.showPopover = () => { calls.push('show'); up = true; };
+  drawer.hidePopover = () => { calls.push('hide'); up = false; };
+  drawer.matches = (selector) => selector === ':popover-open' && up;
+  drawn.open('item=p01');
+  assert.deepEqual(calls, ['show']);
+  assert.equal(drawer.hidden, false);
+  assert.equal(drawn.byId['item-title'].focusOptions.preventScroll, true);
+  drawn.open('item=p03'); // another item while it is open: still one popover
+  assert.deepEqual(calls, ['show']);
+  drawn.root.dispatch('keydown', { key: 'Escape' });
+  assert.deepEqual(calls, ['show', 'hide']);
+  assert.equal(drawer.hidden, true);
+  // where showing it fails, the drawer still opens as the fixed element it was
+  drawer.showPopover = () => { throw new Error('not supported'); };
+  drawn.open('item=p01');
+  assert.equal(drawer.hidden, false);
+});
+
+test('a "%" in the host\'s part of the address leaves the page drawn, and is kept when the page writes (issue 26)', () => {
+  const drawn = dom.page(example(), undefined, { hash: 'save-50%' });
+  assert.equal(drawn.byId.content.hidden, false);
+  assert.doesNotThrow(() => drawn.changed());
+  assert.equal(drawn.byId.content.hidden, false);
+  chips(drawn).find((c) => c.getAttribute('data-comp') !== 'total').dispatch('click', {});
+  assert.match(drawn.context.location.hash, /^save-50%&step=/);
+});
+
+test('two pages on one host keep their own step, item and drawer in the address (issue 27)', () => {
+  const drawn = dom.page(example());
+  const second = dom.body({ data: example() });
+  second.ownerDocument = drawn.document;
+  drawn.document.querySelectorAll = () => [drawn.root, second];
+  drawn.context.SentierDiagnostics.mount(second);
+  const drawerOf = (root) => root.querySelector('[data-sd="item"]');
+  const titleOf = (root) => root.querySelector('[data-sd="item-title"]').textContent;
+  drawn.open('2.item=p01');
+  assert.equal(drawerOf(second).hidden, false, 'the second page opens its item');
+  assert.equal(drawerOf(drawn.root).hidden, true, 'the first page does not open the same id');
+  gridRows(drawn).find((tr) => tr.getAttribute('data-item') === 'p03').childNodes[0].dispatch('click', {});
+  assert.equal(drawn.context.location.hash, '2.item=p01&item=p03', 'the other page\'s part is kept');
+  drawn.changed();
+  assert.equal(titleOf(drawn.root), example().items.find((i) => i.id === 'p03').name);
+  assert.equal(titleOf(second), example().items.find((i) => i.id === 'p01').name);
+  drawn.root.dispatch('keydown', { key: 'Escape' });
+  assert.equal(drawn.context.location.hash, '2.item=p01');
+  drawn.changed();
+  assert.equal(drawerOf(second).hidden, false);
+});
+
+test('closing the drawer keeps the host\'s history state (issue 27)', () => {
+  const drawn = dom.page(example(), undefined, { historyState: { host: 'kept' } });
+  drawn.open('item=p01');
+  drawn.root.dispatch('keydown', { key: 'Escape' });
+  assert.equal(drawn.context.history.replaced.length, 1);
+  assert.deepEqual(drawn.context.history.replaced[0].state, { host: 'kept' });
+});
+
+test('a matrix handed over for another file does not stop a page loading its own (issue 27)', () => {
+  const other = full(); other.of.steps = other.of.steps.slice().reverse();
+  const drawn = dom.page(local(), undefined, { attributes: { 'data-sd-matrix': 'matrix.js' }, globals: { SENTIER_DIAGNOSTICS_MATRIX: other } });
+  const script = drawn.head.querySelector('script[src]');
+  assert.ok(script, 'its own matrix is requested');
+  assert.match(drawn.byId['matrix-said'].textContent, /^Loading/);
+  drawn.context.SENTIER_DIAGNOSTICS_MATRICES = [full()]; // as the script page.write puts beside it does
+  script.onload();
+  assert.equal(gridRows(drawn).length, 10);
+  // a page with nothing of its own to load still says why the matrix handed over is not its
+  const bare = local(); bare.matrix = null;
+  const said = dom.page(bare, undefined, { globals: { SENTIER_DIAGNOSTICS_MATRIX: other } });
+  assert.match(said.byId['matrix-said'].textContent, /not loaded: it is the matrix of another file/);
+});
+
+test('a pair that moved never prints the "1.00" of a pair that agrees (issue 28)', () => {
+  assert.equal(page.ratioView(1, 1.0002, 'differs', 'up', 'up, factor 1-1.1').text, '1 + 2e−4');
+  assert.equal(page.ratioView(1, 1.004, 'differs', 'up', 'up, factor 1-1.1').text, '1.004');
+  assert.equal(page.ratioView(1, 0.9996, 'differs', 'down', 'down, factor 1-1.1').text, '1 − 4e−4');
+  assert.equal(page.ratioView(-2, -2.0004, 'differs', 'down', 'down, factor 1-1.1').text, '1 + 2e−4');
+  assert.equal(page.ratioView(1, 1.0002, 'agrees', null, null).text, '1.00');
+  assert.equal(page.ratioView(1, 1.02, 'differs', 'up', 'up, factor 1-1.1').text, '1.02', 'three digits wherever they part it from 1');
+});
+
+test('indicators called "name" and "worst" are columns like any other (issue 29)', () => {
+  const data = JSON.parse(JSON.stringify(example()).split('"x:water"').join('"worst"').split('"x:tox"').join('"name"'));
+  const drawn = dom.page(data);
+  const heads = () => drawn.byId['grid-table'].querySelectorAll('th[scope="col"]');
+  const marked = () => heads().filter((th) => th.getAttribute('aria-sort')).map((th) => th.getAttribute('title') || th.textContent);
+  assert.deepEqual(marked(), [], 'the grid opens furthest apart first, with no heading marked');
+  const column = (id) => heads().find((th) => (th.getAttribute('title') || '').indexOf(data.indicators.find((i) => i.id === id).name) === 0);
+  column('name').querySelector('button[type="button"]').dispatch('click', {});
+  assert.equal(marked().length, 1);
+  assert.equal(column('name').getAttribute('aria-sort'), 'descending');
+  assert.equal(heads()[0].getAttribute('aria-sort'), null, 'the item column is not sorted');
+  column('worst').querySelector('button[type="button"]').dispatch('click', {});
+  assert.equal(column('worst').getAttribute('aria-sort'), 'descending');
+  assert.doesNotMatch(drawn.byId['grid-region'].getAttribute('aria-label'), /furthest apart first/);
+  column('worst').querySelector('button[type="button"]').dispatch('click', {});
+  assert.deepEqual(marked(), []);
+  assert.match(drawn.byId['grid-region'].getAttribute('aria-label'), /, the furthest apart first$/);
+});
+
+test('host styles on bare buttons and list items stop at the page; its ground comes with its ink (issue 30)', () => {
+  const css = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'sentier_diagnostics', 'page', 'diagnostics.css'), 'utf8');
+  const rule = (selector) => { const at = css.indexOf(selector + ' {'); assert.ok(at >= 0, selector); return css.slice(at, css.indexOf('}', at)); };
+  const button = rule('.sentier-diagnostics button');
+  for (const said of ['min-height: 0', 'text-transform: none', 'letter-spacing: normal', 'font: inherit']) assert.ok(button.includes(said), said);
+  assert.ok(rule('.sentier-diagnostics li::before, .sentier-diagnostics li::after').includes('content: none'));
+  const root = rule('.sentier-diagnostics');
+  assert.ok(root.includes('color: var(--sd-ink)') && root.includes('background: var(--sd-surface)'));
+  // the reset comes before the page's own controls, which weigh more and set their look
+  assert.ok(css.indexOf('.sentier-diagnostics button {') < css.indexOf('.sentier-diagnostics .sd-button {'));
+});
+
+test('an item the file does not list is said to carry no explanation, never "none given" (issue 31)', () => {
+  const data = local();
+  const drawn = withMatrix();
+  const unlisted = full().items.map((r) => r[0]).find((id) => !data.items.some((i) => i.id === id));
+  drawn.open('item=' + unlisted);
+  const why = drawn.byId['item-body'].childNodes[1].seen().join(' ');
+  assert.match(why, /^Not listed in this file, so it carries no explanation of its own: a file explains only the products it lists\./);
+  assert.doesNotMatch(why, /None given/);
+  drawn.open('item=' + data.items[0].id);
+  assert.doesNotMatch(drawn.byId['item-body'].childNodes[1].seen().join(' '), /Not listed in this file/);
+});
+
+test('a table of items is one tab stop; the arrow keys, Home and End move between its rows (issue 32)', () => {
+  const drawn = dom.page(example());
+  const stops = () => gridRows(drawn).filter((tr) => tr.getAttribute('tabindex') === '0');
+  assert.equal(stops().length, 1);
+  assert.equal(stops()[0], gridRows(drawn)[0]);
+  assert.ok(gridRows(drawn).slice(1).every((tr) => tr.getAttribute('tabindex') === '-1'));
+  let prevented = 0;
+  const key = (tr, k) => tr.dispatch('keydown', { key: k, preventDefault: () => { prevented += 1; } });
+  key(gridRows(drawn)[0], 'ArrowDown');
+  assert.equal(stops()[0], gridRows(drawn)[1]);
+  assert.equal(gridRows(drawn)[1].focused, true);
+  key(gridRows(drawn)[1], 'End');
+  assert.equal(stops()[0], gridRows(drawn)[gridRows(drawn).length - 1]);
+  key(stops()[0], 'ArrowDown'); // at the end it stays
+  assert.equal(stops()[0], gridRows(drawn)[gridRows(drawn).length - 1]);
+  key(stops()[0], 'Home');
+  assert.equal(stops()[0], gridRows(drawn)[0]);
+  assert.equal(prevented, 4);
+  gridRows(drawn)[2].childNodes[0].dispatch('click', {}); // a click makes its row the stop
+  assert.equal(stops()[0], gridRows(drawn)[2]);
+  const worst = drawn.byId['worst-table'].querySelectorAll('tr[data-item]');
+  assert.equal(worst.filter((tr) => tr.getAttribute('tabindex') === '0').length, 1);
+});
+
+test('a breakdown is held to its item\'s results, whether it came with the page or over http (issue 33)', async () => {
+  const scaled = () => { const b = wheat(); for (const e of Object.values(b.indicators)) { e.total = e.total.map((v) => v * 2); e.rest = e.rest.map((v) => v * 2); e.parts.forEach((p) => { p.values = p.values.map((v) => v * 2); }); } return b; };
+  const broken = () => { const b = wheat(); const e = Object.values(b.indicators)[0]; e.parts[0].values[1] += 0.01; return b; };
+  const body = (drawn) => drawn.byId['item-body'].seen().join(' ');
+  const bundled = dom.page(example(), { 'p01-fix-1.json': scaled() });
+  bundled.open('item=p01');
+  assert.match(body(bundled), /The breakdown p01-fix-1\.json is not of this file: its total in Climate is not the product's result in repro: not drawn\./);
+  const served = (b) => () => Promise.resolve({ ok: true, json: () => Promise.resolve(b) });
+  for (const [made, said] of [[scaled, /is not of this file: its total in Climate is not/], [broken, /does not add up: in Climate its parts are not its total after/]]) {
+    const fetched = dom.page(example(), undefined, { protocol: 'https:', fetch: served(made()) });
+    fetched.open('item=p01');
+    await new Promise((done) => setImmediate(done));
+    assert.match(body(fetched), said);
+    assert.doesNotMatch(body(fetched), /Dinitrogen monoxide, field/, 'its parts are not drawn');
+  }
+  const right = dom.page(example(), undefined, { protocol: 'https:', fetch: served(wheat()) });
+  right.open('item=p01');
+  await new Promise((done) => setImmediate(done));
+  assert.match(body(right), /Dinitrogen monoxide, field/);
 });

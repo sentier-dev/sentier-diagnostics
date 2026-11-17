@@ -30,7 +30,10 @@
   --sd-down: #1d625e;    /* went down: teal; the pair reads for colour-blind readers */
   --sd-noise: #8a939c;
   --sd-drawer: clamp(22rem, 42vw, 52rem);
+  /* the ink and the ground together: on a host without the tokens both fall back, so the
+     fallback ink is never dark on the host's dark ground */
   color: var(--sd-ink);
+  background: var(--sd-surface);
   font-size: var(--sd-t-md);
   line-height: 1.45;
 }
@@ -40,6 +43,14 @@
 
 /* a class that sets `display` would otherwise show an element marked hidden */
 .sentier-diagnostics [hidden] { display: none !important; }
+
+/* What a host sets on bare elements stops at the page: a site's `button { min-height: 44px;
+   text-transform: uppercase }` or `li::before { content: "• " }` would otherwise reach the
+   headings, chips and lists. These rules beat a host's bare element rules; the page's own
+   classes, which come later and weigh more, set what each control looks like. */
+.sentier-diagnostics button { min-width: 0; min-height: 0; height: auto; margin: 0; text-transform: none; letter-spacing: normal;
+  text-shadow: none; box-shadow: none; font: inherit; line-height: inherit; color: inherit; }
+.sentier-diagnostics li::before, .sentier-diagnostics li::after { content: none; }
 .sentier-diagnostics .sd-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
 /* the head */
@@ -261,9 +272,14 @@
 .sentier-diagnostics .badge.person { border-color: var(--sd-up); }
 .sentier-diagnostics .sd-scope { display: inline-block; margin-right: 0.3em; padding: 0 0.4em; border: 1px solid var(--sd-line-strong); border-radius: 3px; background: var(--sd-paper-deep); font-size: var(--sd-t-xs); font-weight: 700; }
 
-/* the item: a drawer on the right, the whole window on a phone */
-.sentier-diagnostics .sd-drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 20; display: flex; flex-direction: column; width: var(--sd-drawer); max-width: 100%;
-  border-left: 1px solid var(--sd-line-strong); background: var(--sd-surface); box-shadow: -0.5rem 0 2rem color-mix(in srgb, var(--sd-ink) 16%, transparent); }
+/* the item: a drawer on the right, the whole window on a phone. It opens as a popover, drawn
+   above everything: above a host's sticky header whatever its z-index, and against the window
+   even under a host's transformed ancestor (which would otherwise hold a fixed element). The
+   rules below set what the browser's own popover style sets, so that it is the same drawer
+   where popovers are not known and it stays a fixed element. */
+.sentier-diagnostics .sd-drawer { position: fixed; inset: 0 0 0 auto; z-index: 20; display: flex; flex-direction: column; width: var(--sd-drawer); max-width: 100%;
+  height: auto; margin: 0; padding: 0; overflow: hidden; color: var(--sd-ink);
+  border: 0; border-left: 1px solid var(--sd-line-strong); background: var(--sd-surface); box-shadow: -0.5rem 0 2rem color-mix(in srgb, var(--sd-ink) 16%, transparent); }
 .sentier-diagnostics .sd-drawer-head { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--sd-s4); align-items: start;
   padding: var(--sd-s4) var(--sd-s5); border-bottom: 1px solid var(--sd-line); background: var(--sd-paper-deep); }
 .sentier-diagnostics .sd-drawer-head > .sd-label { grid-column: 1; margin: 0; font-size: var(--sd-t-xs); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--sd-muted); }
