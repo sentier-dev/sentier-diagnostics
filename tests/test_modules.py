@@ -8,6 +8,7 @@ import doctest
 import importlib
 import io
 import json
+import math
 import re
 import tempfile
 import unittest
@@ -924,6 +925,44 @@ class Chain(unittest.TestCase):
                 self.assertEqual(cli.check([path]), 1)
             self.assertIn("bytes", out.getvalue())
             self.assertIn("leave the claims' lists out", out.getvalue())  # the example's claims list items
+
+
+class FloorAndLargestFloats(unittest.TestCase):
+    """Issue 37: the floor's median held by tests of its own, not only a doctest; and two
+    results near the largest float, on either side of zero, lie a finite distance apart."""
+
+    def test_the_floor_is_the_factor_times_the_median_size(self):
+        factor = rule.FLOOR_FACTOR
+        for values, median, n in (
+            ([5.0, 1.0, 3.0], 3.0, 3),  # an odd count: the one in the middle, in any order
+            ([10.0, 1.0, 3.0, 2.0], 2.5, 4),  # an even count: halfway between the two in the middle
+            ([-4.0, 1.0, 2.0], 2.0, 3),  # by size: a negative result counts as large as it is
+            ([0.0, 0.0, 7.0, None], 7.0, 1),  # a zero and a missing result are no size
+            ([1e308, 1.6e308], 1.3e308, 2),  # near the largest float: halved before they are added
+        ):
+            with self.subTest(values=values):
+                floor, count = rule.floor_of(values)
+                self.assertEqual(count, n)
+                self.assertTrue(math.isclose(floor, factor * median, rel_tol=1e-15), (floor, factor * median))
+        self.assertEqual(rule.floor_of([0.0, None]), (0.0, 0))
+        self.assertEqual(rule.floor_of([2.0, 4.0], 0.5), (1.5, 2))
+        # one floor per indicator and unit, each the median of its own group
+        found = rule.floors_of({"x": {"a": 1.0, "b": 9.0, "c": 3.0, "t": 40.0}}, {"a": "kg", "b": "kg", "c": "kg", "t": "unit"})
+        self.assertEqual(found, {("x", "kg"): (factor * 3.0, 3), ("x", "unit"): (factor * 40.0, 1)})
+
+    def test_two_results_near_the_largest_float_lie_two_apart_not_infinitely(self):
+        self.assertEqual(rule.relative_difference(1e308, -1e308), 2.0)
+        self.assertEqual(rule.relative_difference(-1.7e308, 1.7e308), 2.0)
+        self.assertEqual(rule.change(1e308, -1e308), -2.0)
+        self.assertEqual(rule.change(-1e308, 1e308), 2.0)
+        # the noise of two builds of one state that far apart is 2, not infinite: an infinite
+        # noise would put every pair within it
+        self.assertEqual(chain.noise_of({"a": 1e308, "b": 1.0}, {"a": -1e308, "b": 1.0}, floor=0.0), 2.0)
+        # a claim of a change of up to 300 % holds a sign change from 1e308 to -1e308
+        entry = claims.scope([A], {"p"}, "any", 3.0, claims.MUST)
+        self.assertEqual(claims.verdict(rule.SIGN_CHANGE, 1e308, -1e308, "down", [entry]), claims.AS_CLAIMED)
+        # and the order from the worst sees them two apart
+        self.assertEqual(rule.severity(1e308, -1e308, rule.SIGN_CHANGE)[1], -2.0)
 
 
 class EachRuleOnItsOwn(unittest.TestCase):

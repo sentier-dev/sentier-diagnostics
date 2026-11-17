@@ -127,22 +127,36 @@ def is_value(value) -> bool:
 
 def relative_difference(before: float, after: float) -> float:
     """How far two results lie apart, relative to the larger of the two; 0 where both are 0.
+    Two results near the largest float on either side of zero are halved before they are
+    subtracted, which is exact there: their difference would overflow to infinity.
 
     >>> relative_difference(2.0, 1.0), relative_difference(0.0, 0.0), relative_difference(1.0, -1.0)
     (0.5, 0.0, 2.0)
+    >>> relative_difference(1e308, -1e308)
+    2.0
     """
     size = max(abs(before), abs(after))
-    return abs(after - before) / size if size else 0.0
+    if not size:
+        return 0.0
+    gap = abs(after - before)
+    if math.isinf(gap):
+        return abs(after / 2 - before / 2) / (size / 2)
+    return gap / size
 
 
 def change(before: float, after: float) -> float | None:
     """The change relative to the size of the result before, signed as the direction is:
     -0.5 is "50 % lower". None where the result before is zero.
 
-    >>> change(2.0, 1.0), change(-2.0, -4.0), change(4.0, 6.0), change(0.0, 1.0)
-    (-0.5, -1.0, 0.5, None)
+    >>> change(2.0, 1.0), change(-2.0, -4.0), change(4.0, 6.0), change(0.0, 1.0), change(1e308, -1e308)
+    (-0.5, -1.0, 0.5, None, -2.0)
     """
-    return (after - before) / abs(before) if before else None
+    if not before:
+        return None
+    moved = after - before
+    if math.isinf(moved):  # as in relative_difference: halved, exactly, so that it does not overflow
+        return (after / 2 - before / 2) / (abs(before) / 2)
+    return moved / abs(before)
 
 
 def size_ratio(before: float, after: float) -> float | None:

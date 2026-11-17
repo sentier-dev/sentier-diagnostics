@@ -918,6 +918,12 @@ const pickRows = (drawn) => drawn.byId['pick-list'].querySelectorAll('button[dat
 const rowOf = (drawn, k) => pickRows(drawn).find((b) => b.getAttribute('data-pick') === String(k));
 const chosenRows = (drawn) => pickRows(drawn).filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => +b.getAttribute('data-pick'));
 const together = () => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'together.json'), 'utf8')).runs;
+test('two results near the largest float on either side of zero lie two apart, as the Python says, not infinitely (issue 37)', () => {
+  assert.deepEqual(page.severityKey(1e308, -1e308, 'sign change'), [page.RANK['sign change'], -2]);
+  assert.deepEqual(page.severityKey(-1.7e308, 1.7e308, 'sign change'), [page.RANK['sign change'], -2]);
+  assert.equal(page.judge(1e308, -1e308, 0, 0.01, null)[0], 'sign change');
+});
+
 const boundaries = () => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'boundaries.json'), 'utf8')).cases;
 const withMatrix = () => dom.page(local(), undefined, { globals: { SENTIER_DIAGNOSTICS_MATRIX: full() } });
 const tagged = (node, tag) => (node.tagName === tag ? [node] : []).concat(...(node.childNodes || []).map((c) => tagged(c, tag)));

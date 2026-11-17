@@ -282,13 +282,21 @@
   // step of the run again and found the file's own class on every item. Held to the Python
   // rule by the shared cases and the boundaries the Python writes (tests/test_boundaries.py).
   var BEYOND_FACTOR = 10; // rule.BEYOND_FACTOR; the validator holds every file to it
+  // how far two results lie apart, relative to the larger, as rule.relative_difference: two
+  // near the largest float on either side of zero are halved first, exactly, not to overflow
+  function relativeDifference(before, after) {
+    var size = Math.max(Math.abs(before), Math.abs(after));
+    if (!size) return 0;
+    var gap = Math.abs(after - before);
+    return isFinite(gap) ? gap / size : Math.abs(after / 2 - before / 2) / (size / 2);
+  }
   function classify(before, after, floor, tolerance, noise) {
     if (before === null || after === null) return 'missing';
     var smallBefore = Math.abs(before) <= floor, smallAfter = Math.abs(after) <= floor;
     if (smallBefore && smallAfter) return 'near zero';
     var sameSign = (before > 0 && after > 0) || (before < 0 && after < 0);
     var size = Math.max(Math.abs(before), Math.abs(after));
-    var gap = size ? Math.abs(after - before) / size : 0;
+    var gap = relativeDifference(before, after);
     if (sameSign && gap <= tolerance) return 'agrees';
     if (sameSign && noise && gap <= noise) return 'within noise';
     var beyond = size > BEYOND_FACTOR * Math.min(Math.abs(before), Math.abs(after));
@@ -429,8 +437,7 @@
     if (before !== 0 && after !== 0 && (before > 0) === (after > 0)) {
       magnitude = distance(before, after);
     } else {
-      var size = Math.max(Math.abs(before), Math.abs(after));
-      magnitude = size ? Math.abs(after - before) / size : 0;
+      magnitude = relativeDifference(before, after);
     }
     return [rank, -magnitude];
   }
