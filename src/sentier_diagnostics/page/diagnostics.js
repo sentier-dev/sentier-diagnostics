@@ -2050,10 +2050,12 @@
       } catch (error) { /* hidden as an element all the same */ }
     }
     // an open drawer the page had shown above the host's page, and the browser took out of it
-    // when the host moved the page, shown there again; never one the page could not show so
+    // when the host moved the page, shown there again; never one the page could not show so,
+    // and not while the page is out of the document, where a browser shows nothing above (a
+    // page of its own acts out of it too): it is shown once the page is back
     function keepDrawer() {
       var drawer = q('item');
-      if (!acting || !drawerAbove || !drawer || drawer.hidden || popoverOpen(drawer) || modalOpen(drawer)) return;
+      if (!acting || !inDocument() || !drawerAbove || !drawer || drawer.hidden || popoverOpen(drawer) || modalOpen(drawer)) return;
       showDrawer(drawer);
     }
 
@@ -2371,6 +2373,12 @@
     var keyProblem = null; // a key the page can never hold: it is not a word, or it is one of the page's own
     var waiting = false; // another page in the document holds the key the host named: the page draws nothing
     // the key each page holds, by key: a weak reference to the page's entry
+    //
+    // Every copy of this script in a window reads these two lists, whatever its version, so
+    // their shape is a contract between versions: an entry is an object whose deref() gives
+    // the page's {root, wake}, or nothing once the page is gone. An entry of another shape
+    // reads as free, so a version that changed it would let two pages take one key. A key
+    // whose page was collected keeps its spent entry until the key is taken again.
     var keys = win.SENTIER_DIAGNOSTICS_KEYS = win.SENTIER_DIAGNOSTICS_KEYS || {};
     // the pages waiting for a key another holds: one that gives a key up wakes them, as no
     // change to the document may reach them (it left from inside a shadow root they do not

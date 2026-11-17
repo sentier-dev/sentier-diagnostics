@@ -2397,18 +2397,20 @@ test('a page that leaves wakes a page another copy of the script mounted, which 
 });
 
 test('a page moved with its drawer open shows it again where it now stands (issue 40)', () => {
-  const setUp = (narrow, kinds) => {
+  const setUp = (narrow, kinds, standalone) => {
     const observers = [];
-    const drawn = dom.page(example(), undefined, { globals: { MutationObserver: observerKind(observers) } });
+    const drawn = dom.page(example(), undefined, { standalone, globals: { MutationObserver: observerKind(observers) } });
     const drawer = drawn.byId.item;
     const calls = [];
     const state = { popover: false, modal: false };
+    // as a browser: nothing out of the document is shown above, and a dialog open is not shown modal
+    const out = () => drawn.root.isConnected === false;
     if (kinds.includes('popover')) {
-      drawer.showPopover = () => { calls.push('popover'); state.popover = true; };
+      drawer.showPopover = () => { if (out()) throw new Error('InvalidStateError'); calls.push('popover'); state.popover = true; };
       drawer.hidePopover = () => { calls.push('hide'); state.popover = false; };
     }
     if (kinds.includes('dialog')) {
-      drawer.showModal = () => { if (drawer.open) throw new Error('InvalidStateError'); calls.push('modal'); drawer.open = true; state.modal = true; };
+      drawer.showModal = () => { if (drawer.open || out()) throw new Error('InvalidStateError'); calls.push('modal'); drawer.open = true; state.modal = true; };
       drawer.close = () => { calls.push('close'); drawer.open = false; state.modal = false; };
     }
     drawer.matches = (selector) => (selector === ':popover-open' && state.popover) || (selector === ':modal' && state.modal);
@@ -2457,6 +2459,21 @@ test('a page moved with its drawer open shows it again where it now stands (issu
   phone.state.modal = false;
   phone.drawer.dispatch('close', {});
   assert.equal(phone.drawer.hidden, true);
+
+  // a page of its own, out of the document a while with its drawer open: nothing is tried
+  // while it is out, and the drawer is shown above once it is back (review of b2ab444)
+  for (const narrow of [false, true]) {
+    const own = setUp(narrow, ['popover', 'dialog'], true);
+    own.drawn.open('item=p01');
+    own.drawn.root.isConnected = false;
+    own.move();
+    own.drawn.root.isConnected = true;
+    own.observers.forEach((o) => o.react([{ type: 'childList' }]));
+    if (own.calls.includes('close')) own.drawer.dispatch('close', {}); // the close the page called, heard after it is back
+    assert.deepEqual(own.calls, narrow ? ['modal', 'close', 'modal'] : ['popover', 'popover'], String(narrow));
+    assert.ok(own.state.popover || own.state.modal, 'shown above again');
+    assert.equal(own.drawer.hidden, false, 'the item is still open');
+  }
 
   // a browser that knows neither: the fixed element stands, and a move tries nothing
   const none = setUp(false, []);
