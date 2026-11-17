@@ -288,12 +288,86 @@ test('a text by a model is drawn as a claim nobody checked (A9)', () => {
 });
 
 test('nothing drawn calls a move better or worse (A22)', () => {
+  // what the script draws, in each view; the page's own words are read in the written page
+  // (`test_a22_the_reference_is_neutral_after_step_0`)
   const drawn = dom.page(example(), { 'p01-fix-1.json': wheat() });
-  drawn.open('sd.item=p01');
-  const html = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'sentier_diagnostics', 'page', 'body.html'), 'utf8')
-    .replace(/<[^>]*>/g, ' ');
-  const text = (drawn.text() + '\n' + html).toLowerCase();
+  const seen = [drawn.text()];
+  for (const view of ['sd.item=p01', 'sd.step=fix-1', 'sd.step=step-0&sd.item=p02']) { drawn.open(view); seen.push(drawn.text()); }
+  const text = seen.join('\n').toLowerCase();
+  assert.ok(text.includes('the whole way') && text.includes('what it is made of'), 'the views were drawn');
   for (const word of ['better', 'worse', 'improve', 'closer']) assert.ok(!text.includes(word), word);
+});
+
+// a drawn table as its rows, each cell's text under its column's name
+const tableRows = (table) => {
+  const part = (tag) => table.childNodes.find((n) => n.tagName === tag);
+  const head = part('THEAD').childNodes[0].childNodes.map((th) => th.textContent);
+  return part('TBODY').childNodes.map((tr) => Object.fromEntries(tr.childNodes.map((cell, i) => [head[i], cell.textContent])));
+};
+const within = (node) => [node, ...node.childNodes.flatMap(within)];
+
+test('the item view draws each result in its own row and column, and each part of a breakdown on its own line (issue 14)', () => {
+  const d = example();
+  const drawn = dom.page(d, { 'p01-fix-1.json': wheat() });
+  drawn.open('sd.item=p01');
+  const item = d.items.find((i) => i.id === 'p01');
+  const tables = within(drawn.byId['item-body']).filter((n) => n.tagName === 'TABLE');
+  let checked = 0;
+  for (const ind of d.indicators) {
+    const values = item.values[ind.id];
+    const rows = tableRows(tables.find((t) => t.getAttribute('data-indicator') === ind.id));
+    d.steps.forEach((s, k) => {
+      assert.equal(rows[k].Before, page.formatNumber(values[k]), `${ind.id} ${s.id} before`);
+      assert.equal(rows[k].After, page.formatNumber(values[k + 1]), `${ind.id} ${s.id} after`);
+      checked += values[k] !== values[k + 1];
+    });
+    assert.equal(rows[d.steps.length].Before, page.formatNumber(values[0]));
+    assert.equal(rows[d.steps.length].After, page.formatNumber(values[values.length - 1]));
+  }
+  assert.ok(checked >= 2, 'some results moved, so before and after differ');
+  const parts = tables.filter((t) => tableRows(t).length && 'Part' in tableRows(t)[0]);
+  const bd = wheat();
+  assert.equal(parts.length, Object.keys(bd.indicators).length);
+  Object.values(bd.indicators).forEach((entry, i) => {
+    const rows = tableRows(parts[i]);
+    const lines = [...entry.parts.map((p) => [p.label, p.kind || '', p.values]), [null, '', entry.rest], ['Total', '', entry.total]];
+    assert.equal(rows.length, lines.length);
+    lines.forEach(([label, kind, pair], k) => {
+      if (label !== null) assert.equal(rows[k].Part, label);
+      assert.equal(rows[k].Kind, kind);
+      assert.equal(rows[k].Before, page.formatNumber(pair[0]), `${rows[k].Part} before`);
+      assert.equal(rows[k].After, page.formatNumber(pair[1]), `${rows[k].Part} after`);
+    });
+    assert.ok(entry.parts.some((p) => p.values[0] !== p.values[1]));
+  });
+});
+
+test('the whole way and the steps are drawn with each count in its own column (issue 14)', () => {
+  const d = example();
+  const drawn = dom.page(d);
+  const n = (x) => String(x).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  const label = (id) => d.steps.find((s) => s.id === id).label;
+  const whole = tableRows(drawn.byId['total-table']);
+  assert.equal(whole.length, d.indicators.length);
+  d.indicators.forEach((ind, k) => {
+    const row = whole[k], block = d.counts.total[ind.id], att = d.attribution[ind.id];
+    for (const [cls, count] of Object.entries(block.classes)) assert.equal(row[cls], n(count), `${ind.id} ${cls}`);
+    assert.equal(row.Up, n(block.directions.up), ind.id);
+    assert.equal(row.Down, n(block.directions.down), ind.id);
+    const ranked = Object.entries(att.dominant).filter(([, c]) => c).sort((a, b) => b[1] - a[1]).map(([id, c]) => `${label(id)} (${c})`);
+    assert.equal(row['Largest step'], ranked.join(', ') || 'none', ind.id);
+    assert.equal(row['Spread over steps'], n(att.spread));
+    assert.equal(row['Not attributable'], n(att.not_attributable));
+    assert.equal(row['Moved by what nothing explains'], n(att.unexplained_moved));
+  });
+  assert.ok(d.indicators.some((ind) => d.counts.total[ind.id].directions.up !== d.counts.total[ind.id].directions.down));
+  assert.ok(d.indicators.some((ind) => Object.values(d.attribution[ind.id].dominant).filter(Boolean).length > 1), 'a ranking of two steps');
+  const steps = tableRows(drawn.byId['steps-table']);
+  d.steps.forEach((s, k) => {
+    const sum = (f) => n(Object.values(d.counts.steps[s.id]).reduce((a, b) => a + f(b), 0));
+    assert.equal(steps[k].Up, sum((b) => b.directions.up), s.id);
+    assert.equal(steps[k].Down, sum((b) => b.directions.down), s.id);
+  });
 });
 
 test('the item view splits only what can be split and draws the breakdown of its own step', () => {

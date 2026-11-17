@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import html.parser
 
 from sentier_diagnostics import chain, claims
 
@@ -89,3 +90,33 @@ def replaced_everywhere(test, data, check, stopped=None):
                 test.assertFalse([e for e in found if e.startswith(stopped)], f"{key!r} = {value!r}")
         parent[key] = kept
 
+
+class _Shown(html.parser.HTMLParser):
+    """What a reader of a written page sees: its text outside scripts and styles, and the
+    texts it shows on request (a tooltip, a label read aloud, a placeholder)."""
+
+    SHOWN_ATTRIBUTES = ("title", "aria-label", "alt", "placeholder")
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts, self.hidden = [], 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("script", "style"):
+            self.hidden += 1
+        self.parts += [value for name, value in attrs if name in self.SHOWN_ATTRIBUTES and value]
+
+    def handle_endtag(self, tag):
+        if tag in ("script", "style"):
+            self.hidden -= 1
+
+    def handle_data(self, data):
+        if not self.hidden:
+            self.parts.append(data)
+
+
+def shown_text(page: str) -> str:
+    """The text a reader of a written page sees, before its script draws anything."""
+    reader = _Shown()
+    reader.feed(page)
+    return " ".join(" ".join(reader.parts).split())
