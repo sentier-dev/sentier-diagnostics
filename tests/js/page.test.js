@@ -1558,15 +1558,31 @@ test('the page reads the host\'s tokens as the browser resolves them, and follow
   themed.isConnected = true;
   watch.react([]);
   assert.equal(themed.getAttribute('data-sd-scheme'), 'dark');
-  // a page in a shadow root: that root is watched too, as the document does not see into it
-  const shadow = { host: around };
+  // a page in a shadow root: that root is watched too, as the document does not see into
+  // it, and loads are heard there, as a load does not leave it
+  const loadsIn = (top) => { top.loads = []; top.addEventListener = (type, react, capture) => { if (type === 'load' && capture) top.loads.push(react); }; return top; };
+  const shadow = loadsIn({ host: around });
   const shaded = dom.body({ data: example() });
   shaded.ownerDocument = first.document;
   shaded.getRootNode = () => shadow;
   around.getRootNode = () => first.document;
   first.context.SentierDiagnostics.mount(shaded);
-  const inShadow = observers[observers.length - 1].watched.map(([node]) => node);
+  const shadedWatch = observers[observers.length - 1];
+  const inShadow = shadedWatch.watched.map(([node]) => node);
   assert.ok(inShadow.includes(first.document) && inShadow.includes(shadow));
+  assert.equal(shadow.loads.length, 1);
+  vars['--ink'] = '#eee';
+  shadow.loads[0]({ type: 'load' }); // a sheet swapped inside the shadow root finished loading
+  assert.equal(shaded.getAttribute('data-sd-scheme'), 'dark');
+  // moved into another shadow root whose colours are the same: that one is watched from then on
+  const elsewhere = new dom.FakeNode('section');
+  elsewhere.nodeType = 1;
+  elsewhere.getRootNode = () => first.document;
+  const moved = loadsIn({ host: elsewhere });
+  shaded.getRootNode = () => moved;
+  shadedWatch.react([{ type: 'childList' }]);
+  assert.ok(shadedWatch.watched.some(([node]) => node === moved));
+  assert.equal(moved.loads.length, 1);
 });
 
 test('a key the host names is a plain word, neither the page\'s own nor another page\'s (review of issue 27)', () => {
@@ -1589,10 +1605,19 @@ test('a key the host names is a plain word, neither the page\'s own nor another 
   };
   const errorOf = (root) => root.querySelector('[data-sd="load-error"]').textContent;
   const left = dom.page(example(), undefined, { attributes: { 'data-sd-key': 'left' } });
-  assert.match(errorOf(mountBeside(left, 'left')), /Another page mounted here has the key data-sd-key="left" and has not left the document/);
+  const twin = mountBeside(left, 'left');
+  assert.match(errorOf(twin), /^Another page in the document has the key data-sd-key="left": .* This page is drawn once the other has left\.$/);
+  assert.equal(twin.querySelector('[data-sd="content"]').hidden, true);
   assert.equal(errorOf(mountBeside(left, 'right')), '');
-  // once it is gone, a page drawn in its place takes its key
+  // once the first has left, the page that waited is drawn, takes the key and reads the address
   left.root.isConnected = false;
+  left.open('left.item=p01');
+  assert.equal(errorOf(twin), '');
+  assert.equal(twin.querySelector('[data-sd="content"]').hidden, false);
+  assert.equal(twin.querySelector('[data-sd="item"]').hidden, false);
+  assert.equal(left.byId.item.hidden, true, 'the page that left opens nothing');
+  // a page drawn in place of one that left takes its key
+  twin.isConnected = false;
   assert.equal(errorOf(mountBeside(left, 'left')), '');
 });
 
@@ -1679,13 +1704,19 @@ test('a host that answers the page\'s reading of its colours sets off no other r
   flush();
   assert.equal(probes, 2);
   assert.equal(written, 1, 'a look that finds what it found before writes nothing');
+  // the host's ink changes and its scheme does not: read again, the mark not written again
+  vars['--ink'] = 'light-dark(#eee, #1d232a)'; // another token, the same light ink
+  watch.react([{ type: 'attributes', target: around }]);
+  flush();
+  assert.equal(probes, 4, 'the ink changed: read');
+  assert.equal(written, 1, 'the scheme did not: nothing written');
   // a stylesheet that finished loading (a host that swapped its theme's sheet) changes no
   // element: the load is caught on its way down the document, and looked at
   vars['--ink'] = '#1d232a';
   loaded.forEach((react) => react({ type: 'load' }));
   flush();
   assert.equal(themed.getAttribute('data-sd-scheme'), null);
-  assert.equal(probes, 4);
+  assert.equal(probes, 6);
   assert.equal(written, 2);
 });
 
@@ -1718,7 +1749,7 @@ test('a page mounted before it is put in reads the host\'s colours once it is in
   assert.equal(again.querySelector('[data-sd="item"]').hidden, false);
 });
 
-test('pages built and mounted before the host puts them in take keys of their own (review of issue 27)', () => {
+test('pages built and mounted before the host puts them in take keys of their own once they are in (review of issue 27, and of 233b988)', () => {
   const observers = [];
   const drawn = dom.page(undefined, undefined, { attributes: { 'data-sentier-diagnostics': 'manual' }, globals: { MutationObserver: observerKind(observers) } });
   const build = (key) => {
@@ -1732,6 +1763,7 @@ test('pages built and mounted before the host puts them in take keys of their ow
   const drawerOf = (root) => root.querySelector('[data-sd="item"]');
   const errorOf = (root) => root.querySelector('[data-sd="load-error"]').textContent;
   const a = build(), b = build();
+  assert.deepEqual(Object.keys(drawn.context.SENTIER_DIAGNOSTICS_KEYS), [], 'no key is taken outside the document');
   a.isConnected = true; b.isConnected = true; // the host puts both in
   drawn.open('sd.item=p01');
   assert.equal(drawerOf(a).hidden, false);
@@ -1739,28 +1771,193 @@ test('pages built and mounted before the host puts them in take keys of their ow
   drawn.open('sd2.item=p01');
   assert.equal(drawerOf(b).hidden, false);
   assert.equal(drawerOf(a).hidden, true);
-  // named alike, both built before either is put in: the second is refused
-  const left = build('left');
+  // named alike, both built before either is put in: neither is refused until both are in
+  const left = build('left'), twin = build('left');
   assert.equal(errorOf(left), '');
-  assert.match(errorOf(build('left')), /Another page mounted here has the key data-sd-key="left" and has not left the document/);
+  assert.equal(errorOf(twin), '');
+  left.isConnected = true; twin.isConnected = true;
+  drawn.open('left.item=p01');
+  assert.equal(drawerOf(left).hidden, false);
+  assert.match(errorOf(twin), /Another page in the document has the key data-sd-key="left"/);
   // a page that was in and has left: the page drawn in its place takes its key, and the
-  // one it replaces no longer answers the address
-  const listening = drawn.listeners.hashchange.length;
-  const watchOfA = observers[0];
-  assert.ok(watchOfA.watched.length > 0);
+  // one it replaces opens nothing
   a.isConnected = false;
   const c = build();
-  assert.equal(drawn.listeners.hashchange.length, listening, 'the page it replaced is released: one listener off, one on');
-  assert.deepEqual(watchOfA.watched, [], 'and watches the document no more');
+  c.isConnected = true;
   drawn.open('sd.item=p02');
   assert.equal(drawerOf(c).hidden, false);
   assert.equal(drawerOf(a).hidden, true, 'the removed page opens nothing');
-  // a page built and never put in keeps its key: the next takes the next free one
+  // a page built and never put in takes no key: the next page put in takes the first free one
+  build();
   const d = build();
   d.isConnected = true;
   drawn.open('sd3.item=p01');
   assert.equal(drawerOf(d).hidden, false);
   assert.equal(drawerOf(c).hidden, true);
+});
+
+test('a page taken out and put back works: it takes its key again, or the next free one, never one a page in the document holds (review of 233b988)', () => {
+  // a host with tabs takes the page of a hidden tab out of the document, and puts it back
+  const observers = [];
+  const drawn = dom.page(example(), undefined, { globals: { MutationObserver: observerKind(observers) } }); // "sd"
+  const watchOfFirst = observers[0];
+  const putBack = (root) => { root.isConnected = true; observers.forEach((o) => o.react([{ type: 'childList' }])); };
+  const beside = (key) => {
+    const root = dom.body({ data: example() });
+    if (key !== undefined) root.setAttribute('data-sd-key', key);
+    root.ownerDocument = drawn.document;
+    drawn.context.SentierDiagnostics.mount(root);
+    return root;
+  };
+  const drawerOf = (root) => root.querySelector('[data-sd="item"]');
+  const titleOf = (root) => root.querySelector('[data-sd="item-title"]').textContent;
+  const nameOf = (id) => example().items.find((i) => i.id === id).name;
+  drawn.root.isConnected = false;
+  const b = beside(); // takes "sd": the first is out of the document
+  putBack(drawn.root);
+  drawn.open('sd2.item=p01&sd.item=p03');
+  assert.equal(drawerOf(drawn.root).hidden, false, 'the first, put back, took the next free key');
+  assert.equal(titleOf(drawn.root), nameOf('p01'));
+  assert.equal(titleOf(b), nameOf('p03'), 'the page that took its key keeps it');
+  assert.ok(watchOfFirst.watched.length > 0, 'and it still follows the host\'s theme');
+  // a file handed to a page that is out, and whose key another took: it reads no part of
+  // that page's
+  const handed = dom.body({});
+  handed.ownerDocument = drawn.document;
+  handed.setAttribute('data-sentier-diagnostics', 'manual');
+  const api = drawn.context.SentierDiagnostics.mount(handed); // takes "sd3"
+  handed.isConnected = false;
+  const taker = beside(); // takes "sd3": the page that held it is out
+  drawn.open('sd3.item=p02');
+  assert.equal(drawerOf(taker).hidden, false);
+  api.show(example(), true);
+  assert.equal(drawerOf(handed).hidden, true, 'the page that is out opens nothing of the page that took its key');
+  // put back where its own key and a lower one are both free: it takes its own again, so the
+  // addresses made for it still open it
+  taker.isConnected = false;
+  drawn.root.isConnected = false;
+  b.isConnected = false; // "sd" and "sd2" are free, and "sd3" is
+  putBack(handed);
+  drawn.open('sd3.item=p01');
+  assert.equal(drawerOf(handed).hidden, false);
+  assert.equal(titleOf(handed), nameOf('p01'));
+  // put back where no page took its key: it keeps it, and reads the address as it is now
+  const kept = dom.page(example(), undefined, { globals: { MutationObserver: observerKind(observers) } });
+  kept.root.isConnected = false;
+  kept.open('sd.item=p02');
+  assert.equal(kept.byId.item.hidden, true, 'a page out of the document answers no address');
+  kept.root.isConnected = true;
+  observers[observers.length - 1].react([{ type: 'childList' }]);
+  assert.equal(kept.byId.item.hidden, false);
+  assert.equal(kept.byId['item-title'].textContent, nameOf('p02'));
+  // a page the host named: put back while another holds its name, it waits and says why,
+  // and is drawn once the other has left
+  const left = beside('left');
+  left.isConnected = false;
+  const right = beside('left');
+  putBack(left);
+  assert.match(left.querySelector('[data-sd="load-error"]').textContent, /Another page in the document has the key data-sd-key="left"/);
+  drawn.open('left.item=p01');
+  assert.equal(drawerOf(right).hidden, false);
+  assert.equal(drawerOf(left).hidden, true);
+  right.isConnected = false;
+  observers.forEach((o) => o.react([{ type: 'childList' }]));
+  assert.equal(left.querySelector('[data-sd="content"]').hidden, false);
+  assert.equal(drawerOf(left).hidden, false, 'drawn at the address as it is');
+});
+
+test('a page in the document takes its key when it is mounted, file or not; one put in later, when the document changes, before any frame (review of 233b988)', () => {
+  const observers = [];
+  const frames = []; // frames held, as in a tab in the background
+  const drawn = dom.page(undefined, undefined, { attributes: { 'data-sentier-diagnostics': 'manual' }, globals: { MutationObserver: observerKind(observers), requestAnimationFrame: (f) => frames.push(f) } });
+  const mount = (data, inside) => {
+    const root = dom.body(data ? { data } : {});
+    root.ownerDocument = drawn.document;
+    root.isConnected = inside;
+    drawn.context.SentierDiagnostics.mount(root);
+    return root;
+  };
+  const empty = mount(null, true); // a host that hands it its file later
+  const held = () => Object.keys(drawn.context.SENTIER_DIAGNOSTICS_KEYS).map((k) => [k, drawn.context.SENTIER_DIAGNOSTICS_KEYS[k].root]);
+  assert.deepEqual(held(), [['sd', empty]]);
+  const later = mount(example(), false);
+  later.isConnected = true;
+  observers[observers.length - 1].react([{ type: 'childList' }]);
+  assert.deepEqual(held(), [['sd', empty], ['sd2', later]], 'taken when the document changed, with no frame run');
+});
+
+test('a page put in and handed its file before the document\'s change reaches it reads the address with its key (review of 233b988)', () => {
+  const drawn = dom.page(undefined, undefined, { attributes: { 'data-sentier-diagnostics': 'manual' }, hash: 'sd.item=p01' });
+  const root = dom.body({});
+  root.ownerDocument = drawn.document;
+  root.isConnected = false;
+  const api = drawn.context.SentierDiagnostics.mount(root);
+  root.isConnected = true; // put in, and handed its file in the same task
+  api.show(example(), true);
+  assert.equal(root.querySelector('[data-sd="item"]').hidden, false);
+});
+
+test('a page put in and taken out before it was found there, or never put in, takes no key (review of 233b988)', () => {
+  const observers = [];
+  const manual = { attributes: { 'data-sentier-diagnostics': 'manual' }, globals: { MutationObserver: observerKind(observers) } };
+  const build = (drawn, key, inside) => {
+    const root = dom.body({ data: example() });
+    if (key !== undefined) root.setAttribute('data-sd-key', key);
+    root.ownerDocument = drawn.document;
+    root.isConnected = !!inside;
+    drawn.context.SentierDiagnostics.mount(root);
+    return root;
+  };
+  const deliver = () => observers.forEach((o) => o.react([{ type: 'childList' }])); // the task ends
+  // mounted, put in, taken out and mounted again in one task (React's StrictMode in development)
+  for (const key of [undefined, 'left']) {
+    const drawn = dom.page(undefined, undefined, manual);
+    const first = build(drawn, key);
+    first.isConnected = true;
+    first.isConnected = false;
+    const again = build(drawn, key, true);
+    deliver();
+    assert.equal(again.querySelector('[data-sd="load-error"]').textContent, '', String(key));
+    drawn.open((key || 'sd') + '.item=p01');
+    assert.equal(again.querySelector('[data-sd="item"]').hidden, false, String(key));
+    assert.equal(first.querySelector('[data-sd="item"]').hidden, true, String(key));
+  }
+  // mounted and never put in (a host's error path): the page drawn next takes "sd"
+  const drawn = dom.page(undefined, undefined, manual);
+  build(drawn);
+  const next = build(drawn, undefined, true);
+  drawn.open('sd.item=p01');
+  assert.equal(next.querySelector('[data-sd="item"]').hidden, false);
+});
+
+test('unmount takes a page\'s listeners off and gives its key up; the address keeps what it said (review of 233b988)', () => {
+  const observers = [];
+  const drawn = dom.page(undefined, undefined, { attributes: { 'data-sentier-diagnostics': 'manual' }, globals: { MutationObserver: observerKind(observers) } });
+  const hashListeners = () => (drawn.listeners.hashchange || []).length;
+  const root = dom.body({ data: example() });
+  root.ownerDocument = drawn.document;
+  const api = drawn.context.SentierDiagnostics.mount(root);
+  const watch = observers[observers.length - 1];
+  assert.equal(hashListeners(), 1);
+  drawn.open('sd.item=p01');
+  assert.equal(root.querySelector('[data-sd="item"]').hidden, false);
+  api.unmount();
+  assert.equal(hashListeners(), 0);
+  assert.deepEqual(watch.watched, [], 'it watches the document no more');
+  assert.equal(root.querySelector('[data-sd="content"]').hidden, true, 'it draws nothing');
+  assert.equal(root.querySelector('[data-sd="item"]').hidden, true);
+  assert.equal(drawn.context.location.hash, '#sd.item=p01', 'the address is left as it was');
+  root.querySelector('[data-sd="grid-table"]').querySelectorAll('tr[data-item]')[0].childNodes[0].dispatch('click', {});
+  assert.equal(root.querySelector('[data-sd="item"]').hidden, true, 'a click opens nothing');
+  api.open('p01');
+  api.show(example(), true);
+  assert.equal(root.querySelector('[data-sd="content"]').hidden, true, 'and does nothing a host asks of it');
+  watch.react([{ type: 'childList' }]);
+  // still in the document, its key is free: the page mounted next takes it and opens the item
+  const next = dom.body({ data: example() });
+  next.ownerDocument = drawn.document;
+  drawn.context.SentierDiagnostics.mount(next);
+  assert.equal(next.querySelector('[data-sd="item"]').hidden, false);
 });
 
 test('a matrix the host put in its page under another query is taken where it is this file\'s (review of issue 27)', () => {

@@ -580,16 +580,22 @@ reviewer can send someone to exactly that view: nothing for the whole way, `#ste
 one step, `#steps=<first>:<last>` for a run (each id URL-encoded), and `&item=<id>`. In a
 host's page each part carries the page's key, so that the page never reads the host's own
 parts and two pages never take each other's: the host's name for it (`data-sd-key`), else
-`sd.` for the first page mounted and `sd2.`, `sd3.` … for the next (`#sd.step=<id>`). A
-host's name is a plain word (a letter, then up to 39 letters, digits, `-` or `_`), not `sd`
-or `sdN`, and not the key of another page mounted in the document that has not left it; the
-page refuses any other and says why. A page built and mounted before the host puts it in
-holds its key from then on, so two pages mounted before either is put in take two keys. A
-page mounted in place of one that was in the document and left it takes the key it left,
-so an address made before the host drew the page again still opens it, and releases the
-page it replaces (its listeners on the window and the document). A host that draws pages
-again while the old ones are still in the document, or takes a page out and puts it back
-later, names them. Every part the page does not
+`sd.` for the first page in the document and `sd2.`, `sd3.` … for the next
+(`#sd.step=<id>`). A host's name is a plain word (a letter, then up to 39 letters, digits,
+`-` or `_`), not `sd` or `sdN`; the page refuses any other and says why. A page takes its
+key in the document, never outside it: when it is mounted there, or else when it is first
+found there (the document changes, the address changes, or it is used). It holds the key
+while it is in the document, and a page that left keeps it until a page in the document
+needs it. So a page drawn in place of one removed takes the key it left, and an address
+made before still opens it; a page built and dropped before it was ever put in takes none;
+two pages built before either is put in take one each once they are in. A page out of the
+document answers no address. Put back, it takes its key again where no page in the
+document holds it, or else the next free one; a page the host named waits instead, says
+why, and is drawn once the other page with that name has left. Two pages in the document
+never hold one key. `mount` returns `{show, open, close, unmount}`: `unmount()` takes the
+page's listeners on the window and the document off, gives its key up and draws nothing
+more, leaving the address as it was. A host that removes a page for good calls it; a page
+removed without it stays in memory, in case it is put back. Every part the page does not
 own is kept as it was. An
 address naming a step the file does not have, steps apart, or a run the page cannot judge
 (no matrix), says so and shows the whole way. Below

@@ -2101,6 +2101,9 @@
     // after the validator passed it. A file chosen here or named in the address was not
     // checked: the page checks its shape only, and says so above everything it draws.
     function show(data, checked) {
+      if (released) return;
+      shown = { data: data, checked: checked };
+      if (waiting) return;
       var problem = checkShape(data);
       if (problem) { refuse(problem); return; }
       D = data;
@@ -2150,65 +2153,113 @@
     // its own parts, and leaves every other part where it was. A page of its own writes its
     // parts as above. A page in a host's page writes them after its key, so that it never
     // reads a host's own `item=` and two pages never take each other's step or item: the
-    // host's name for it (`data-sd-key`), or else `sd.` for the first page mounted in the
-    // document and `sd2.`, `sd3.` … for the next. The count is of mounting, not of places in
-    // the document, so a page mounted later but placed earlier takes a key of its own.
+    // host's name for it (`data-sd-key`), or else `sd.` for the first page in the document
+    // and `sd2.`, `sd3.` … for the next, in the order they took them, not the order of their
+    // places, so a page mounted later but placed earlier takes a key of its own.
     //
-    // A key the host names is a plain word (a letter, then letters, digits, - or _), not one
-    // of the page's own (`sd`, `sd2` ...) and not the key of another page still in the
-    // document: anything else would write an address the page cannot read back, or open
-    // two pages on one item. The page refuses it and says why. A page put in place of one
-    // that was removed takes the key that page left, so that an address made before a host
-    // drew it again still opens it; a host that draws two pages at once names them.
+    // A key the host names is a plain word (a letter, then letters, digits, - or _), and not
+    // one of the page's own (`sd`, `sd2` ...): anything else would write an address the page
+    // cannot read back. The page refuses it and says why.
     //
-    // A key is left only by a page that was in the document and is no longer: a page a host
-    // builds before it puts it in keeps its key, so two pages built and mounted before
-    // either is put in take two keys. The page that takes a left key releases the page that
-    // left it (its listeners on the window and the document), so a host that draws its page
-    // again and again does not keep every page it drew.
+    // A page takes its key in the document, never outside it: when it is mounted there, or
+    // else when it is first found there (the document changed, the address changed, or it
+    // is used). It holds the key while it is in the document, and a page that leaves it
+    // keeps its key until a page in the document needs it. So a page drawn in place of one
+    // removed takes the key it left, and an address made before still opens it; a page
+    // built and dropped before it was ever put in takes none; and two pages built before
+    // either is put in take one key each once they are in.
+    //
+    // A page out of the document answers no address. One put back takes its key again where
+    // no page in the document took it, or else the next free one (an address made for it
+    // before now opens the page that took its key); a page the host named waits, says why,
+    // and is drawn once the other page with its name has left. Two pages in the document
+    // never hold one key. `unmount()` takes a page's listeners off and gives its key up: a
+    // host that removes pages for good calls it, or each removed page stays in memory.
     var OWN_PARTS = ['step', 'steps', 'item'];
-    var keyProblem = null;
-    var keyHeld = null; // this page's entry in the list of keys: its root, whether it was seen in the document, how to release it
+    var keyProblem = null; // a key the page can never hold: it is not a word, or it is one of the page's own
+    var waiting = false; // another page in the document holds the key the host named: the page draws nothing
+    var keys = win.SENTIER_DIAGNOSTICS_KEYS = win.SENTIER_DIAGNOSTICS_KEYS || {};
+    var self = { root: root }; // this page's entry in the list of keys
+    var named = root.getAttribute('data-sd-key');
+    var KEY = standalone ? '' : null; // what the page's parts start with, while it holds a key
+    var lastKey = null;
     var teardown = [];
     var released = false;
-    function release() { released = true; while (teardown.length) teardown.pop()(); }
-    // the page is in the document: from now on, a page that finds it gone may take its key
-    function present() { if (keyHeld && root.isConnected !== false) keyHeld.seen = true; }
-    var KEY = (function () {
-      var keys = win.SENTIER_DIAGNOSTICS_KEYS = win.SENTIER_DIAGNOSTICS_KEYS || {};
-      function free(key) {
-        var held = keys[key];
-        if (!held || held.root === root) return true;
-        if (held.root.isConnected !== false) { held.seen = true; return false; }
-        return !!held.seen;
-      }
-      function take(key) {
-        var left = keys[key];
-        if (left && left.root !== root && left.release) left.release();
-        keys[key] = keyHeld = { root: root, seen: root.isConnected !== false, release: release };
-        return key + '.';
-      }
-      var named = root.getAttribute('data-sd-key');
-      if (named !== null) {
-        if (!KEY_WORD.test(named)) keyProblem = 'The page\'s key, data-sd-key="' + named + '", is not a plain word: a letter, then up to ' + (KEY_LONGEST - 1) + ' letters, digits, - or _. An address could not hold it.';
-        else if (OWN_KEY.test(named)) keyProblem = 'The page\'s key, data-sd-key="' + named + '", is one the page gives a page the host names none for (sd, sd2 ...): name it otherwise.';
-        else if (!free(named)) keyProblem = 'Another page mounted here has the key data-sd-key="' + named + '" and has not left the document: two pages with one key open on each other\'s items. Give each its own.';
-        if (keyProblem) return null;
-        return take(named);
-      }
-      if (standalone) return '';
+    var acting = false; // in the document with its key, at the last look
+    var routing = false;
+    var shown = null; // the file last handed to the page, drawn once it may draw
+    if (named !== null && !standalone) {
+      if (!KEY_WORD.test(named)) keyProblem = 'The page\'s key, data-sd-key="' + named + '", is not a plain word: a letter, then up to ' + (KEY_LONGEST - 1) + ' letters, digits, - or _. An address could not hold it.';
+      else if (OWN_KEY.test(named)) keyProblem = 'The page\'s key, data-sd-key="' + named + '", is one the page gives a page the host names none for (sd, sd2 ...): name it otherwise.';
+    }
+    function inDocument() { return root.isConnected !== false; }
+    function holding() { return standalone || (lastKey !== null && keys[lastKey] === self); }
+    function free(key) {
+      var held = keys[key];
+      return !held || held === self || held.root.isConnected === false;
+    }
+    function pick() {
+      if (named !== null) return free(named) ? named : null;
+      if (lastKey !== null && free(lastKey)) return lastKey;
       for (var n = 1; ; n++) {
         var key = 'sd' + (n > 1 ? n : '');
-        if (free(key)) return take(key);
+        if (free(key)) return key;
       }
-    })();
+    }
+    function mayAct() {
+      if (released || keyProblem) return false;
+      if (standalone) return true;
+      if (!inDocument()) return false;
+      if (holding()) return true;
+      var key = pick();
+      if (key === null) {
+        if (!waiting) {
+          waiting = true;
+          refuse('Another page in the document has the key data-sd-key="' + named + '": two pages with one key would open on each other\'s items. Give each its own. This page is drawn once the other has left.');
+        }
+        return false;
+      }
+      keys[key] = self;
+      lastKey = key;
+      KEY = key + '.';
+      return true;
+    }
+    // Whether the page may act on the address now: it is in the document and holds its key,
+    // which it takes here if it holds none. A page that could not act before catches up: it
+    // draws the file it waited to draw, or reads the address as it is now.
+    function present() {
+      var was = acting;
+      acting = mayAct();
+      if (acting && !was) {
+        if (waiting) {
+          waiting = false;
+          q('load-error').textContent = '';
+          if (shown) show(shown.data, shown.checked);
+          else showLoad();
+        } else if (D && !routing) route();
+      }
+      return acting;
+    }
+    // unmounted: the page answers nothing more, draws nothing more, and gives its key up;
+    // the address keeps what it said, for a page mounted in its place
+    function release() {
+      if (released) return;
+      released = true;
+      acting = false;
+      while (teardown.length) teardown.pop()();
+      if (lastKey !== null && keys[lastKey] === self) delete keys[lastKey];
+      closeItem();
+      D = null; M = null; LISTED = []; shown = null;
+      q('content').hidden = true;
+      q('load').hidden = true;
+    }
     function hashList() {
       var text = (win.location.hash || '').replace(/^#/, '');
       return text ? text.split('&') : [];
     }
     function ownName(part) {
       var at = part.indexOf('=');
-      if (at <= 0 || part.slice(0, KEY.length) !== KEY) return null;
+      if (KEY === null || !holding() || at <= 0 || part.slice(0, KEY.length) !== KEY) return null;
       var name = part.slice(KEY.length, at);
       return OWN_PARTS.indexOf(name) >= 0 ? name : null;
     }
@@ -2240,7 +2291,7 @@
       return { set: set.sort(function (a, b) { return a - b; }), unknown: unknown };
     }
     function setHash(item) {
-      present();
+      if (!present()) return false; // out of the document, or without its key: the address is another's
       var said = [], k = kNow();
       if (isSet(k)) said.push(KEY + 'steps=' + setText(view.set));
       else if (k < D.steps.length) said.push(KEY + 'step=' + encodeURIComponent(D.steps[k].id));
@@ -2316,7 +2367,8 @@
     // the address, read: what it names is chosen; what it names that the file does not have,
     // or that cannot be judged now, is said, and the whole way shown
     function route() {
-      present();
+      routing = true;
+      try { present(); } finally { routing = false; }
       if (!D) return;
       var parts = hashParts();
       var wanted = allSteps(), said = '';
@@ -2445,14 +2497,18 @@
     // Look again whenever the host may have switched its theme: the reader's colour scheme
     // changed, the document changed (a class or an attribute anywhere, an element put in or
     // taken out, the page itself put in after it was built), or a stylesheet finished
-    // loading. Watched: the document and every shadow root the page sits in. A look reads
-    // only what the scheme is read from (schemeSign), once a frame however much changed,
-    // and reads the scheme itself only where that changed. So the page's own probes, and a
-    // host's observer that answers them, end after one look. Not seen: a rule a host adds
-    // or edits through the CSS object model alone, which changes nothing in the document.
+    // loading. Watched: the document and every shadow root the page sits in, for changes
+    // and for loads (a load does not leave a shadow root). A look reads only what the
+    // scheme is read from (schemeSign), once a frame however much changed, and reads the
+    // scheme itself only where that changed. So the page's own probes, and a host's
+    // observer that answers them, end after one look. Not seen: a rule a host adds or edits
+    // through the CSS object model alone, which changes nothing in the document.
+    //
+    // A change to the document is also where a page put in after it was built, or put
+    // back, is found: it takes its key there, before the next frame (`present`).
     var WATCHED = { attributes: true, childList: true, subtree: true };
     function followScheme() {
-      var last = schemeSign(), queued = false, watch = null;
+      var last = schemeSign(), queued = false, watch = null, heard = [doc];
       var frame = win.requestAnimationFrame ? function (f) { win.requestAnimationFrame(f); } : function (f) { f(); };
       function tops() { // the document, and each shadow root from the page's out to it
         var out = [doc];
@@ -2464,29 +2520,36 @@
         }
         return out;
       }
-      function observe() { if (watch) tops().forEach(function (top) { watch.observe(top, WATCHED); }); }
+      // the roots the page sits in now: put in, or moved, it may sit in others than before
+      function observe() {
+        tops().forEach(function (top) {
+          if (watch) watch.observe(top, WATCHED);
+          if (heard.indexOf(top) < 0) { heard.push(top); listen(top, 'load', later, true); }
+        });
+      }
       function look() {
         queued = false;
         if (released) return;
         var sign = schemeSign();
         if (sign === null) return;
-        present();
+        observe();
         if (sign === last) return;
         last = sign;
-        observe(); // put in, or moved: the shadow roots it now sits in
         matchScheme();
       }
       function later() { if (!queued && !released) { queued = true; frame(look); } }
       if (win.matchMedia) listen(win.matchMedia(DARK_READER), 'change', later);
       listen(doc, 'load', later, true);
-      if (!win.MutationObserver) return;
-      watch = new win.MutationObserver(later);
+      if (win.MutationObserver) {
+        watch = new win.MutationObserver(function () { present(); later(); });
+        teardown.push(function () { watch.disconnect(); });
+      }
       observe();
-      teardown.push(function () { watch.disconnect(); });
     }
 
     function start() {
       if (keyProblem) { refuse(keyProblem); return; }
+      present();
       matchScheme();
       followScheme();
       q('comparison').addEventListener('click', function (e) {
@@ -2556,7 +2619,8 @@
         q(name).addEventListener('click', openFrom);
         q(name).addEventListener('keydown', function (e) { if (e.key === 'Enter') openFrom(e); else moveRow(e); });
       });
-      listen(win, 'hashchange', route);
+      // a page that takes its key here has read the address already
+      listen(win, 'hashchange', function () { var was = acting; if (present() && was) route(); });
       q('file').addEventListener('change', function (e) {
         var file = e.target.files[0];
         if (!file) return;
@@ -2601,9 +2665,10 @@
     // reason stays where it was said, never replaced by a fault of the file it was given
     if (keyProblem) {
       var still = function () { refuse(keyProblem); };
-      return { show: still, close: still, open: still };
+      return { show: still, close: still, open: still, unmount: release };
     }
-    return { show: show, close: closeItem, open: renderItem };
+    // an unmounted page does nothing a host asks of it: it has no file to show an item of
+    return { show: show, close: closeItem, open: renderItem, unmount: release };
   }
 
   // every root of the document not yet mounted, but those a host mounts itself
