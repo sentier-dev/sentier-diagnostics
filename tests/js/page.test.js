@@ -287,6 +287,58 @@ test('a breakdown of the right step and another item is not drawn under it (issu
   assert.ok(body.includes('is of another product or another step: not drawn'), body.slice(-300));
 });
 
+test('the page refuses a breakdown for each reason the check has, and says which (issue 5)', () => {
+  // each case changes one thing of wheat's breakdown of its step, or where it is named
+  const data = example();
+  const step = Object.keys(data.items.find((i) => i.id === 'p01').breakdowns)[0];
+  const shown = (bd, comp = step) => {
+    const d = example();
+    d.items.find((i) => i.id === 'p01').breakdowns = { [comp]: 'b.json' };
+    const drawn = dom.page(d, { 'b.json': bd });
+    drawn.open('sd.item=p01');
+    return drawn.byId['item-body'].seen().join(' ');
+  };
+  const indicator = Object.keys(wheat().indicators)[0];
+  const cases = [
+    ['is not a breakdown', (b) => { b.format = 'sentier-diagnostics-breakdown/2'; }],
+    // the item's own breakdown, named for the whole way: its states are not the whole way's
+    ['is of another product or another step', null, 'total'],
+    ['holds no indicators', (b) => { b.indicators = {}; }],
+    ['names an indicator this file does not hold, x:nowhere', (b) => { b.indicators['x:nowhere'] = b.indicators[indicator]; delete b.indicators[indicator]; }],
+    ['is not of the shape of a breakdown in', (b) => { b.indicators[indicator].parts[0].values = [1]; }],
+    ['does not add up', (b) => { b.indicators[indicator].rest[0] += 1; }],
+    ['is not of this file', (b) => { const e = b.indicators[indicator]; e.total[1] += 1; e.rest[1] += 1; }],
+  ];
+  assert.ok(shown(wheat()).includes('What it is made of') && !/not drawn/.test(shown(wheat())), 'the breakdown itself is drawn');
+  for (const [said, change, comp] of cases) {
+    const bd = wheat();
+    if (change) change(bd);
+    const body = shown(bd, comp);
+    assert.ok(body.includes('The breakdown b.json ' + said), said + ' | ' + body.slice(-240));
+    assert.ok(body.includes(': not drawn.'), said);
+  }
+});
+
+test('a breakdown the page fetches is checked as one that came with it (issue 5)', async () => {
+  const served = (bd) => (url) => (bd ? Promise.resolve({ ok: true, json: () => Promise.resolve(bd) }) : Promise.resolve({ ok: false, status: 404 }));
+  const opened = async (bd, comp) => {
+    const d = example();
+    const step = Object.keys(d.items.find((i) => i.id === 'p01').breakdowns)[0];
+    d.items.find((i) => i.id === 'p01').breakdowns = { [comp || step]: 'b.json' };
+    const drawn = dom.page(d, undefined, { protocol: 'http:', fetch: served(bd) });
+    drawn.open('sd.item=p01');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    return drawn.byId['item-body'].seen().join(' ');
+  };
+  const right = await opened(wheat());
+  assert.ok(!right.includes('not drawn') && !right.includes('is not with this page'), right.slice(-240));
+  assert.ok(right.includes('What it is made of'));
+  const other = await opened(wheat(), 'total');
+  assert.ok(other.includes('The breakdown b.json is of another product or another step: not drawn.'), other.slice(-240));
+  const gone = await opened(null);
+  assert.ok(gone.includes('The breakdown b.json is not with this page.'), gone.slice(-240));
+});
+
 test('a file the page cannot draw draws nothing', () => {
   const data = example();
   data.counts.total = null;
