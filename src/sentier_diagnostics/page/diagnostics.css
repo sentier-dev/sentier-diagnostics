@@ -182,6 +182,8 @@
 /* the distributions: one card per indicator, as many in a row as fit, under the matrix */
 .sentier-diagnostics .sd-dists-part { margin: var(--sd-s6) 0 var(--sd-s5); }
 .sentier-diagnostics .sd-dists-part > h3 { margin: 0 0 var(--sd-s2); font-size: var(--sd-t-lg); }
+.sentier-diagnostics .sd-dist-controls { margin: var(--sd-s2) 0 0; align-items: center; }
+.sentier-diagnostics .sd-dist-controls .sd-legend { margin: 0; }
 .sentier-diagnostics .sd-dists { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: var(--sd-s3); margin-top: var(--sd-s3); }
 .sentier-diagnostics .sd-dist { position: relative; display: flex; flex-direction: column; min-width: 0; padding: var(--sd-s3) var(--sd-s4); border: 1px solid var(--sd-line); border-radius: var(--sd-radius); background: var(--sd-surface); }
 .sentier-diagnostics .sd-dist:hover { border-color: var(--sd-accent); }

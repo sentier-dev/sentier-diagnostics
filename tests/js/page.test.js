@@ -727,3 +727,27 @@ test('a card sorts the matrix by its indicator, and a heading marks its card', (
   assert.equal(cards(drawn)[0].childNodes[0].childNodes[0].getAttribute('aria-pressed'), 'true');
   assert.equal(cards(drawn)[1].childNodes[0].childNodes[0].getAttribute('aria-pressed'), 'false');
 });
+
+test('the bars of every card can be put on one scale, the share of all values (A21)', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  const heights = () => cards(drawn).map((card) => card.childNodes[1].childNodes.map((bar) => parseFloat(/height:([\d.]+)%/.exec(bar.getAttribute('style'))[1])));
+  // each card to its own tallest bar: every card that has values reaches the top
+  heights().forEach((h) => assert.equal(Math.max(...h), 100));
+  const select = drawn.byId['dist-scale'];
+  select.value = 'one';
+  select.dispatch('change', { target: select });
+  const one = heights();
+  assert.equal(Math.max(...one.flat()), 100);
+  // on one scale, a bar's height is its share of the values of its card, the same factor in every card
+  const shares = cards(drawn).map((card, i) => {
+    const block = data.counts.total[card.getAttribute('data-indicator')];
+    // a bar is at least 2% high, so that one value is seen: those are left out
+    return card.childNodes[1].childNodes.map((bar, j) => {
+      const n = Number(bar.getAttribute('title').match(/: ([\d,]+) of/)[1].replace(/,/g, ''));
+      return n && one[i][j] > 2 ? one[i][j] / (n / block.pairs) : null;
+    }).filter((x) => x !== null);
+  }).flat();
+  for (const f of shares) assert.ok(Math.abs(f - shares[0]) < 0.06 * shares[0], f + ' vs ' + shares[0]);
+  assert.match(drawn.byId['dist-said'].textContent, /one scale/);
+});

@@ -49,7 +49,11 @@
   <section class="sd-dists-part" data-sd="distributions">
     <h3>Distributions per <span data-sd-word="indicator">indicator</span></h3>
     <p class="sd-note" data-sd="dist-said"></p>
-    <p class="sd-legend" data-sd="dist-legend" aria-hidden="true"></p>
+    <div class="sd-controls sd-dist-controls">
+      <label class="sd-field"><span>Bar heights</span>
+        <select data-sd="dist-scale"><option value="card">each card to its own tallest bar</option><option value="one">one scale for every card</option></select></label>
+      <p class="sd-legend" data-sd="dist-legend" aria-hidden="true"></p>
+    </div>
     <div class="sd-dists" data-sd="dist-cards"></div>
   </section>
 

@@ -439,7 +439,7 @@
 
     var D = null, B = {}, LISTED = [], M = null;
     var matrix = { state: 'none', said: '' };
-    var view = { comp: null, worstN: 20, worstIndicator: '', find: '', cls: '', verdict: '', group: '', limit: PAGE, size: 0, sort: 'worst', open: null };
+    var view = { comp: null, worstN: 20, worstIndicator: '', find: '', cls: '', verdict: '', group: '', limit: PAGE, size: 0, sort: 'worst', open: null, distScale: 'card' };
     var lastFocus = null;
 
     function q(name) { return root.querySelector('[data-sd="' + name + '"]'); }
@@ -830,16 +830,26 @@
       var held = M || (D.items_count.listed === D.items_count.all && D.tier !== 'counts');
       q('dist-said').textContent = 'How many ' + D.item.many + ' fall in each band of after ÷ before, in the comparison chosen above, one card per ' + indWord(false) +
         ' in the order of the matrix: from across zero, through down by more than ten times, the band around 1 (dark), to up by more than ten times; then the values with no ratio. ' +
-        'Each card is drawn on the scale of its own tallest bar; a bar\'s title holds its count. ' +
+        (view.distScale === 'one' ? 'Every card is drawn on one scale, the share of all values, so that a bar of one height means as many in each; ' :
+          'Each card is drawn on the scale of its own tallest bar, so that a few values that moved are seen beside many that agree; ') + 'a bar\'s title holds its count. ' +
         (held ? 'The median and percentiles are of after ÷ before over every ' + D.item.one + ' with a ratio, in as many digits as keep apart the ones that differ. '
           : 'The median and percentiles need every ' + D.item.one + ', and this page holds the ' + groupThousands(D.items_count.listed) + ' listed, the furthest apart: it gives none. ') +
         'Choose a card to sort the matrix by that ' + indWord(false) + '.';
       var box = clear(q('dist-cards'));
+      var countsOf = function (block) {
+        return distBins(block).map(function (b) { return (b[0] === 'band' ? block.bands[b[1]] : block.classes[b[1]]) || 0; });
+      };
+      // on one scale: the largest share of any bar of any card is the full height
+      var topShare = 0;
+      D.indicators.forEach(function (ind) {
+        var block = blocks[ind.id];
+        if (block.pairs) topShare = Math.max(topShare, Math.max.apply(null, countsOf(block)) / block.pairs);
+      });
       columns(comp).forEach(function (c) {
         var ind = c.ind, block = blocks[ind.id];
         var bins = distBins(block);
-        var counts = bins.map(function (b) { return (b[0] === 'band' ? block.bands[b[1]] : block.classes[b[1]]) || 0; });
-        var top = Math.max.apply(null, counts.concat([1]));
+        var counts = countsOf(block);
+        var top = view.distScale === 'one' ? Math.max(1e-12, topShare) * block.pairs : Math.max.apply(null, counts.concat([1]));
         var said = bins.map(function (b, i) { return b[1] + ': ' + groupThousands(counts[i]); }).join('; ');
         var bars = bins.map(function (b, i) {
           return el('span', { cls: 'sd-bin ' + b[2] + (i && bins[i - 1][2] !== b[2] && (b[2] === 'aside' || bins[i - 1][2] === 'aside') ? ' sd-gap' : ''),
@@ -1475,6 +1485,7 @@
       });
       q('size').addEventListener('change', function (e) { view.size = +e.target.value; view.limit = PAGE; renderWorst(); renderGrid(); });
       q('worst-n').addEventListener('change', function (e) { view.worstN = +e.target.value; renderWorst(); });
+      q('dist-scale').addEventListener('change', function (e) { view.distScale = e.target.value === 'one' ? 'one' : 'card'; renderDistributions(); });
       q('worst-indicator').addEventListener('change', function (e) { view.worstIndicator = e.target.value; renderWorst(); });
       q('grid-find').addEventListener('input', function (e) { view.find = e.target.value; view.limit = PAGE; renderGrid(); });
       q('grid-class').addEventListener('change', function (e) { view.cls = e.target.value; view.limit = PAGE; renderGrid(); });
