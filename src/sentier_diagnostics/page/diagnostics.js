@@ -569,6 +569,7 @@
       q('steps-zero').hidden = D.states[0].kind !== 'published';
       q('made-by').textContent = 'Written by ' + D.made_by + '. ' + FORMAT + '.';
       renderChips();
+      renderStepSaid();
     }
 
     // the comparison is chosen from a row of chips: the whole way, then each step with its
@@ -599,6 +600,44 @@
         });
         chip(s.id, parts, said.join('. ') + '.');
       });
+    }
+
+    // under the chips: what the chosen comparison is, the claim of its step and who made it,
+    // and its rule, so that a reviewer reads what a step said beside what it did
+    function renderStepSaid() {
+      var node = q('step-said');
+      if (!node) return;
+      clear(node);
+      if (view.comp === 'total') {
+        node.appendChild(el('p', null, [el('strong', { text: 'The whole way: ' }), D.states[0].label + ' → ' + D.states[D.states.length - 1].label + '. ',
+          el('span', { cls: 'sd-quiet', text: 'Each cell holds the last result divided by the first. Choose a step to see what one change did; "Steps and the whole way" below splits the whole difference between them.' })]));
+        return;
+      }
+      var k = stepIndex(view.comp);
+      var s = D.steps[k];
+      var line = [el('strong', { text: 'Step ' + stepNo(k) + ': ' + s.label + '. ' }), el('span', { cls: 'sd-quiet', text: D.states[k].label + ' → ' + D.states[k + 1].label + '. ' })];
+      if (s.about) line.push(el('span', { cls: 'sd-quiet', text: s.about }));
+      node.appendChild(el('p', null, line));
+      if (k === 0 && D.states[0].kind === 'published') {
+        node.appendChild(el('p', { cls: 'sd-quiet', text: 'What moves here was not reproduced within the tolerance: the residual the chain starts from, not a regression.' }));
+      }
+      if (!s.explained) node.appendChild(el('p', { cls: 'sd-error', text: 'Nothing explains this step.' }));
+      var claim = [el('span', { cls: 'sd-claim-label', text: 'Claim' })];
+      if (s.claim) {
+        claim.push(s.claim.text, ' ', badge(s.claim.by));
+        var found = LOOK.map(function (name) { return [name, sumOver(s.id, function (b) { return b.verdicts[name]; })]; }).filter(function (p) { return p[1]; });
+        var held = sumOver(s.id, function (b) { return b.verdicts['as claimed']; });
+        claim.push(el('span', { cls: found.length ? 'sd-look' : 'sd-good', text: found.length
+          ? ' ' + found.map(function (p) { return n(p[1]) + ' ' + p[0]; }).join(', ') + '.'
+          : held ? ' All ' + n(held) + ' moves as claimed.' : ' Nothing moved, as claimed.' }));
+        if (s.claim.scope.some(function (e) { return e.items === null; })) {
+          claim.push(el('span', { cls: 'sd-quiet', text: ' Its list of ' + D.item.many + ' is not in this file' + (s.claim.reach !== null ? ' (' + n(s.claim.reach) + ')' : '') + ': its verdicts were worked out by its writer.' }));
+        }
+      } else {
+        claim.push(el('span', { cls: 'sd-quiet', text: 'none: what moves here is counted, not judged.' }));
+      }
+      node.appendChild(el('p', { cls: 'sd-claim' }, claim));
+      node.appendChild(el('p', { cls: 'sd-quiet', text: 'Tolerance ' + s.tolerance.value + ' (' + s.tolerance.basis + '). Noise ' + noiseText(s.noise, indicatorIds(), indWord(true)) + '.' }));
     }
 
     function markChips() {
@@ -820,8 +859,18 @@
       return button;
     }
 
+    // the columns of the matrix: the indicators in which the comparison moved most first, so
+    // that what a step did is in view without scrolling; the file's order among equals, and
+    // an indicator in which nothing moved last, quietened
+    function columns(comp) {
+      var blocks = comp === 'total' ? D.counts.total : D.counts.steps[comp];
+      return D.indicators.map(function (ind, at) { return { ind: ind, moved: moved(blocks[ind.id]), at: at }; })
+        .sort(function (a, b) { return b.moved - a.moved || a.at - b.at; });
+    }
+
     function renderGrid() {
       var k = stepIndex(view.comp);
+      var cols = columns(view.comp);
       var found = gridRows();
       var shown = found.slice(0, view.limit);
       q('grid-said').textContent = D.tier === 'counts'
@@ -836,8 +885,10 @@
         el('th', { scope: 'col', cls: 'sd-name', 'aria-sort': sorted('name') }, [sortButton(capital(D.item.one), 'name', 'Sort by name')]),
         el('th', { scope: 'col', cls: 'sd-group', text: 'Group' })
       ];
-      D.indicators.forEach(function (ind) {
-        head.push(el('th', { scope: 'col', cls: 'num', 'aria-sort': sorted(ind.id), title: ind.name + (ind.unit ? ' (' + ind.unit + ')' : '') },
+      cols.forEach(function (c) {
+        var ind = c.ind;
+        head.push(el('th', { scope: 'col', cls: 'num' + (c.moved ? '' : ' sd-still'), 'aria-sort': sorted(ind.id),
+          title: ind.name + (ind.unit ? ' (' + ind.unit + ')' : '') + (c.moved ? ': ' + groupThousands(c.moved) + ' moved here' : ': nothing moved here') },
           [sortButton(indicatorName(ind.id), ind.id, 'Sort by how far the two lie apart, the furthest first')]));
       });
       table.appendChild(el('thead', null, [el('tr', null, head)]));
@@ -848,7 +899,11 @@
           el('th', { scope: 'row', title: name + ', per ' + (row.unit || 'unknown unit') }, [M && row.item ? el('span', { cls: 'sd-listed', title: 'listed in this file' }) : null, name]),
           el('td', { cls: 'sd-group', text: row.group || '' })
         ];
-        D.indicators.forEach(function (ind) { cells.push(valueCell(row, ind.id, k, true)); });
+        cols.forEach(function (c) {
+          var td = valueCell(row, c.ind.id, k, true);
+          if (!c.moved) td.className += ' sd-still';
+          cells.push(td);
+        });
         body.appendChild(el('tr', { cls: 'sd-row', tabindex: '0', 'data-item': row.id, 'aria-current': view.open === row.id ? 'true' : null }, cells));
       });
       table.appendChild(body);
@@ -1067,9 +1122,7 @@
       drawer.hidden = true;
       view.open = null;
       markOpen();
-      if (/^#item=/.test(win.location.hash || '') && win.history && win.history.replaceState) {
-        win.history.replaceState(null, '', win.location.pathname + win.location.search);
-      }
+      if (hashParts().item) setHash({ step: view.comp });
       if (lastFocus && lastFocus.focus && root.contains && root.contains(lastFocus)) lastFocus.focus();
       lastFocus = null;
     }
@@ -1243,10 +1296,41 @@
       if (checked) loadMatrix();
     }
 
+    // the address holds the chosen step and the open item, `#step=<id>&item=<id>`, each
+    // optional, so that a reviewer can send someone to exactly what they look at
+    function hashParts() {
+      var out = {};
+      (win.location.hash || '').slice(1).split('&').forEach(function (part) {
+        var at = part.indexOf('=');
+        if (at > 0) out[part.slice(0, at)] = decodeURIComponent(part.slice(at + 1));
+      });
+      return out;
+    }
+    function setHash(parts) {
+      var said = [];
+      if (parts.step && parts.step !== 'total') said.push('step=' + encodeURIComponent(parts.step));
+      if (parts.item) said.push('item=' + encodeURIComponent(parts.item));
+      var wanted = said.join('&');
+      if ((win.location.hash || '').replace(/^#/, '') === wanted) return false;
+      if (wanted) win.location.hash = wanted;
+      else if (win.history && win.history.replaceState) win.history.replaceState(null, '', win.location.pathname + win.location.search);
+      return true;
+    }
+
+    function choose(comp) {
+      if (comp === view.comp) return;
+      view.comp = comp; view.cls = ''; view.verdict = ''; view.limit = PAGE; view.sort = 'worst';
+      markChips();
+      renderStepSaid();
+      renderComparison();
+    }
+
     function route() {
       if (!D) return;
-      var hash = decodeURIComponent((win.location.hash || '').slice(1));
-      if (hash.indexOf('item=') === 0) renderItem(hash.slice(5));
+      var parts = hashParts();
+      var step = parts.step && stepIndex(parts.step) < D.steps.length ? parts.step : 'total';
+      choose(step);
+      if (parts.item) renderItem(parts.item);
       else closeItem();
     }
 
@@ -1254,8 +1338,7 @@
       var row = event.target.closest ? event.target.closest('tr[data-item]') : null;
       if (!row) return;
       var id = row.getAttribute('data-item');
-      if (win.location.hash === '#item=' + encodeURIComponent(id)) renderItem(id);
-      else win.location.hash = 'item=' + encodeURIComponent(id);
+      if (!setHash({ step: view.comp, item: id })) renderItem(id);
     }
 
     function readScript(name) {
@@ -1268,9 +1351,19 @@
       q('comparison').addEventListener('click', function (e) {
         var chip = e.target.closest ? e.target.closest('button[data-comp]') : null;
         if (!chip || chip.getAttribute('data-comp') === view.comp) return;
-        view.comp = chip.getAttribute('data-comp'); view.cls = ''; view.verdict = ''; view.limit = PAGE;
-        markChips();
-        renderComparison();
+        choose(chip.getAttribute('data-comp'));
+        setHash({ step: view.comp, item: view.open });
+      });
+      // the arrow keys move between the chips
+      q('comparison').addEventListener('keydown', function (e) {
+        if (!D || (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft')) return;
+        var comps = ['total'].concat(D.steps.map(function (s) { return s.id; }));
+        var at = comps.indexOf(view.comp) + (e.key === 'ArrowRight' ? 1 : -1);
+        if (at < 0 || at >= comps.length) return;
+        choose(comps[at]);
+        setHash({ step: view.comp, item: view.open });
+        var next = q('comparison').querySelector('button[data-comp="' + comps[at] + '"]');
+        if (next && next.focus) next.focus();
       });
       q('size').addEventListener('change', function (e) { view.size = +e.target.value; view.limit = PAGE; renderWorst(); renderGrid(); });
       q('worst-n').addEventListener('change', function (e) { view.worstN = +e.target.value; renderWorst(); });

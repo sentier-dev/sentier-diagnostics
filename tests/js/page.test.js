@@ -590,3 +590,70 @@ test('steps count from 1 where the chain does not start from the published resul
   assert.doesNotMatch(drawer, /Step 0\b/);
 });
 
+
+// ------------------------------------------------------------------ reviewing one step
+
+const chips = (drawn) => drawn.byId.comparison.querySelectorAll('button[data-comp]');
+
+test('choosing a step says its claim and what the claim found, under the chips, and the address keeps it', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  assert.match(drawn.byId['step-said'].textContent, /^The whole way: /);
+  const k = data.steps.findIndex((s) => s.claim && s.claim.scope.length);
+  const step = data.steps[k];
+  chips(drawn)[k + 1].dispatch('click', {});
+  const said = drawn.byId['step-said'].textContent;
+  assert.ok(said.includes(step.claim.text), said);
+  // what the claim found, from the file's own counts
+  const look = ['off claim', 'not claimed', 'claimed, not moved'];
+  const found = look.filter((v) => Object.values(data.counts.steps[step.id]).some((b) => b.verdicts[v]));
+  if (found.length) found.forEach((v) => assert.ok(said.includes(v), v));
+  else assert.match(said, /as claimed/);
+  assert.equal(drawn.context.location.hash, 'step=' + encodeURIComponent(step.id));
+  assert.equal(chips(drawn)[k + 1].getAttribute('aria-pressed'), 'true');
+});
+
+test('the matrix shows first the indicators in which the chosen comparison moved most', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  const moves = ['differs', 'beyond 10x', 'zero reference', 'zero result', 'sign change'];
+  const moved = (comp, id) => moves.reduce((m, c) => m + (comp === 'total' ? data.counts.total : data.counts.steps[comp])[id].classes[c], 0);
+  for (const comp of ['total'].concat(data.steps.map((s) => s.id))) {
+    drawn.byId.comparison.querySelectorAll('button[data-comp="' + comp + '"]')[0].dispatch('click', {});
+    const heads = drawn.byId['grid-table'].querySelectorAll('th[scope="col"]').slice(2);
+    const counts = heads.map((th) => moved(comp, data.indicators.find((i) => th.getAttribute('title').indexOf(i.name) === 0).id));
+    for (let k = 1; k < counts.length; k++) assert.ok(counts[k - 1] >= counts[k], comp + ': ' + counts.join());
+    heads.forEach((th, k) => assert.equal(/sd-still/.test(th.className), counts[k] === 0, comp));
+    // the cells of a quiet column are quiet too
+    const row = gridRows(drawn)[0];
+    const cells = row.childNodes.filter((n) => n.tagName === 'TD').slice(1); // after the group
+    cells.forEach((td, k) => assert.equal(/sd-still/.test(td.className), counts[k] === 0, comp + ' cell ' + k));
+  }
+});
+
+test('an address with a step opens the page on that step, and with an item on that item', () => {
+  const data = example();
+  const step = data.steps[2];
+  const drawn = dom.page(data);
+  drawn.open('step=' + encodeURIComponent(step.id) + '&item=' + encodeURIComponent(data.items[0].id));
+  assert.equal(chips(drawn).find((c) => c.getAttribute('aria-pressed') === 'true').getAttribute('data-comp'), step.id);
+  assert.equal(drawn.byId.item.hidden, false);
+  // closing the item keeps the step
+  drawn.byId['item-close'].dispatch('click', {});
+  assert.equal(drawn.byId.item.hidden, true);
+  assert.equal(drawn.context.location.hash, 'step=' + encodeURIComponent(step.id));
+  // an unknown step falls back to the whole way
+  drawn.open('step=nothing-of-the-kind');
+  assert.equal(chips(drawn)[0].getAttribute('aria-pressed'), 'true');
+});
+
+test('the arrow keys move between the chips', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  drawn.byId.comparison.dispatch('keydown', { key: 'ArrowRight' });
+  assert.equal(chips(drawn)[1].getAttribute('aria-pressed'), 'true');
+  drawn.byId.comparison.dispatch('keydown', { key: 'ArrowLeft' });
+  assert.equal(chips(drawn)[0].getAttribute('aria-pressed'), 'true');
+  drawn.byId.comparison.dispatch('keydown', { key: 'ArrowLeft' }); // nothing before the whole way
+  assert.equal(chips(drawn)[0].getAttribute('aria-pressed'), 'true');
+});
