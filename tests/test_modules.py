@@ -306,6 +306,37 @@ class Breakdowns(unittest.TestCase):
             bad = helpers.mutated(good, lambda d, p=parts: d["indicators"][A].update(parts=p))
             self.assertIn(f"indicator {A!r}: a part is not {{label, kind, values}}", breakdown.errors(bad))
 
+    def test_each_text_of_a_breakdown_is_a_fault_with_its_part_and_its_length(self):
+        """Issue 4: a part's label and kind, the item and states it names and an indicator's
+        unit, each taken at its limit and one past it, and of other kinds."""
+        good = breakdown.build("p", "s0", "s1", {A: ("kg", [("a", "kind", 0.2, 0.1), ("b", None, 0.3, 0.3)])})
+        at = lambda field, value, part=1: helpers.mutated(good, lambda d: d["indicators"][A]["parts"][part].update({field: value}))  # noqa: E731
+        self.assertEqual(breakdown.errors(at("label", "x" * breakdown.MAX_PART_LABEL)), [])
+        self.assertEqual(breakdown.MAX_PART_LABEL, 300)  # SPEC 9
+        self.assertEqual(breakdown.errors(at("kind", "k" * 40)), [])
+        where = f"indicator {A!r}, part 1"
+        for field, value, said in (
+            ("label", "x" * 301, "`label` is longer than 300 characters (301)"),
+            ("label", 5, "`label` is not a text"),
+            ("label", "", "`label` is empty"),
+            ("label", "a\nb", "`label` holds a control character, such as a line break or a tab"),
+            ("kind", 7, "`kind` is not a text"),
+            ("kind", "k" * 41, "`kind` is longer than 40 characters (41)"),
+        ):
+            with self.subTest(field=field, value=value):
+                self.assertEqual(breakdown.errors(at(field, value)), [f"{where}: {said}"])
+        unit = helpers.mutated(good, lambda d: d["indicators"][A].update(unit="u" * 41))
+        self.assertEqual(breakdown.errors(unit), [f"indicator {A!r}: `unit` is longer than 40 characters (41)"])
+        for value in (-1, 1.5, True, "0", None):
+            with self.subTest(parts_not_listed=value):
+                bad = helpers.mutated(good, lambda d, v=value: d["indicators"][A].update(parts_not_listed=v))
+                self.assertEqual(breakdown.errors(bad), [f"indicator {A!r}: `parts_not_listed` is not a count"])
+        for key, value in (("item", "p" * 101), ("from", ""), ("to", 3)):
+            with self.subTest(key):
+                found = breakdown.errors(helpers.mutated(good, lambda d, k=key, v=value: d.update({k: v})))
+                self.assertEqual(len(found), 1, found)
+                self.assertTrue(found[0].startswith(f"a breakdown names its item and the two states it compares: `{key}` "), found)
+
     def test_a_rest_without_parts_left_out(self):
         good = breakdown.build("p", "s0", "s1", {A: ("kg", [("a", None, 1.0, 2.0)])})
         bad = helpers.mutated(good, lambda d: d["indicators"][A].update(rest=[0.5, 0.0], total=[1.5, 2.0]))

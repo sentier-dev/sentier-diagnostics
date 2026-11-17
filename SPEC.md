@@ -514,7 +514,9 @@ that no such word hides behind a lookalike letter or an invisible one.
 A breakdown says what one item's result is made of, before and after one step: format
 `sentier-diagnostics-breakdown/1`, one file per item and step, named in the item's
 `breakdowns`. Per indicator: `total` (before, after), `parts` (label, kind, before,
-after), `rest` and `parts_not_listed`.
+after), `rest` and `parts_not_listed`. Up to 200 parts are listed per indicator; a part's
+label is up to 300 characters and its kind up to 40, and the item and the two states are
+ids. A refusal names the part, the field and the text's own length.
 
 - Parts are chosen by the **larger of their two sides**, so a part that appears only after
   the step is listed.
