@@ -31,7 +31,7 @@ A package, never a copied file. Standard library only, Python 3.10 or later.
 - A site copies the page's files from `sentier_diagnostics.page.assets()` and writes the
   data with `page.as_script("SENTIER_DIAGNOSTICS", data)`, or calls `page.write`.
 
-The first tag, `v0.1.0`, is made by a person after the first pull request is merged.
+The first tag is `v0.1.0`.
 
 ## 1. The trial dashboard (sentier-bafu-agribalyse)
 

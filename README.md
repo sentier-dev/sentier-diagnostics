@@ -56,6 +56,6 @@ Python 3.10 or later, standard library only.
 - [docs/migration.md](docs/migration.md): how the existing dashboards move here and retire.
 - [GLOSSARY.md](GLOSSARY.md), [MAINTAINERS.md](MAINTAINERS.md), [NOTICE](NOTICE).
 
-Status: first version, under review. The tag `v0.1.0` does not exist yet.
+Status: first release, `v0.1.0`. See its [release notes](https://github.com/sentier-dev/sentier-diagnostics/releases/tag/v0.1.0).
 
 Licence: MIT, see [LICENSE](LICENSE).
