@@ -1584,6 +1584,23 @@ test('a key the host names is a plain word, neither the page\'s own nor another 
   assert.equal(errorOf(mountBeside(left, 'left')), '');
 });
 
+test('a page whose key is refused keeps saying why, whatever the host calls (review of issue 27)', () => {
+  // a host that mounts by hand and gives the page its file: the key's reason stays, never a
+  // fault of the file
+  const drawn = dom.page(undefined, undefined, { attributes: { 'data-sentier-diagnostics': 'manual', 'data-sd-key': 'sd' }, hash: 'item=p01' });
+  const api = drawn.context.SentierDiagnostics.mount(drawn.root);
+  const reason = /is one the page gives/;
+  assert.match(drawn.byId['load-error'].textContent, reason);
+  api.show(example(), true);
+  assert.match(drawn.byId['load-error'].textContent, reason);
+  api.open('p01');
+  api.close();
+  assert.match(drawn.byId['load-error'].textContent, reason);
+  assert.equal(drawn.byId.content.hidden, true);
+  assert.equal(drawn.byId.item.hidden, true);
+  assert.equal(drawn.context.location.hash, '#item=p01', 'the address is left as it was');
+});
+
 test('a page drawn again in place of a removed one takes the key it left, so an address made before still opens it (review of issue 27)', () => {
   const drawn = dom.page(example()); // "sd."
   drawn.root.isConnected = false; // the host removed it, and draws it again

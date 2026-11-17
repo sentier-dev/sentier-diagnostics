@@ -2507,6 +2507,12 @@
     }
 
     start();
+    // a page whose key is refused draws nothing and opens nothing, whoever asks it to: the
+    // reason stays where it was said, never replaced by a fault of the file it was given
+    if (keyProblem) {
+      var still = function () { refuse(keyProblem); };
+      return { show: still, close: still, open: still };
+    }
     return { show: show, close: closeItem, open: renderItem };
   }
 
