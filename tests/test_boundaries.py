@@ -161,6 +161,11 @@ class OtherEdges(unittest.TestCase):
         self.assertEqual(chain.LARGE_NOISE, 0.01)  # SPEC 5.3: above 1 % a noise is large
         self.assertNotIn("(large)", said(0.01))
         self.assertIn("(large)", said(math.nextafter(0.01, 1.0)))
+        # and a large one never reads as 1 % itself (review of 9a11c09)
+        self.assertIn("A just over 1 % (large)", said(math.nextafter(0.01, 1.0)))
+        self.assertIn("A 1.04 % (large)", said(0.0104))
+        self.assertIn("A 120 % (large)", said(1.2))
+        self.assertIn("A 1e\u22125 %", said(1e-7))
 
     def test_closer_and_further_may_add_up_to_what_moved_and_no_more(self):
         data = example.build()

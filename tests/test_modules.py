@@ -10,6 +10,8 @@ import io
 import json
 import math
 import re
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -915,6 +917,28 @@ class Summary(unittest.TestCase):
             with self.subTest(text):
                 self.assertEqual(summary.md(text), md)
                 self.assertEqual(shown(summary.md(text)), text)
+
+    def test_the_summary_writes_a_number_as_the_page_does(self):
+        """The summary wrote a noise of 120 % as `1.2e+02 %`, 1e-5 % as `1e-05 %`, and a
+        tolerance of 1e-5 as `1e-05` where the page writes `0.00001` (review of 9a11c09).
+        Its writers are held to the page's own, run over the whole range of the floats."""
+        said = summary.text(example.build())
+        self.assertIn("tolerance 0.00001 (default)", said)
+        self.assertNotRegex(said, r"\de[-+]\d")
+        node = shutil.which("node")
+        if node is None:
+            self.skipTest("node is not installed")
+        values = [9999.5, 99999.5, 999.95, 0.0099995, 0.00099995, 5e-324, 1.7976931348623157e308, 1e21,
+                  1234.5, -1234.5, 0.1 + 0.2, -2.5e-9, 1e-6, 9.999999e-7, -0.00099996, 0.0]  # fmt: skip
+        values += [m * 10.0**e for e in range(-323, 308) for m in (1, 1.2345, 9.5, 9.9995, 9.99995)]
+        values = [v for v in values if math.isfinite(v)]
+        script = ("const p = require(process.argv[1]); const v = JSON.parse(require('fs').readFileSync(0, 'utf8'));"
+                  "process.stdout.write(JSON.stringify(v.map((x) => [p.exactText(x), p.formatNumber(x)])))")  # fmt: skip
+        run = subprocess.run([node, "-e", script, str(Path(page.__file__).parent / "page" / "diagnostics.js")],
+                             input=json.dumps(values), capture_output=True, text=True, check=True)  # fmt: skip
+        for value, (exact, short) in zip(values, json.loads(run.stdout)):
+            self.assertEqual(summary._exact(value), exact, value)
+            self.assertEqual(summary._short(value, 4), short, value)
 
 
 class Verdicts(unittest.TestCase):

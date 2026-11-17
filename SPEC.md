@@ -775,7 +775,8 @@ request or a reader without JavaScript. Each text of the file shows there as wri
 makes nothing of its own: no column, emphasis, link, list, rule, code or heading in
 Markdown, and on GitHub no mention, issue reference, emoji or maths (a word joiner, which
 shows as nothing, breaks those). A commit's hash is left whole: GitHub links it to that
-commit of the repository, a target the file cannot choose.
+commit of the repository, a target the file cannot choose. Its numbers are written in the
+page's style (section 10.3): a tolerance of 1e-5 as `0.00001`, a noise of 120 % as `120 %`.
 
 ## 11. Acceptance cases
 
