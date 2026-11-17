@@ -15,7 +15,6 @@
   --sd-accent: var(--index, #1d625e);
   --sd-on-accent: var(--on-index, #ffffff);
   --sd-fail: var(--fail, #a3262a);
-  --sd-good: var(--good, #2e6b3a);
   --sd-radius: var(--radius, 6px);
   --sd-gutter: var(--gutter, 16px);
   --sd-t-xs: var(--t-xs, 0.75rem);
@@ -84,8 +83,8 @@
 .sentier-diagnostics .sd-step > p { margin: 0; }
 .sentier-diagnostics .sd-step > p + p { margin-top: 0.25rem; }
 .sentier-diagnostics .sd-claim-label { display: inline-block; margin-right: 0.5em; padding: 0 0.45em; border-radius: 3px; background: var(--sd-surface); font-size: var(--sd-t-xs); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--sd-muted); }
-.sentier-diagnostics .sd-good { color: var(--sd-good); font-weight: 700; }
-.sentier-diagnostics .sd-look { color: var(--sd-fail); font-weight: 700; }
+/* what a claim found: weight, not colour; a verdict is not an approval (ADR 0010) */
+.sentier-diagnostics .sd-verdicts { font-weight: 700; }
 
 /* an indicator in which the chosen comparison moved nothing: last, and quiet */
 .sentier-diagnostics .sd-grid .sd-still { color: var(--sd-muted); opacity: 0.7; }
@@ -195,6 +194,7 @@
 .sentier-diagnostics .sd-dist-pick::after { content: ""; position: absolute; inset: 0; border-radius: var(--sd-radius); }
 .sentier-diagnostics .sd-dist-pick:focus-visible { outline: none; }
 .sentier-diagnostics .sd-dist-pick:focus-visible::after { outline: 2px solid var(--sd-accent); outline-offset: 2px; }
+.sentier-diagnostics .sd-top { margin: 0 0 0.15rem; font-size: 0.7rem; line-height: 1.2; color: var(--sd-muted); text-align: right; font-variant-numeric: tabular-nums; }
 .sentier-diagnostics .sd-hist { display: flex; align-items: flex-end; gap: 2px; height: 4.5rem; border-bottom: 1px solid var(--sd-line-strong); }
 .sentier-diagnostics .sd-bin { flex: 1 1 0; min-width: 0; border-radius: 1px 1px 0 0; }
 .sentier-diagnostics .sd-bin.sd-gap { margin-left: 5px; }

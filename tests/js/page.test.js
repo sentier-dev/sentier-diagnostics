@@ -617,7 +617,8 @@ test('the matrix shows first the indicators in which the chosen comparison moved
   const data = example();
   const drawn = dom.page(data);
   const moves = ['differs', 'beyond 10x', 'zero reference', 'zero result', 'sign change'];
-  const moved = (comp, id) => moves.reduce((m, c) => m + (comp === 'total' ? data.counts.total : data.counts.steps[comp])[id].classes[c], 0);
+  // what moved, and the missing values with it: missing is a finding, not stillness
+  const moved = (comp, id) => moves.concat(['missing']).reduce((m, c) => m + (comp === 'total' ? data.counts.total : data.counts.steps[comp])[id].classes[c], 0);
   for (const comp of ['total'].concat(data.steps.map((s) => s.id))) {
     drawn.byId.comparison.querySelectorAll('button[data-comp="' + comp + '"]')[0].dispatch('click', {});
     const heads = drawn.byId['grid-table'].querySelectorAll('th[scope="col"]').slice(2);
@@ -671,7 +672,7 @@ test('a distribution card per indicator, in the order of the matrix, its bars th
     ids.forEach((id, k) => assert.ok(heads[k].indexOf(data.indicators.find((i) => i.id === id).name) === 0, comp + ' ' + k));
     for (const card of cards(drawn)) {
       const block = (comp === 'total' ? data.counts.total : data.counts.steps[comp])[card.getAttribute('data-indicator')];
-      const bars = card.childNodes[1].childNodes;
+      const bars = card.childNodes[2].childNodes;
       const sum = bars.reduce((s, bar) => s + Number(bar.getAttribute('title').match(/: ([\d,]+) of/)[1].replace(/,/g, '')), 0);
       // every pair is in one bar: the bands split what moved and what agrees, the rest is a class
       assert.equal(sum, block.pairs, comp + ' ' + card.getAttribute('data-indicator'));
@@ -695,7 +696,7 @@ test('a median of after ÷ before only from every item, never from the listed on
   const x = 0.5 * (ratios.length - 1), lo = Math.floor(x), hi = Math.ceil(x);
   const median = ratios[lo] + (ratios[hi] - ratios[lo]) * (x - lo);
   assert.ok(ratios.length > 0);
-  const shown = Number(card.textContent.match(/Median ([\d.e−]+)/)[1].replace('−', '-'));
+  const shown = Number(card.textContent.match(/Median of [\d ]+ ratios? ([\d.e−]+)/)[1].replace('−', '-'));
   assert.ok(Math.abs(shown - median) <= 5e-3 * Math.abs(median), shown + ' vs ' + median);
 });
 
@@ -703,7 +704,7 @@ test('percentiles get the digits that keep apart the ones that differ', () => {
   // a spread only the fifth digit shows
   const text = page.quantileTexts({ p10: 0.99981, median: 1.0, p90: 1.00042 });
   assert.notEqual(text[0], text[2]);
-  assert.deepEqual(text, ['0.99981', '1.0000', '1.0004']);
+  assert.deepEqual(text, ['0.9998', '1.0000', '1.0004']); // each only as wide as its neighbour needs
   assert.deepEqual(page.quantileTexts({ p10: 0.5, median: 1, p90: 2 }), ['0.500', '1.00', '2.00']);
   assert.deepEqual(page.quantileTexts({ p10: 1, median: 1, p90: 1 }), ['1.00', '1.00', '1.00']);
 });
@@ -731,7 +732,7 @@ test('a card sorts the matrix by its indicator, and a heading marks its card', (
 test('the bars of every card can be put on one scale, the share of all values (A21)', () => {
   const data = example();
   const drawn = dom.page(data);
-  const heights = () => cards(drawn).map((card) => card.childNodes[1].childNodes.map((bar) => parseFloat(/height:([\d.]+)%/.exec(bar.getAttribute('style'))[1])));
+  const heights = () => cards(drawn).map((card) => card.childNodes[2].childNodes.map((bar) => parseFloat(/height:([\d.]+)%/.exec(bar.getAttribute('style'))[1])));
   // each card to its own tallest bar: every card that has values reaches the top
   heights().forEach((h) => assert.equal(Math.max(...h), 100));
   const select = drawn.byId['dist-scale'];
@@ -743,11 +744,74 @@ test('the bars of every card can be put on one scale, the share of all values (A
   const shares = cards(drawn).map((card, i) => {
     const block = data.counts.total[card.getAttribute('data-indicator')];
     // a bar is at least 2% high, so that one value is seen: those are left out
-    return card.childNodes[1].childNodes.map((bar, j) => {
+    return card.childNodes[2].childNodes.map((bar, j) => {
       const n = Number(bar.getAttribute('title').match(/: ([\d,]+) of/)[1].replace(/,/g, ''));
       return n && one[i][j] > 2 ? one[i][j] / (n / block.pairs) : null;
     }).filter((x) => x !== null);
   }).flat();
   for (const f of shares) assert.ok(Math.abs(f - shares[0]) < 0.06 * shares[0], f + ' vs ' + shares[0]);
   assert.match(drawn.byId['dist-said'].textContent, /one scale/);
+});
+
+test('the claim line names every verdict on a move, "as claimed" first, in words and without colour', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  const k = data.steps.findIndex((s) => s.claim && s.claim.scope.length);
+  const step = data.steps[k];
+  chips(drawn)[k + 1].dispatch('click', {});
+  const said = drawn.byId['step-said'].textContent;
+  const total = (v) => Object.values(data.counts.steps[step.id]).reduce((a, b) => a + b.verdicts[v], 0);
+  for (const v of ['as claimed', 'off claim', 'not claimed', 'claimed, not moved']) {
+    const word = v === 'as claimed' ? 'moved as claimed' : v;
+    if (total(v)) assert.ok(said.includes(total(v) + ' value' + (total(v) === 1 ? '' : 's') + ' ' + word), v + ': ' + said);
+    else assert.ok(!said.includes(word), v);
+  }
+  if (total('as claimed')) assert.ok(said.indexOf('moved as claimed') < Math.max(said.indexOf('off claim'), said.indexOf('not claimed')) || !/off claim|not claimed/.test(said));
+  assert.doesNotMatch(said, /moves as claimed/);
+  const all = drawn.byId['step-said'].all();
+  assert.ok(!all.some((node) => /sd-good|sd-look/.test(node.className || '')));
+});
+
+test('a column whose only change is a missing value is not quietened as if nothing moved', () => {
+  const data = example();
+  const step = data.steps[0].id;
+  const id = data.indicators[data.indicators.length - 1].id;
+  const block = data.counts.steps[step][id];
+  // nothing moved in this indicator, two values went missing
+  for (const c of ['differs', 'beyond 10x', 'zero reference', 'zero result', 'sign change']) block.classes[c] = 0;
+  block.classes.missing = 2;
+  const drawn = dom.page(data);
+  drawn.byId.comparison.querySelectorAll('button[data-comp="' + step + '"]')[0].dispatch('click', {});
+  const name = data.indicators.find((i) => i.id === id).name;
+  const head = drawn.byId['grid-table'].querySelectorAll('th[scope="col"]').slice(2).find((th) => th.getAttribute('title').indexOf(name) === 0);
+  assert.doesNotMatch(head.className, /sd-still/);
+  assert.match(head.getAttribute('title'), /2 missing/);
+  const card = cards(drawn).find((c) => c.getAttribute('data-indicator') === id);
+  assert.doesNotMatch(card.className, /sd-still/);
+});
+
+test('two percentiles that six digits cannot part are said to lie just under or over the median', () => {
+  const t = page.quantileTexts({ p10: 1 - 1e-9, median: 1, p90: 5.94545 });
+  assert.equal(t[0], 'just under the median');
+  assert.notEqual(t[2], t[1]);
+  assert.equal(t[2], '5.95'); // the pair (median, 90th) never blurred
+  // only the pair that blurs is widened: 5.94545 needs no six digits beside 1
+  assert.equal(page.quantileTexts({ p10: 0.5, median: 1, p90: 1 + 1e-9 })[0], '0.500');
+  assert.equal(page.quantileTexts({ p10: 0.5, median: 1, p90: 1 + 1e-9 })[2], 'just over the median');
+});
+
+test('a card says over how many ratios its median is, how many have none, and what full height is', () => {
+  const data = local();
+  const loaded = dom.page(data, undefined, { globals: { SENTIER_DIAGNOSTICS_MATRIX: full() } });
+  for (const card of cards(loaded)) {
+    const text = card.textContent;
+    const block = data.counts.total[card.getAttribute('data-indicator')];
+    const m = text.match(/Median of ([\d ]+) ratios?/);
+    if (!m) { assert.match(text, /No value with a ratio/); continue; }
+    const n = Number(m[1].replace(/ /g, ''));
+    const left = block.pairs - n;
+    if (left) assert.ok(text.includes(left + ' without a ratio'), text);
+    else assert.doesNotMatch(text, /without a ratio/);
+    assert.match(card.childNodes[1].textContent, /^tallest bar: \d/);
+  }
 });

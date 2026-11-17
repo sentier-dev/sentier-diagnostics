@@ -477,7 +477,8 @@ the page fetches it over HTTP. Served over HTTP the page can also read `?file=..
 opens a file a reader chooses (read in the browser, sent nowhere). **The page works out no
 class, no direction and no count of its own.** It reads them from the file, which the
 validator has checked, and only adds the file's counts up: the classes that moved into
-"moved", and a step's counts over its indicators. A file read by `?file=` or chosen by a
+"moved", and a step's counts over its indicators. The one number it works out itself is
+the median and percentiles of a distribution (10.3), and only from every item. A file read by `?file=` or chosen by a
 reader has not passed through the validator: the page checks its shape only, says so above
 everything it draws, and refuses a file it cannot draw instead of drawing part of it. A
 matrix is held to the file it says it is of (title, states, indicators, steps, number of
@@ -495,11 +496,17 @@ that moved in it, a `!` where nothing explains it and a mark for each verdict wo
 states it goes between, what it is, its claim with who made it, what the claim found, its
 tolerance and its noise; one row of controls (name, group, class, verdict, the size
 filter) with the count and the legend in the row under it; then the matrix (10.5), which
-opens an item in a drawer (10.6). The address keeps the chosen step and an open item
+opens an item in a drawer (10.6); directly under it, always open, the distributions of the
+chosen comparison (10.3). The address keeps the chosen step and an open item
 (`#step=<id>&item=<id>`), so that a reviewer can send someone to exactly that view. Below
-it, each closed until a reader opens it: the steps and the whole way (10.2), the
-distributions (10.3), the worst values (10.4), the explanations and the rule (10.7). A
-host's page never offers to open a file; it says only why nothing is drawn.
+them, each closed until a reader opens it: the steps and the whole way (10.2), the worst
+values (10.4), the explanations and the rule (10.7). A host's page never offers to open a
+file; it says only why nothing is drawn.
+
+The line of the chosen step names every verdict on a move with its count, "as claimed"
+first ("40 values moved as claimed, 2 off claim ◐"), and "Nothing moved, as claimed" only
+where every count is zero. It gives them weight, not colour: a verdict is not an approval
+(ADR 0010, A20).
 
 ### 10.1 Header
 The title, the file's `about`, and one quiet line: how many items and indicators, how many
@@ -518,8 +525,31 @@ every class, up, down, the step that carries most of the difference (section 7),
 over steps, not attributable, and moved by what nothing explains.
 
 ### 10.3 Distributions
-Per indicator, the share of values in each band and class, down on the left, up on the
-right. **Every indicator on the same scale**, so a tall bar means the same in each.
+One card per indicator, in the order of the matrix's columns (10.5), for the comparison the
+chips have chosen: a histogram of the file's own counts, from left to right a sign change,
+the bands down from far to near, agrees and within noise (two bars, the band around 1),
+the bands up from near to far, then zero reference, zero result, near zero and missing.
+Every count is in its bar's title.
+
+**Bar heights: each card to its own tallest bar by default**, with one scale for every card
+(the share of all values) as a switch beside the legend. A step that moves a few values
+of thousands moves them in most indicators by less than a pixel on one scale, and the
+reviewer looks for exactly those; so each card says what its full height is ("tallest bar:
+7", or on one scale "full height: 300 of 11 947"), and a bar of one value is never drawn as
+large as a bar of thousands without that number beside it. An indicator in which nothing
+moved and nothing is missing is quietened, as its column is.
+
+Under each card, how many moved and are missing, and **the median, 10th and 90th
+percentile of after ÷ before: the one statistic the page works out itself.** It is taken
+only where the page holds every item (the matrix is loaded, or the file lists them all),
+over the values with a ratio (both results neither zero nor missing, of one sign), and says
+over how many ("Median of 11 893 ratios", and how many have none). From the listed items
+alone it gives none and says why: they are the furthest apart, and their median would say
+more than the whole holds. Each percentile has as few digits as keep it apart from a
+neighbour that differs (three at least, six at most); where six still read the same it
+says "just under the median" or "just over the median" instead of two equal numbers.
+
+A card's title sorts the matrix by its indicator; a heading of the matrix marks its card.
 
 ### 10.4 Worst
 The N worst values of one comparison (a step or the whole way), ordered by class (sign
@@ -531,7 +561,10 @@ look the file does not hold.
 ### 10.5 Matrix
 Items by indicator for the comparison the chips have chosen. **The indicators in which that
 comparison moved most come first**, so that what a step did is in view without scrolling;
-an indicator in which it moved nothing comes last, quietened, and keeps its column. In it: each cell with a ratio shows the result after
+an indicator in which it moved nothing and nothing is missing comes last, quietened, and
+keeps its column (a missing value counts with what moved: it is a finding, not stillness).
+Choosing another comparison sorts the grid furthest-first again, since a new comparison
+has a new order. In it: each cell with a ratio shows the result after
 divided by the result before in three significant digits (`1.00`, `0.984`, `2.27`,
 `1.01e−3`), agreeing pairs included, so that a column reads as numbers; a cell without one
 says what the class says (from 0, to 0, + → −, missing, ≈ 0). The class shows as the tint
@@ -599,7 +632,7 @@ the page script (`tests/js/page.test.js`), so the two cannot drift apart unnotic
 | A18 | The split is exact up to rounding, the page prints the sum it computed, and an item it cannot split is counted | rule, review of PR 2 | `test_a18`, node "A18" |
 | A19 | Only `must` can be unmet, and it is unmet by a pair that stayed within the tolerance, the noise or the floor; empty scope means nothing moves; a zero reference is never within `largest`; a private claim list | sentier-bafu, sentier-agribalyse, review of PR 2 | `test_a19`, `test_a19b`, `Verdicts` |
 | A20 | No status or acceptance field anywhere | sentier-bafu-agribalyse ADR 0010 | `test_a20` |
-| A21 | Distributions are drawn on one scale | trial dashboard | checked by hand in a browser (not automated) |
+| A21 | Distributions: each card says what its full height is; one scale for every card is a switch; percentiles only from every item, over the values with a ratio, with their number | trial dashboard, review of PR 21 | node "one scale", "a median of after ÷ before only from every item", "over how many ratios", "just under or over the median" |
 | A22 | Coming closer to the reference is never called better | ADR 0009, sentier-bafu | `test_a22`, node "nothing drawn calls a move better or worse" |
 | A23 | An indicator is matched by its exact id, not a prefix | backtest | `test_a23` |
 | A24 | Results on one side only are counted, by side | sentier-bafu | `test_a24` |

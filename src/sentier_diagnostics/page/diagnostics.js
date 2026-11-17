@@ -122,22 +122,30 @@
     return s.replace(/-/g, '−');
   }
 
-  // the 10th, 50th and 90th percentile in as few digits as keep apart the ones that differ
-  // (three at least, six at most): "1.00, 1.00, 1.00" over values that moved would hide
-  // the spread a reader looks for
+  // the 10th, 50th and 90th percentile, each in as few digits as keep it apart from a
+  // neighbour that differs (three at least, six at most): "1.00, 1.00, 1.00" over values
+  // that moved would hide the spread a reader looks for. Where six digits still read the
+  // same, the line says how the two lie instead of printing two equal numbers.
   function quantileTexts(qs) {
-    var one = function (v, digits) {
-      if (v < 0.01 || v >= 1e4) return v.toExponential(digits - 1).replace(/\.?0+e/, 'e').replace('e+', 'e').replace(/-/g, '−');
-      return v.toPrecision(digits);
-    };
     var values = [qs.p10, qs.median, qs.p90];
-    var out;
-    // two that differ and read the same
-    var blurred = function (i, j) { return values[i] !== values[j] && out[i] === out[j]; };
-    for (var digits = 3; digits <= 6; digits++) {
-      out = values.map(function (v) { return one(v, digits); });
-      if (!(blurred(0, 1) || blurred(1, 2) || blurred(0, 2))) break;
-    }
+    var one = function (v, digits) {
+      if (v !== 0 && (Math.abs(v) < 0.01 || Math.abs(v) >= 1e4)) return v.toExponential(digits - 1).replace(/\.?0+e/, 'e').replace('e+', 'e').replace(/-/g, '−');
+      return v.toPrecision(digits).replace(/-/g, '−');
+    };
+    var digits = [3, 3, 3];
+    var text = function (i) { return one(values[i], digits[i]); };
+    // widen only the two of a pair that read the same while they differ
+    [[0, 1], [1, 2], [0, 2]].forEach(function (pair) {
+      var i = pair[0], j = pair[1];
+      if (values[i] === values[j]) return;
+      // compared at one precision: "1.000" and "1.00" are one number
+      for (var d = 3; ; d++) {
+        if (one(values[i], d) !== one(values[j], d) || d >= 6) { digits[i] = Math.max(digits[i], d); digits[j] = Math.max(digits[j], d); return; }
+      }
+    });
+    var out = [text(0), text(1), text(2)];
+    if (values[0] !== values[1] && out[0] === out[1]) out[0] = 'just under the median';
+    if (values[2] !== values[1] && out[2] === out[1]) out[2] = 'just over the median';
     return out;
   }
 
@@ -644,11 +652,13 @@
       var claim = [el('span', { cls: 'sd-claim-label', text: 'Claim' })];
       if (s.claim) {
         claim.push(s.claim.text, ' ', badge(s.claim.by));
-        var found = LOOK.map(function (name) { return [name, sumOver(s.id, function (b) { return b.verdicts[name]; })]; }).filter(function (p) { return p[1]; });
-        var held = sumOver(s.id, function (b) { return b.verdicts['as claimed']; });
-        claim.push(el('span', { cls: found.length ? 'sd-look' : 'sd-good', text: found.length
-          ? ' ' + found.map(function (p) { return n(p[1]) + ' ' + p[0]; }).join(', ') + '.'
-          : held ? ' All ' + n(held) + ' moves as claimed.' : ' Nothing moved, as claimed.' }));
+        // every verdict on a move, "as claimed" first, each with its count; the ones worth a
+        // look carry their mark, as on the chips. No colour: a verdict is not an approval.
+        var found = ['as claimed'].concat(LOOK).map(function (name) { return [name, sumOver(s.id, function (b) { return b.verdicts[name]; })]; })
+          .filter(function (p) { return p[1]; });
+        claim.push(el('span', { cls: 'sd-verdicts', text: found.length
+          ? ' ' + found.map(function (p) { return n(p[1]) + ' ' + (p[1] === 1 ? 'value' : 'values') + ' ' + (p[0] === 'as claimed' ? 'moved as claimed' : p[0]) + (LOOK_MARK[p[0]] ? ' ' + LOOK_MARK[p[0]] : ''); }).join(', ') + '.'
+          : ' Nothing moved, as claimed.' }));
         if (s.claim.scope.some(function (e) { return e.items === null; })) {
           claim.push(el('span', { cls: 'sd-quiet', text: ' Its list of ' + D.item.many + ' is not in this file' + (s.claim.reach !== null ? ' (' + n(s.claim.reach) + ')' : '') + ': its verdicts were worked out by its writer.' }));
         }
@@ -767,9 +777,9 @@
         if (last && last.tone === b[2] && !(b[2] === 'aside' && i > 0 && bins[i - 1][2] !== 'aside')) last.n += 1;
         else runs.push({ tone: b[2], n: 1, first: !runs.length });
       });
-      var words = { down: '÷10 ← down', mid: '1', up: 'up → ×10' };
+      var words = { down: '↓ ÷10', mid: '1', up: '×10 ↑' };
       return el('div', { cls: 'sd-axis', 'aria-hidden': 'true' }, runs.map(function (run) {
-        var word = run.tone === 'aside' ? (run.first ? '±' : 'no ratio') : words[run.tone];
+        var word = run.tone === 'aside' ? (run.first ? '±' : '0 ∅') : words[run.tone];
         return el('span', { cls: 'sd-axis-' + run.tone, style: 'flex-grow:' + run.n, text: word });
       }));
     }
@@ -857,10 +867,12 @@
             title: binWords(b) + ': ' + groupThousands(counts[i]) + ' of ' + groupThousands(block.pairs) });
         });
         var qs = quantiles(ind.id, k);
-        var meta = c.moved ? groupThousands(c.moved) + ' of ' + groupThousands(block.pairs) + ' moved' : 'Nothing moved';
+        var meta = c.active ? capital(activeSaid(c)) + ', of ' + groupThousands(block.pairs) : 'Nothing moved';
         var said3 = qs && qs.n ? quantileTexts(qs) : null;
+        var left = qs ? block.pairs - qs.n : 0;
         var stats = qs === null ? null : (said3
-          ? 'Median ' + said3[1] + ', 10th percentile ' + said3[0] + ', 90th ' + said3[2]
+          ? 'Median of ' + groupThousands(qs.n) + ' ' + (qs.n === 1 ? 'ratio' : 'ratios') + ' ' + said3[1] + ', 10th percentile ' + said3[0] + ', 90th ' + said3[2] +
+            (left ? '; ' + groupThousands(left) + ' without a ratio' : '')
           : 'No value with a ratio');
         var button = el('button', { type: 'button', cls: 'sd-dist-pick', 'aria-pressed': view.sort === ind.id ? 'true' : 'false',
           title: 'Sort the matrix by ' + ind.name }, [ind.name]);
@@ -872,8 +884,11 @@
           var region = q('grid-region');
           if (region && region.scrollIntoView) region.scrollIntoView({ block: 'start', behavior: 'smooth' });
         });
-        box.appendChild(el('div', { cls: 'sd-dist' + (c.moved ? '' : ' sd-still') + (view.sort === ind.id ? ' sd-chosen' : ''), 'data-indicator': ind.id }, [
+        box.appendChild(el('div', { cls: 'sd-dist' + (c.active ? '' : ' sd-still') + (view.sort === ind.id ? ' sd-chosen' : ''), 'data-indicator': ind.id }, [
           el('h4', null, [button]),
+          el('p', { cls: 'sd-top', 'aria-hidden': 'true', text: view.distScale === 'one'
+            ? 'full height: ' + groupThousands(Math.round(top)) + ' of ' + groupThousands(block.pairs)
+            : 'tallest bar: ' + groupThousands(Math.max.apply(null, counts)) }),
           el('div', { cls: 'sd-hist', role: 'img', 'aria-label': said }, bars),
           axis(bins),
           el('p', { cls: 'sd-dist-meta' }, [el('strong', { text: meta }), stats ? el('br') : null, stats])
@@ -982,8 +997,17 @@
     // an indicator in which nothing moved last, quietened
     function columns(comp) {
       var blocks = comp === 'total' ? D.counts.total : D.counts.steps[comp];
-      return D.indicators.map(function (ind, at) { return { ind: ind, moved: moved(blocks[ind.id]), at: at }; })
-        .sort(function (a, b) { return b.moved - a.moved || a.at - b.at; });
+      // a missing value is a finding, not stillness: it counts with what moved
+      return D.indicators.map(function (ind, at) {
+        var block = blocks[ind.id];
+        return { ind: ind, moved: moved(block), missing: block.classes.missing || 0, at: at };
+      }).map(function (c) { c.active = c.moved + c.missing; return c; })
+        .sort(function (a, b) { return b.active - a.active || a.at - b.at; });
+    }
+
+    function activeSaid(c) {
+      if (!c.active) return 'nothing moved and nothing is missing';
+      return [c.moved ? groupThousands(c.moved) + ' moved' : null, c.missing ? groupThousands(c.missing) + ' missing' : null].filter(Boolean).join(', ');
     }
 
     function renderGrid() {
@@ -1005,8 +1029,8 @@
       ];
       cols.forEach(function (c) {
         var ind = c.ind;
-        head.push(el('th', { scope: 'col', cls: 'num' + (c.moved ? '' : ' sd-still'), 'aria-sort': sorted(ind.id),
-          title: ind.name + (ind.unit ? ' (' + ind.unit + ')' : '') + (c.moved ? ': ' + groupThousands(c.moved) + ' moved here' : ': nothing moved here') },
+        head.push(el('th', { scope: 'col', cls: 'num' + (c.active ? '' : ' sd-still'), 'aria-sort': sorted(ind.id),
+          title: ind.name + (ind.unit ? ' (' + ind.unit + ')' : '') + ': ' + activeSaid(c) + ' here' },
           [sortButton(indicatorName(ind.id), ind.id, 'Sort by how far the two lie apart, the furthest first')]));
       });
       table.appendChild(el('thead', null, [el('tr', null, head)]));
@@ -1019,7 +1043,7 @@
         ];
         cols.forEach(function (c) {
           var td = valueCell(row, c.ind.id, k, true);
-          if (!c.moved) td.className += ' sd-still';
+          if (!c.active) td.className += ' sd-still';
           cells.push(td);
         });
         body.appendChild(el('tr', { cls: 'sd-row', tabindex: '0', 'data-item': row.id, 'aria-current': view.open === row.id ? 'true' : null }, cells));
