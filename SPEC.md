@@ -568,11 +568,19 @@ below 1 (`transparent`, a faint tint, a dark theme's raised surface) is read as 
 laid over the backgrounds of the elements around the page, out to the first opaque one,
 and over the document's canvas, which is dark where the root's `color-scheme` (or the
 document's `<meta name="color-scheme">`) and the reader make it so. A background behind it
-that cannot be read leaves the ground unknown; background images are not read. It looks
+that cannot be read leaves the ground unknown; background images are not read. The
+elements around the page are those of the document's tree (for a slotted page its slot, for
+a page in a shadow root its host), read through the DOM's own properties, so that a host's
+names do not stand in for them (an element named `host`, a form's control named
+`parentNode`); past 4,096 of them the ground is unknown. What is painted is not read: an
+ancestor's opacity, filter, backdrop filter or blend mode, an element placed or transformed
+away from its parents, and an element of `display: contents` (a slot among them), which
+paints no background and whose background is read all the same. It looks
 again when the reader's colour scheme changes, when anything changes in the document or in
 a shadow root the page sits in, and when a stylesheet loads: once a frame at most, and it
 reads the tokens again only where they, the computed `color-scheme`, the reader's scheme or
-what a translucent ground shows changed, so that a host's observer that answers the page's
+what a translucent ground shows changed (it reads what is around the page only where the
+ground as written may have alpha), so that a host's observer that answers the page's
 reading sets off no other. A rule a site changes through the CSS object model alone changes nothing the page
 can see.
 
@@ -657,7 +665,9 @@ by its hash (`#/products/12`, as Vue's hash mode, React's `HashRouter` or Angula
 a route with a query (`#/products?tab=2`) takes them as more of its query, which does no
 harm. Such
 a host keeps the page out of the address with `data-sd-address="off"`: the page then holds
-its parts itself, neither reads nor writes the address, and no address opens it. An
+its parts itself, neither reads nor writes the address, and no address opens it. The
+attribute is read once, when the page is mounted. A host that wants to open a step or an
+item on such a page has no call for it yet. An
 address naming a step the file does not have, steps apart, or a run the page cannot judge
 (no matrix), says so and shows the whole way. Below
 them, each closed until a reader opens it: the steps and the whole way (10.2), the worst

@@ -1140,13 +1140,18 @@ test('a host that routes by its hash keeps the page out of the address, and the 
   assert.equal(drawn.byId.item.hidden, false, 'the item opens');
   assert.match(drawn.byId['item-title'].textContent, new RegExp(data.items.find((i) => i.id === item).name));
   assert.equal(pressed(drawn), step.id);
-  // the host's route moves on: the page keeps its step and its item
+  // the host's route moves on: the page keeps its step and its item, and leaves the open
+  // item as it is: not drawn again, so its scroll and the focus in it stay
+  const shown = drawn.byId['item-body'].firstChild;
+  assert.ok(shown);
   drawn.open('/products/13');
   assert.equal(pressed(drawn), step.id);
   assert.equal(drawn.byId.item.hidden, false);
+  assert.equal(drawn.byId['item-body'].firstChild, shown, 'the open item is not drawn again');
   // an address in the page's own words is not the page's
   drawn.open('sd.step=' + encodeURIComponent(data.steps[0].id));
   assert.equal(pressed(drawn), step.id);
+  assert.equal(drawn.byId['item-body'].firstChild, shown);
   // closing the item leaves the address as the host has it, and keeps the step
   drawn.byId['item-close'].dispatch('click', {});
   assert.equal(drawn.byId.item.hidden, true);
@@ -2127,7 +2132,7 @@ test('the page reads the host\'s tokens as the browser resolves them, and follow
   // a page in a shadow root: that root is watched too, as the document does not see into
   // it, and loads are heard there, as a load does not leave it
   const loadsIn = (top) => { top.loads = []; top.addEventListener = (type, react, capture) => { if (type === 'load' && capture) top.loads.push(react); }; return top; };
-  const shadow = loadsIn({ host: around });
+  const shadow = loadsIn({ host: around, nodeType: 11 });
   const shaded = dom.body({ data: example() });
   shaded.ownerDocument = first.document;
   shaded.getRootNode = () => shadow;
@@ -2144,7 +2149,7 @@ test('the page reads the host\'s tokens as the browser resolves them, and follow
   const elsewhere = new dom.FakeNode('section');
   elsewhere.nodeType = 1;
   elsewhere.getRootNode = () => first.document;
-  const moved = loadsIn({ host: elsewhere });
+  const moved = loadsIn({ host: elsewhere, nodeType: 11 });
   shaded.getRootNode = () => moved;
   shadedWatch.react([{ type: 'childList' }]);
   assert.ok(shadedWatch.watched.some(([node]) => node === moved));
@@ -2165,8 +2170,14 @@ const inHost = (vars, grounds, options = {}) => {
     observe() {}
     disconnect() {}
   }
+  let reads = 0;
+  const read = new Set();
   const styles = {
     getComputedStyle: (node) => {
+      // as a browser: an element or a TypeError; and a walk that does not end is ended here
+      if (!(node instanceof dom.FakeNode)) throw new TypeError('parameter 1 is not of type \'Element\'');
+      if (++reads > 50000) throw new Error('the walk around the page did not end');
+      read.add(node);
       const color = node.style ? node.style.getPropertyValue('color') : '';
       if (color.startsWith('var(')) {
         let said = vars[color.slice(4, -1)];
@@ -2177,7 +2188,7 @@ const inHost = (vars, grounds, options = {}) => {
       return { getPropertyValue: (name) => (name === 'background-color' ? node.bg || '' : name === 'color-scheme' ? (node.isRoot ? scheme.value : '') : vars[name] || '') };
     },
   };
-  const first = dom.page(example(), undefined, { globals: { ...styles, matchMedia: () => reader, MutationObserver: Observer } });
+  const first = dom.page(example(), undefined, { globals: { ...styles, matchMedia: () => reader, MutationObserver: Observer, ...(options.globals || {}) } });
   const html = new dom.FakeNode('html'), body = new dom.FakeNode('body'), main = new dom.FakeNode('main');
   html.isRoot = true;
   [html.bg, body.bg, main.bg] = [grounds.html, grounds.body, grounds.main];
@@ -2191,9 +2202,15 @@ const inHost = (vars, grounds, options = {}) => {
   const themed = dom.body({ data: example() });
   themed.ownerDocument = first.document;
   main.appendChild(themed);
+  if (options.before) options.before({ document: first.document, html, body, main, themed });
   first.context.SentierDiagnostics.mount(themed);
   const look = () => observers[observers.length - 1].react([]);
-  return { themed, html, body, main, reader, scheme, vars, look, dark: () => themed.getAttribute('data-sd-scheme') === 'dark' };
+  return {
+    themed, html, body, main, reader, scheme, vars, look,
+    dark: () => themed.getAttribute('data-sd-scheme') === 'dark',
+    ended: () => reads <= 50000, // every walk ended (a page that threw is refused, and light)
+    wasRead: (node) => read.has(node),
+  };
 };
 
 test('a ground with alpha is read as it is seen, through what is behind the page (issue 45)', () => {
@@ -2204,6 +2221,8 @@ test('a ground with alpha is read as it is seen, through what is behind the page
   assert.equal(page.colourOf('#fff8').alpha, 136 / 255);
   assert.equal(page.colourOf('oklch(0.5 0.1 200 / 0.5)').alpha, 0.5);
   assert.equal(page.colourOf('oklch(0.5 0.1 200 / none)').alpha, 0);
+  assert.equal(page.colourOf('rgb(0 0 0 / none)').alpha, 0);
+  assert.equal(page.colourOf('rgb(0 0 0 / 0.5) 1px'), null, 'a colour and something after it is not a colour');
   assert.equal(page.colourOf('rgb(29, 35, 42)').alpha, 1);
   assert.deepEqual(page.colourOf('rgba(0, 0, 0, 0)'), { rgb: [0, 0, 0], alpha: 0 });
   assert.equal(page.colourOf('color(srgb 1 1 1 / 0.5)', canvasOf()).alpha, 128 / 255, 'read back from a canvas');
@@ -2241,6 +2260,12 @@ test('a ground with alpha is read as it is seen, through what is behind the page
   assert.equal(inHost({ '--surface': 'transparent' }, { body: 'color(display-p3 0 0 0)' }, { scheme: 'dark' }).dark(), false);
   // where the ink says something, the ink decides, as before
   assert.equal(inHost({ '--ink': '#1d232a', '--surface': 'rgb(255 255 255 / .05)' }, { body: 'rgb(17, 17, 17)' }).dark(), false);
+  // an opaque ground hides what is behind it: nothing around the page is read, then or on a look
+  const opaque = inHost({ '--surface': '#fff' }, { body: 'rgb(17, 17, 17)' });
+  opaque.look();
+  assert.ok(![opaque.main, opaque.body, opaque.html].some(opaque.wasRead), 'an opaque ground reads nothing around it');
+  const faint = inHost({ '--surface': 'rgb(255 255 255 / .05)' }, { body: 'rgb(17, 17, 17)' });
+  assert.ok([faint.main, faint.body].every(faint.wasRead));
 });
 
 test('a host that switches what is behind a translucent ground is followed, its tokens unchanged (issue 45)', () => {
@@ -2272,12 +2297,98 @@ test('a host that switches what is behind a translucent ground is followed, its 
   slotted.themed.assignedSlot = slot;
   slotted.look();
   assert.equal(slotted.dark(), true, 'slotted into a card whose frame is dark');
+  // a ground made translucent is seen through from then on: what is behind it is followed
+  const turned = inHost({ '--surface': '#fff' }, { body: 'rgb(17, 17, 17)' });
+  assert.equal(turned.dark(), false);
+  turned.vars['--surface'] = 'rgb(255 255 255 / .05)';
+  turned.look();
+  assert.equal(turned.dark(), true);
+  turned.body.bg = 'rgb(255, 255, 255)';
+  turned.look();
+  assert.equal(turned.dark(), false);
   // and the canvas: the root's colour scheme switched, with nothing behind the page
   const bare = inHost({ '--surface': 'transparent' }, {});
   assert.equal(bare.dark(), false);
   bare.scheme.value = 'dark';
   bare.look();
   assert.equal(bare.dark(), true);
+});
+
+test('the walk around the page follows the tree, not what a host\'s names put in its place (review of #46)', () => {
+  // a faint white on a dark body: dark, read through every element out to the body
+  const faint = (options) => inHost({ '--surface': 'rgb(255 255 255 / .05)' }, { body: 'rgb(17, 17, 17)' }, options);
+  assert.equal(faint().dark(), true);
+  // an element named "host" in the document (<form name="host">, <img name="host">) is
+  // document.host; an <iframe name="host"> makes it a window. Nothing is above the document.
+  const named = faint({ before: ({ document, body }) => { document.host = body; } });
+  assert.equal(named.dark(), true, 'document.host an element of the page');
+  named.look();
+  assert.equal(named.dark(), true);
+  assert.equal(faint({ before: ({ document }) => { document.host = { closed: false }; } }).dark(), true, 'document.host a window');
+  // a page inside a link: the link's host is its address's host name, and no node
+  const linked = faint({
+    before: ({ main, themed }) => {
+      const link = new dom.FakeNode('a');
+      link.host = 'example.org';
+      main.removeChild(themed);
+      main.appendChild(link);
+      link.appendChild(themed);
+    },
+  });
+  assert.equal(linked.dark(), true, 'inside a link');
+  // In a browser the walk reads the DOM's own getters. A form gives its controls by name
+  // (WebForms wraps a whole page in one form), so a control named parentNode, nodeType,
+  // assignedSlot or host is what the form says for that name; the getters say what it is.
+  const truth = new WeakMap();
+  const held = (key) => function () {
+    if (!truth.has(this)) throw new TypeError('Illegal invocation');
+    return truth.get(this)[key];
+  };
+  class Node {}
+  Object.defineProperty(Node.prototype, 'parentNode', { get: held('parentNode') });
+  Object.defineProperty(Node.prototype, 'nodeType', { get: held('nodeType') });
+  Node.prototype.getRootNode = function () { let n = this; while (truth.get(n).parentNode) n = truth.get(n).parentNode; return n; };
+  class Element {}
+  Object.defineProperty(Element.prototype, 'assignedSlot', { get: held('assignedSlot') });
+  class ShadowRoot {}
+  Object.defineProperty(ShadowRoot.prototype, 'host', { get: held('host') });
+  const wrapped = (globals, options, names = ['parentNode', 'nodeType', 'assignedSlot', 'host']) => faint({
+    ...options,
+    globals,
+    before: ({ document, html, body, main, themed }) => {
+      const form = new dom.FakeNode('form'), control = new dom.FakeNode('input');
+      main.removeChild(themed);
+      main.appendChild(form);
+      form.appendChild(control);
+      form.appendChild(themed);
+      [html, body, main, form, control, themed].forEach((n) => truth.set(n, { parentNode: n.parentNode, nodeType: 1, assignedSlot: null }));
+      truth.set(document, { parentNode: null, nodeType: 9 });
+      names.forEach((name) => { form[name] = control; });
+    },
+  });
+  assert.equal(wrapped({ Node, Element, ShadowRoot }).dark(), true, 'inside a form whose controls take its names');
+  // without the getters, a form whose control is named assignedSlot leads the walk round
+  // and round between them: it ends at its limit, and the ground is unknown (light), never
+  // a hang or an error, nor the canvas behind
+  const round = wrapped({}, {}, ['assignedSlot']);
+  assert.equal(round.dark(), false);
+  assert.ok(round.ended());
+  round.look();
+  assert.ok(round.ended());
+  const roundDark = wrapped({}, { scheme: 'dark' }, ['assignedSlot']);
+  assert.equal(roundDark.dark(), false, 'not read past the limit to a dark canvas');
+  assert.ok(roundDark.ended());
+  // the walk out to the document, through shadow roots, ends too: a stand-in whose shadow
+  // root is the page's own
+  let asked = 0;
+  const looped = faint({
+    before: ({ themed }) => {
+      const top = { nodeType: 11, host: themed, addEventListener() {}, removeEventListener() {} };
+      themed.getRootNode = () => { if (++asked > 50000) throw new Error('the walk out to the document did not end'); return top; };
+    },
+  });
+  looped.look();
+  assert.ok(asked <= 50000);
 });
 
 test('the reader\'s scheme alone is followed: a token in light-dark() resolves anew, its text unchanged (review of #34)', () => {

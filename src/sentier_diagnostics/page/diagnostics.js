@@ -547,7 +547,7 @@
       var h = m[1].length <= 4 ? m[1].replace(/(.)/g, '$1$1') : m[1];
       rgb = [0, 2, 4].map(function (at) { return parseInt(h.slice(at, at + 2), 16); });
       if (h.length === 8) alpha = parseInt(h.slice(6), 16) / 255;
-    } else if ((m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:\s*[,\/]\s*([\d.]+%?))?/i.exec(text))) {
+    } else if ((m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)\s*(?:[,\/]\s*([\d.]+%?|none)\s*)?\)$/i.exec(text))) {
       rgb = [+m[1], +m[2], +m[3]];
       alpha = alphaOf(m[4]);
     } else if ((m = OKLAB.exec(text))) {
@@ -3949,8 +3949,9 @@
     function groundSeen(surface) {
       var top = surface ? colourOf(surface, doc) : null;
       if (!top || top.alpha >= 1) return surface;
-      var coats = [top];
+      var coats = [top], steps = 0;
       for (var node = around(root); node; node = around(node)) {
+        if (++steps > WALK_LIMIT) return null;
         var said = backgroundOf(node), behind = said ? colourOf(said, doc) : null;
         if (said && !behind) return null;
         if (!behind || behind.alpha === 0) continue;
@@ -3960,13 +3961,39 @@
       coats.push(canvasIsDark() ? { rgb: [18, 18, 18], alpha: 1 } : { rgb: [255, 255, 255], alpha: 1 });
       return seenThrough(coats);
     }
+    // The elements around the page, read out to this many; past it the ground is unknown. A
+    // document's tree has no loop, and none is near this deep: the limit holds a walk that
+    // was handed something else for a node.
+    var WALK_LIMIT = 4096;
+    // A node's relations as the DOM holds them, read through the getters of its prototypes.
+    // A plain property can say something else: a document's named elements (with a
+    // `<form name="host">` in it, `document.host` is that form), a form's controls (a field
+    // named parentNode, nodeType or host is what the form gives for that name), and a link's
+    // `host` (the host name of its address). Without the prototypes (no DOM, as in the tests'
+    // stand-in), the plain property.
+    function related(type, name, call) {
+      var proto = win[type] && win[type].prototype, own = null;
+      try { own = proto ? Object.getOwnPropertyDescriptor(proto, name) : null; } catch (error) { own = null; }
+      var read = own && (call ? own.value : own.get);
+      return function (node) {
+        if (!node) return null;
+        try {
+          if (typeof read === 'function') return read.call(node);
+          var said = node[name];
+          return call ? (typeof said === 'function' ? said.call(node) : null) : said;
+        } catch (error) { return null; }
+      };
+    }
+    var parentOf = related('Node', 'parentNode'), typeOf = related('Node', 'nodeType'),
+      slotOf = related('Element', 'assignedSlot'), hostOf = related('ShadowRoot', 'host'),
+      rootNodeOf = related('Node', 'getRootNode', true);
     // the element a node is drawn in: its slot where it is slotted, its parent, or the host
-    // of the shadow root it is the top of; none above the document's root element
+    // of the shadow root it is the top of; none above the document's root element, and none
+    // where what is above is not an element
     function around(node) {
-      var up = node.assignedSlot || node.parentNode;
-      if (!up) return null;
-      if (up.host) return up.host;
-      return up.nodeType === 9 || up.nodeType === 11 ? null : up;
+      var up = slotOf(node) || parentOf(node);
+      if (up && typeOf(up) === 11) up = hostOf(up);
+      return up && typeOf(up) === 1 ? up : null;
     }
     function backgroundOf(node) {
       var style = win.getComputedStyle ? win.getComputedStyle(node) : null;
@@ -3998,18 +4025,37 @@
     // What the scheme is read from, read without changing anything: the host's two tokens as
     // the browser computes them (another var() in them already put in), the colour scheme
     // they may resolve by (light-dark(), a system colour), the reader's, and what a ground
-    // with alpha shows through: the backgrounds around the page and the canvas's scheme. Null
-    // for a page out of the document, which has no host to read.
+    // with alpha shows through: the backgrounds around the page and the canvas's scheme.
+    // Those are read only where the ground as written may have alpha, or cannot be read
+    // here; an opaque ground hides them, and a switch to one with alpha changes the token.
+    // Null for a page out of the document, which has no host to read.
     function schemeSign() {
       if (root.isConnected === false || !win.getComputedStyle) return null;
       var style = win.getComputedStyle(root);
       if (!style || !style.getPropertyValue) return null;
       var reader = win.matchMedia ? win.matchMedia(DARK_READER) : null;
-      var behind = [];
-      for (var node = around(root); node; node = around(node)) behind.push(backgroundOf(node));
-      return [style.getPropertyValue('--ink'), style.getPropertyValue('--surface'),
-        style.getPropertyValue('color-scheme'), reader && reader.matches ? 'dark' : 'light',
-        behind.join(';'), canvasScheme()].join('\n');
+      var surface = style.getPropertyValue('--surface'), behind = '';
+      if (seenThroughMay(surface)) {
+        var said = [], steps = 0;
+        for (var node = around(root); node && ++steps <= WALK_LIMIT; node = around(node)) said.push(backgroundOf(node));
+        behind = said.join(';') + '\n' + canvasScheme();
+      }
+      return [style.getPropertyValue('--ink'), surface, style.getPropertyValue('color-scheme'),
+        reader && reader.matches ? 'dark' : 'light', behind].join('\n');
+    }
+    // whether a ground as written may show what is behind it: it has alpha, or it cannot be
+    // read here (light-dark(), a colour this script does not parse). The last answer is
+    // kept, as a look asks it again for the same text.
+    var seenThroughText = null, seenThroughAnswer = true;
+    function seenThroughMay(text) {
+      text = String(text || '').trim();
+      if (!text) return false;
+      if (text !== seenThroughText) {
+        var c = colourOf(text, doc);
+        seenThroughText = text;
+        seenThroughAnswer = !c || c.alpha < 1;
+      }
+      return seenThroughAnswer;
     }
 
     // A host's colour token as the browser resolves it, set on a probe in the page, so that
@@ -4069,11 +4115,11 @@
       var listeners = sharedListeners();
       function tops() { // the document, and each shadow root from the page's out to it
         var out = [doc];
-        for (var node = root; node && node.getRootNode; ) {
-          var top = node.getRootNode();
-          if (!top || top === doc || !top.host) break;
+        for (var node = root, steps = 0; node && ++steps <= WALK_LIMIT; ) {
+          var top = rootNodeOf(node), host = top && top !== doc && typeOf(top) === 11 ? hostOf(top) : null;
+          if (!host) break;
           out.push(top);
-          node = top.host;
+          node = host;
         }
         return out;
       }
