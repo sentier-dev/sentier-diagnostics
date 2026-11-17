@@ -446,13 +446,22 @@ test('the page refuses a breakdown for each reason the check has, and says which
     return drawn.byId['item-body'].seen().join(' ');
   };
   const indicator = Object.keys(wheat().indicators)[0];
+  const other = (b) => data.states.map((s) => s.id).find((id) => id !== b.from && id !== b.to);
   const cases = [
     ['is not a breakdown', (b) => { b.format = 'sentier-diagnostics-breakdown/2'; }],
     // the item's own breakdown, named for the whole way: its states are not the whole way's
     ['is of another product or another step', null, 'total'],
+    // one of the three it names changed alone: another item, or a step that ends or starts elsewhere
+    ['is of another product or another step', (b) => { b.item = 'p02'; }],
+    ['is of another product or another step', (b) => { b.to = other(b); }],
+    ['is of another product or another step', (b) => { b.from = other(b); }],
     ['holds no indicators', (b) => { b.indicators = {}; }],
     ['names an indicator this file does not hold, x:nowhere', (b) => { b.indicators['x:nowhere'] = b.indicators[indicator]; delete b.indicators[indicator]; }],
     ['is not of the shape of a breakdown in', (b) => { b.indicators[indicator].parts[0].values = [1]; }],
+    ['is not of the shape of a breakdown in', (b) => { b.indicators[indicator].total = [b.indicators[indicator].total[0]]; }],
+    ['is not of the shape of a breakdown in', (b) => { b.indicators[indicator].rest = [b.indicators[indicator].rest[0], 'x']; }],
+    ['is not of the shape of a breakdown in', (b) => { b.indicators[indicator].parts = {}; }],
+    ['is not of the shape of a breakdown in', (b) => { b.indicators[indicator] = null; }],
     ['does not add up', (b) => { b.indicators[indicator].rest[0] += 1; }],
     ['is not of this file', (b) => { const e = b.indicators[indicator]; e.total[1] += 1; e.rest[1] += 1; }],
   ];
