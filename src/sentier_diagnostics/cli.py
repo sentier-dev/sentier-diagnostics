@@ -5,7 +5,7 @@ sentier-diagnostics check FILE [FILE ...]      exit 1 if any file is not one a p
                                                a fixes file against the file it names)
 sentier-diagnostics build DESCRIPTION --out FILE
 sentier-diagnostics summary FILE
-sentier-diagnostics page FILE --out FOLDER
+sentier-diagnostics page FILE --out FOLDER [--fixes FIXES]
 sentier-diagnostics example --out FOLDER
 """
 
@@ -88,6 +88,7 @@ def main(argv=None) -> int:
     one = commands.add_parser("page", help="write the static page of a diagnostics file")
     one.add_argument("file", type=Path)
     one.add_argument("--out", type=Path, required=True)
+    one.add_argument("--fixes", type=Path, help="a file of fixes of this file: the page offers any set")
     one = commands.add_parser("example", help="write the made-up example and its page")
     one.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
@@ -111,7 +112,8 @@ def main(argv=None) -> int:
             data = chain.read(args.file)
             found, absent = page.named_breakdowns(data, args.file.parent)
             full = page.named_matrix(data, args.file.parent)
-            where = page.write(data, args.out, found, full)
+            fx = fixes.read(args.fixes) if args.fixes else None
+            where = page.write(data, args.out, found, full, fx)
             for name in absent:
                 print(f"note: the breakdown {name} is not beside the file; the page says so")
             if data.get("matrix") and full is None:
