@@ -1,6 +1,6 @@
 """Steps taken together: the whole way judged with the noise of its steps (SPEC section 5.3),
-the matrix that lets the page compose any set of steps (section 4.5, `"="`), and the
-composition itself (`together`, section 3), whose counts the page is held to.
+the matrix the page judges a run of steps from (section 4.5, `"="`), and the run itself
+(`together`, section 3), whose counts the page is held to.
 
 The fixture `fixtures/together.json` is written by
 
@@ -21,9 +21,8 @@ from . import helpers
 from .helpers import A, B
 
 FIXTURE = Path(__file__).parent / "fixtures" / "together.json"
-#: sets of the local example's four steps: one run, steps apart, every step but one, and a
-#: set without step 0, whose moves are counted closer to or further from the published results
-SETS = [[1, 2], [0, 2], [1, 3], [0, 1, 3], [2, 3]]
+#: every run of two or more of the local example's four steps, short of the whole way
+RUNS = [(0, 1), (1, 2), (2, 3), (0, 2), (1, 3)]
 STEPS = ("one", "two", "three", "four")
 #: `n` moves by 2% in a step whose two builds differ by 3%: within noise in that step, and
 #: over the whole way, which the other steps leave as it is (sentier-agribalyse's "codes"
@@ -170,8 +169,8 @@ class Matrix(unittest.TestCase):
 def fixture() -> dict:
     data, full = example.build_local()
     return {
-        "about": "Counts of sets of steps of examples/local, composed by together.counts; the page is held to them.",
-        "sets": [{"steps": chosen, **together.counts(data, full, chosen)} for chosen in SETS],
+        "about": "Counts of every run of steps of examples/local, judged by together.counts; the page is held to them.",
+        "runs": [{"first": a, "last": b, **together.counts(data, full, a, b)} for a, b in RUNS],
     }
 
 
@@ -185,7 +184,7 @@ class Together(unittest.TestCase):
     def test_one_run_is_the_states_it_runs_between(self):
         # steps 1 to 2 together are the state before step 1 against the state after step 2,
         # exactly: every item's class is the rule's on those two results
-        found = together.counts(self.data, self.full, [1, 2])
+        found = together.counts(self.data, self.full, 1, 2)
         nstates = len(self.data["states"])
         ids = [i["id"] for i in self.data["indicators"]]
         floors = {(f["indicator"], f["unit"]): f["value"] for f in self.data["rule"]["floors"]}
@@ -198,38 +197,28 @@ class Together(unittest.TestCase):
                 kind = rule.judge(values[1], values[3], floor=floors[(indicator, row[4])], tolerance=tolerance, noise=noise)[0]
                 self.assertEqual(found["classes"][row[0]][indicator], kind)
 
-    def test_steps_apart_add_their_differences(self):
-        values = [1.0, 2.0, 2.5, 4.0]
-        # steps 0 and 2: 1.0, plus 1.0 from step 0 and 1.5 from step 2
-        self.assertEqual(together.pair(values, together.runs_of([0, 2])), (1.0, 3.5))
-        # which is every step but step 1: the last result with step 1's difference taken off
-        self.assertEqual(together.pair(values, together.runs_of([0, 2]))[1], values[-1] - (values[2] - values[1]))
-        # a result the set needs that is missing makes its side missing; one it skips does not
-        self.assertEqual(together.pair([1.0, 2.0, None, 4.0], together.runs_of([0, 2])), (1.0, None))
-        self.assertEqual(together.pair([1.0, None, 2.5, 4.0], together.runs_of([2])), (2.5, 4.0))
-
-    def test_a_set_takes_no_verdict_and_its_noise_is_the_largest_of_its_steps(self):
-        found = together.counts(self.data, self.full, [2, 3])
+    def test_a_run_takes_no_verdict_and_its_noise_is_the_largest_of_its_steps(self):
+        found = together.counts(self.data, self.full, 2, 3)
         self.assertTrue(all(block["verdicts"] is None for block in found["blocks"].values()))
-        # step 3 measured noise in water: a set with it takes that noise, one without has none
+        # step 3 measured noise in water: a run with it takes that noise, one without has none
         water = "x:water"
         self.assertGreater(fileformat.noise_together(self.data["steps"][2:4]).get(water, 0), 0)
         self.assertNotIn(water, fileformat.noise_together(self.data["steps"][0:3]))
 
     def test_closer_and_further_only_from_the_published_results_and_without_step_0(self):
-        # the local example starts from the published results: a set without step 0 counts
+        # the local example starts from the published results: a run without step 0 counts
         # its moves closer to or further from them, one with step 0 counts none
-        found = together.counts(self.data, self.full, [1, 3])["blocks"]
+        found = together.counts(self.data, self.full, 1, 3)["blocks"]
         for block in found.values():
             moved = sum(block["classes"][kind] for kind in rule.MOVES)
             self.assertLessEqual(block["closer"] + block["further"], moved)
         self.assertGreater(sum(b["closer"] + b["further"] for b in found.values()), 0)
-        self.assertTrue(all(b["closer"] is None for b in together.counts(self.data, self.full, [0, 2])["blocks"].values()))
+        self.assertTrue(all(b["closer"] is None for b in together.counts(self.data, self.full, 0, 2)["blocks"].values()))
 
     def test_one_step_and_every_step_are_the_files_own(self):
-        for chosen in ([1], [0, 1, 2, 3], [], [4]):
-            with self.subTest(chosen), self.assertRaises(ValueError):
-                together.counts(self.data, self.full, chosen)
+        for first, last in ((1, 1), (0, 3), (2, 1), (3, 4), (-1, 1)):
+            with self.subTest((first, last)), self.assertRaises(ValueError):
+                together.counts(self.data, self.full, first, last)
 
 
 if __name__ == "__main__":

@@ -796,20 +796,20 @@ test('a card says over how many ratios its median is, how many have none, and wh
   }
 });
 
-// ------------------------------------------------------------------ several steps together
+// ------------------------------------------------------------------ a run of steps
 
 const pressed = (drawn) => chips(drawn).filter((c) => c.getAttribute('aria-pressed') === 'true').map((c) => c.getAttribute('data-comp'));
 const chipOf = (drawn, id) => chips(drawn).find((c) => c.getAttribute('data-comp') === id);
-const ticks = (drawn) => drawn.byId['pick-list'].querySelectorAll('input[data-k]');
-const tickOf = (drawn, k) => ticks(drawn).find((box) => box.getAttribute('data-k') === String(k));
-const ticked = (drawn) => ticks(drawn).filter((box) => box.checked).map((box) => +box.getAttribute('data-k'));
-const together = () => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'together.json'), 'utf8')).sets;
+const pickRows = (drawn) => drawn.byId['pick-list'].querySelectorAll('button[data-pick]');
+const rowOf = (drawn, k) => pickRows(drawn).find((b) => b.getAttribute('data-pick') === String(k));
+const chosenRows = (drawn) => pickRows(drawn).filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => +b.getAttribute('data-pick'));
+const together = () => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'together.json'), 'utf8')).runs;
+const boundaries = () => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'boundaries.json'), 'utf8')).cases;
 const withMatrix = () => dom.page(local(), undefined, { globals: { SENTIER_DIAGNOSTICS_MATRIX: full() } });
 const tagged = (node, tag) => (node.tagName === tag ? [node] : []).concat(...(node.childNodes || []).map((c) => tagged(c, tag)));
-// the address of a set of steps of a file, as the page writes it: runs as first:last
-const stepsAddress = (data, set) => 'steps=' + page.runsOf(set).map((r) => r[0] === r[1]
-  ? encodeURIComponent(data.steps[r[0]].id)
-  : encodeURIComponent(data.steps[r[0]].id) + ':' + encodeURIComponent(data.steps[r[1]].id)).join(',');
+const ids = (data, first, last) => data.steps.slice(first, last + 1).map((s) => s.id);
+// the address of a run of steps of a file, as the page writes it: its first and last step
+const runAddress = (data, first, last) => 'steps=' + encodeURIComponent(data.steps[first].id) + ':' + encodeURIComponent(data.steps[last].id);
 // what a grid shows: per row, the class of each indicator
 const gridClasses = (drawn, data) => {
   const heads = drawn.byId['grid-table'].querySelectorAll('th[scope="col"]').slice(2)
@@ -828,32 +828,39 @@ test('the page judges with the rule of the Python on every acceptance case', () 
   }
 });
 
-test('a set of steps adds what each run of them did, a single run being its own two states', () => {
-  assert.deepEqual(page.runsOf([0, 1, 3, 5, 6]), [[0, 1], [3, 3], [5, 6]]);
-  const values = [1, 2, 2.5, 4];
-  assert.deepEqual(page.composePair(values, [[1, 2]]), [2, 4]);
-  assert.deepEqual(page.composePair(values, [[0, 0], [2, 2]]), [1, 3.5]); // every step but step 1
-  assert.deepEqual(page.composePair([1, 2, null, 4], [[0, 0], [2, 2]]), [1, null]);
-  assert.deepEqual(page.composePair([1, null, 2.5, 4], [[2, 2]]), [2.5, 4]);
+test('the page judges as the Python on every edge of the rule, down to the last bit', () => {
+  const all = boundaries();
+  assert.ok(all.length > 700, String(all.length));
+  for (const c of all) {
+    assert.deepEqual(page.judge(c.before, c.after, c.floor, c.tolerance, c.noise), [c.class, c.direction, c.band], c.why + ': ' + c.before + ' to ' + c.after);
+  }
+});
+
+test('a run of steps is the two built states it lies between, never a sum', () => {
+  assert.deepEqual(page.runPair([1, 2, 2.5, 4], 1, 2), [2, 4]);
+  assert.deepEqual(page.runPair([1, null, 2.5, 4], 2, 2), [2.5, 4]);
+  assert.deepEqual(page.runPair([1, 2, null, 4], 0, 1), [1, null]);
   assert.deepEqual(page.noiseTogether([{ noise: { measured: true, by: { a: 1e-9 } } }, { noise: { measured: false, by: null } },
     { noise: { measured: true, by: { a: 3e-9, b: 2e-9 } } }]), { a: 3e-9, b: 2e-9 });
 });
 
-test('a set composed by the page has the classes and counts of the Python reference, item by item', () => {
+test('a run judged by the page has the classes and counts of the Python reference, item by item', () => {
   const data = local();
+  assert.equal(together().length, 5);
   for (const one of together()) {
     const drawn = withMatrix();
-    drawn.open(stepsAddress(data, one.steps));
+    drawn.open(runAddress(data, one.first, one.last));
+    const at = one.first + ' to ' + one.last;
     assert.equal(drawn.byId['step-said'].textContent.indexOf('The address'), -1, drawn.byId['step-said'].textContent);
-    assert.deepEqual(pressed(drawn), one.steps.map((k) => data.steps[k].id), String(one.steps));
-    assert.deepEqual(gridClasses(drawn, data), one.classes, String(one.steps));
+    assert.deepEqual(pressed(drawn), ids(data, one.first, one.last), at);
+    assert.deepEqual(gridClasses(drawn, data), one.classes, at);
     // every bar of every card is the reference's count, by its own words
     for (const card of cards(drawn)) {
       const block = one.blocks[card.getAttribute('data-indicator')];
       for (const bar of card.childNodes[2].childNodes) {
         const said = /^(.*?)(?: \(.*\))?: ([\d\s]+) of ([\d\s]+)$/.exec(bar.getAttribute('title'));
         const count = (said[1] in block.bands ? block.bands : block.classes)[said[1]];
-        assert.equal(+said[2].replace(/\s/g, ''), count, one.steps + ' ' + said[1]);
+        assert.equal(+said[2].replace(/\s/g, ''), count, at + ' ' + said[1]);
         assert.equal(+said[3].replace(/\s/g, ''), block.pairs);
       }
     }
@@ -883,33 +890,30 @@ test('the strip: the whole way first, then a cell per step, its bar as high as w
   assert.match(drawn.byId.comparison.className, /sd-numbered/);
 });
 
-test('Shift-click chooses every step from one to another, ⌘-click adds or takes off one; the address keeps it', () => {
+test('Shift-click chooses every step from one to another; steps apart are refused and said; the address keeps a run', () => {
   const data = example();
   const drawn = dom.page(data);
   chipOf(drawn, data.steps[1].id).dispatch('click', {});
   chipOf(drawn, data.steps[2].id).dispatch('click', { shiftKey: true });
-  assert.deepEqual(pressed(drawn), [data.steps[1].id, data.steps[2].id]);
-  assert.equal(drawn.context.location.hash, stepsAddress(data, [1, 2]));
-  assert.match(drawn.byId['step-said'].textContent, /^Steps 1 and 2 together\. /);
-  // steps apart: what is left out between them is said, and no step is taken in unasked
+  assert.deepEqual(pressed(drawn), ids(data, 1, 2));
+  assert.equal(drawn.context.location.hash, runAddress(data, 1, 2));
+  const said = drawn.byId['step-said'].textContent;
+  assert.match(said, /^Steps 1 and 2 together\. /);
+  assert.match(said, /two built states/);
+  assert.match(said, /No verdict: each claim is judged in its own step/);
+  for (const k of [1, 2]) assert.ok(said.includes('Step ' + k + ': ' + data.steps[k].label), k);
+  // ⌘ or Ctrl does as Shift: a run from the step chosen before, never steps apart
   chipOf(drawn, data.steps[0].id).dispatch('click', {});
   chipOf(drawn, data.steps[2].id).dispatch('click', { metaKey: true });
-  assert.deepEqual(pressed(drawn), [data.steps[0].id, data.steps[2].id]);
-  assert.equal(drawn.context.location.hash, stepsAddress(data, [0, 2]));
-  const said = drawn.byId['step-said'].textContent;
-  assert.match(said, /^Steps 0 and 2 together\. From the state before step 0 \(/);
-  assert.match(said, /Step 1 is left out\. Each chosen step adds the difference it made in this chain/);
-  assert.match(said, /No verdict: each claim is judged in its own step/);
-  for (const k of [0, 2]) assert.ok(said.includes('Step ' + k + ': ' + data.steps[k].label), k);
-  // the drawer holds the set's own row
-  drawn.open(stepsAddress(data, [0, 2]) + '&item=' + encodeURIComponent(data.items[0].id));
-  assert.ok(drawn.byId['item-body'].textContent.includes('Steps 0 and 2 together'));
-  // a step taken off with Ctrl; the last one stays
-  chipOf(drawn, data.steps[0].id).dispatch('click', { ctrlKey: true });
-  assert.deepEqual(pressed(drawn), [data.steps[2].id]);
-  chipOf(drawn, data.steps[2].id).dispatch('click', { metaKey: true });
-  assert.deepEqual(pressed(drawn), [data.steps[2].id]);
-  assert.match(drawn.byId['step-said'].textContent, /At least one step stays chosen/);
+  assert.deepEqual(pressed(drawn), ids(data, 0, 2));
+  assert.match(drawn.byId['step-said'].textContent, /^Steps 0 to 2 together\. /);
+  // the drawer holds the run's own row
+  drawn.open(runAddress(data, 0, 2) + '&item=' + encodeURIComponent(data.items[0].id));
+  assert.ok(drawn.byId['item-body'].textContent.includes('Steps 0 to 2 together'));
+  // steps apart, asked for by an address: refused, said why, the whole way shown
+  drawn.open('steps=' + data.steps[0].id + ',' + data.steps[2].id);
+  assert.deepEqual(pressed(drawn), ['total'].concat(data.steps.map((s) => s.id)));
+  assert.match(drawn.byId['step-said'].textContent, /^The address asks for steps 0 and 2\. Steps apart are not compared on a chain: each step was measured with every step before it applied/);
   // every step chosen is the whole way, its address none
   chipOf(drawn, data.steps[0].id).dispatch('click', {});
   chipOf(drawn, data.steps[3].id).dispatch('click', { shiftKey: true });
@@ -917,64 +921,48 @@ test('Shift-click chooses every step from one to another, ⌘-click adds or take
   assert.match(drawn.byId['step-said'].textContent, /^The whole way: /);
 });
 
-test('every step but one is said so, and is the whole way with that step\'s difference taken off', () => {
-  const data = example();
-  const drawn = dom.page(data);
-  drawn.byId['pick-all'].dispatch('click', {});
-  tickOf(drawn, 2).dispatch('click', {});
-  assert.deepEqual(ticked(drawn), [0, 1, 3]);
-  assert.match(drawn.byId['step-said'].textContent, /^Every step but step 2\. /);
-  assert.equal(drawn.byId['pick-summary'].textContent, '3 of 4 steps');
-});
-
-test('the list ticks any steps: Shift ticks those shown between, a group at once, "only" one alone', () => {
+test('the list chooses one step, or with Shift a run; it offers nothing that would choose steps apart', () => {
   const data = example();
   const drawn = dom.page(data);
   assert.equal(drawn.byId['pick-panel'].hidden, false); // a short chain opens its list
-  assert.deepEqual(ticked(drawn), [0, 1, 2, 3]);
-  drawn.byId['pick-list'].querySelectorAll('button[data-only]')[1].dispatch('click', {});
-  assert.deepEqual(ticked(drawn), [1]);
-  assert.equal(tickOf(drawn, 1).disabled, true); // the last step stays chosen
-  tickOf(drawn, 3).dispatch('click', { shiftKey: true });
-  assert.deepEqual(ticked(drawn), [1, 2, 3]);
-  tickOf(drawn, 2).dispatch('click', {});
-  assert.deepEqual(ticked(drawn), [1, 3]);
-  assert.deepEqual(pressed(drawn), [data.steps[1].id, data.steps[3].id]);
-  // the example's kinds are one step each: no group has a head, each row says its kind
-  assert.equal(drawn.byId['pick-list'].querySelectorAll('input[data-group]').length, 0);
+  assert.deepEqual(chosenRows(drawn), []); // the whole way is no row's
+  rowOf(drawn, 1).dispatch('click', {});
+  assert.deepEqual(chosenRows(drawn), [1]);
+  assert.deepEqual(pressed(drawn), [data.steps[1].id]);
+  rowOf(drawn, 3).dispatch('click', { shiftKey: true });
+  assert.deepEqual(chosenRows(drawn), [1, 2, 3]);
+  rowOf(drawn, 0).dispatch('click', {});
+  assert.deepEqual(chosenRows(drawn), [0]);
+  // the example's kinds are one step each: no group has a heading, each row says its kind
+  assert.equal(drawn.byId['pick-list'].querySelectorAll('button[data-group]').length, 0);
   assert.ok(drawn.byId['pick-list'].textContent.includes(data.steps[2].kind));
-  // the steps where something moved, at once
-  drawn.byId['pick-active'].dispatch('click', {});
-  const active = data.steps.map((s, k) => k).filter((k) => Object.values(data.counts.steps[data.steps[k].id])
-    .some((b) => ['differs', 'beyond 10x', 'zero reference', 'zero result', 'sign change'].some((c) => b.classes[c])));
-  assert.deepEqual(ticked(drawn), active);
+  assert.equal(tagged(drawn.byId['pick-list'], 'INPUT').length, 0);
+  assert.equal(drawn.byId['pick-active'], undefined);
+  drawn.byId['pick-all'].dispatch('click', {});
+  assert.deepEqual(pressed(drawn), ['total'].concat(data.steps.map((s) => s.id)));
 });
 
-test('consecutive steps of one kind are one group, its box ticks them all, half ticked or not', () => {
+test('consecutive steps of one kind are one group, whose heading chooses their run', () => {
   const data = example();
   data.steps.slice(1).forEach((s) => { s.kind = 'fix'; });
   const drawn = dom.page(data);
-  const group = drawn.byId['pick-list'].querySelectorAll('input[data-group]');
+  const group = drawn.byId['pick-list'].querySelectorAll('button[data-group]');
   assert.equal(group.length, 1);
-  assert.equal(group[0].checked, true);
-  drawn.byId['pick-list'].querySelectorAll('button[data-only]')[2].dispatch('click', {});
-  assert.equal(group[0].checked, false);
-  assert.equal(group[0].indeterminate, true);
-  assert.equal(drawn.byId['pick-list'].querySelectorAll('span[data-group-count]')[0].textContent, '1 of 3 chosen');
+  assert.equal(group[0].getAttribute('aria-pressed'), 'false');
+  const count = () => drawn.byId['pick-list'].querySelectorAll('span[data-group-count]')[0].textContent;
+  assert.equal(count(), '3 steps');
+  rowOf(drawn, 2).dispatch('click', {});
+  assert.equal(count(), '1 of 3 chosen');
   group[0].dispatch('click', {});
-  assert.deepEqual(ticked(drawn), [1, 2, 3]);
-  // the group is every step chosen: its box would leave none, and is off
-  assert.equal(group[0].disabled, true);
-  tickOf(drawn, 0).dispatch('click', {});
-  assert.deepEqual(ticked(drawn), [0, 1, 2, 3]);
-  group[0].dispatch('click', {});
-  assert.deepEqual(ticked(drawn), [0]);
+  assert.deepEqual(chosenRows(drawn), [1, 2, 3]);
+  assert.equal(group[0].getAttribute('aria-pressed'), 'true');
+  assert.match(drawn.byId['step-said'].textContent, /^Steps 1 to 3 together\. /);
 });
 
 test('the list finds steps by number, name or kind, and shows those where something moved', () => {
   const data = example();
   const drawn = dom.page(data);
-  const shown = () => drawn.byId['pick-list'].querySelectorAll('div[data-row]').map((row) => +row.getAttribute('data-row'));
+  const shown = () => drawn.byId['pick-list'].querySelectorAll('button[data-row]').map((row) => +row.getAttribute('data-row'));
   drawn.byId['pick-find'].value = data.steps[2].label.slice(0, 6).toUpperCase();
   drawn.byId['pick-find'].dispatch('input', {});
   assert.ok(shown().includes(2) && shown().length < data.steps.length, String(shown()));
@@ -983,63 +971,59 @@ test('the list finds steps by number, name or kind, and shows those where someth
   drawn.byId['pick-find'].dispatch('input', {});
   assert.deepEqual(shown(), []);
   assert.match(drawn.byId['pick-list'].textContent, /No step matches "nothing like it"/);
-  drawn.byId['pick-find'].value = '';
-  drawn.byId['pick-find'].dispatch('input', {});
   const still = example();
   for (const block of Object.values(still.counts.steps[still.steps[1].id])) for (const c of Object.keys(block.classes)) block.classes[c] = 0;
   const quiet = dom.page(still);
   quiet.byId['pick-moved'].checked = true;
   quiet.byId['pick-moved'].dispatch('change', {});
-  assert.deepEqual(quiet.byId['pick-list'].querySelectorAll('div[data-row]').map((row) => +row.getAttribute('data-row')), [0, 2, 3]);
+  assert.deepEqual(quiet.byId['pick-list'].querySelectorAll('button[data-row]').map((row) => +row.getAttribute('data-row')), [0, 2, 3]);
 });
 
-test('without every item no set is composed: the ticks are off, said why, and one step and the whole way remain', () => {
+test('without every item no run is judged: said why, and one step and the whole way remain', () => {
   const data = local(); // 6 of 10 listed; its matrix is not read over file:
   const drawn = dom.page(data);
-  assert.match(drawn.byId['pick-locked'].textContent, /composed from every product's results, and the matrix that holds them was not loaded/);
+  assert.match(drawn.byId['pick-locked'].textContent, /judged from every product's results, and the matrix that holds them was not loaded/);
   assert.equal(drawn.byId['pick-locked'].hidden, false);
-  assert.ok(ticks(drawn).every((box) => box.disabled));
   chipOf(drawn, data.steps[1].id).dispatch('click', {});
   chipOf(drawn, data.steps[2].id).dispatch('click', { shiftKey: true });
   assert.deepEqual(pressed(drawn), [data.steps[1].id]); // nothing changed
-  assert.match(drawn.byId['step-said'].textContent, /^Several steps together are composed from every product's results/);
-  // an address that asks for a set while the matrix is loading falls back, and is read again once it is here
+  assert.match(drawn.byId['step-said'].textContent, /^A run of steps is judged from every product's results/);
+  // an address that asks for a run while the matrix is loading falls back, and is read again once it is here
   const later = dom.page(local(), undefined, { attributes: { 'data-sd-matrix': 'matrix.js' } });
-  later.open(stepsAddress(data, [1, 3]));
-  assert.match(later.byId['step-said'].textContent, /^The address asks for steps 1 and 3 together\. .*the matrix that holds them is loading\. The whole way is shown\./);
+  later.open(runAddress(data, 1, 3));
+  assert.match(later.byId['step-said'].textContent, /^The address asks for steps 1 to 3\. .*the matrix that holds them is loading\. The whole way is shown\./);
   later.context.SENTIER_DIAGNOSTICS_MATRIX = full();
   later.head.querySelector('script[src]').onload();
-  assert.deepEqual(pressed(later), [data.steps[1].id, data.steps[3].id]);
+  assert.deepEqual(pressed(later), ids(data, 1, 3));
   assert.equal(later.byId['pick-locked'].hidden, true);
 });
 
-test('the page refuses a set whose steps its rule does not judge as the file does, and says where', () => {
+test('the page refuses a run whose steps its rule does not judge as the file does, and says where', () => {
   const data = local();
   const m = full();
   // one item's class in step 1 rewritten: the page's rule no longer gives the file's
-  const at = 3, nc = data.steps.length + 1;
+  const at = 3;
   const codes = m.classes[at].split('');
   codes[1] = codes[1] === '=' ? 'D' : '=';
   m.classes[at] = codes.join('');
-  assert.ok(nc > 1);
   const drawn = dom.page(data, undefined, { globals: { SENTIER_DIAGNOSTICS_MATRIX: m } });
-  drawn.open(stepsAddress(data, [1, 2]));
+  drawn.open(runAddress(data, 1, 2));
   assert.match(drawn.byId['step-said'].textContent, new RegExp("This page's rule does not give the file's classes in step 1 \\(" + m.items[at][0] + ', '));
   assert.deepEqual(pressed(drawn), ['total'].concat(data.steps.map((s) => s.id)));
-  // a set without that step is composed, and step 1 alone is still the file's
-  drawn.open(stepsAddress(data, [2, 3]));
-  assert.deepEqual(pressed(drawn), [data.steps[2].id, data.steps[3].id]);
+  // a run without that step is judged, and step 1 alone is still the file's
+  drawn.open(runAddress(data, 2, 3));
+  assert.deepEqual(pressed(drawn), ids(data, 2, 3));
   drawn.open('step=' + encodeURIComponent(data.steps[1].id));
   assert.deepEqual(pressed(drawn), [data.steps[1].id]);
 });
 
-test('an address names any set; one with a step the file does not have falls back to the whole way, said', () => {
+test('an address names a run; one with a step the file does not have falls back to the whole way, said', () => {
   const data = example();
   const drawn = dom.page(data);
-  drawn.open(stepsAddress(data, [0, 2, 3]));
-  assert.deepEqual(pressed(drawn), [0, 2, 3].map((k) => data.steps[k].id));
-  assert.equal(stepsAddress(data, [0, 2, 3]), 'steps=' + data.steps[0].id + ',' + data.steps[2].id + ':' + data.steps[3].id);
-  drawn.open('steps=' + data.steps[0].id + ',nothing-of-the-kind');
+  drawn.open(runAddress(data, 1, 3));
+  assert.deepEqual(pressed(drawn), ids(data, 1, 3));
+  assert.equal(runAddress(data, 1, 3), 'steps=' + data.steps[1].id + ':' + data.steps[3].id);
+  drawn.open('steps=' + data.steps[0].id + ':nothing-of-the-kind');
   assert.deepEqual(pressed(drawn), ['total'].concat(data.steps.map((s) => s.id)));
   assert.match(drawn.byId['step-said'].textContent, /^The address names a step this file does not have \(nothing-of-the-kind\)\. The whole way is shown\./);
   // an id holding a comma or a colon is still one id
@@ -1048,43 +1032,42 @@ test('an address names any set; one with a step the file does not have falls bac
   assert.equal(odd.steps[1].id, 'fix, part: one');
   const shown = dom.page(odd);
   chipOf(shown, odd.steps[1].id).dispatch('click', {});
-  chipOf(shown, odd.steps[3].id).dispatch('click', { metaKey: true });
+  chipOf(shown, odd.steps[2].id).dispatch('click', { shiftKey: true });
   const hash = shown.context.location.hash;
   shown.open('');
   shown.open(hash);
-  assert.deepEqual(pressed(shown), [odd.steps[1].id, odd.steps[3].id]);
+  assert.deepEqual(pressed(shown), ids(odd, 1, 2));
 });
 
-test('in a set, the steps where nothing moved and nothing was judged fold into one line', () => {
+test('in a run, the steps where nothing moved and nothing was judged fold into one line', () => {
   const data = example();
-  const set = [0, 1, 3];
   const drawn = dom.page(data);
-  drawn.open(stepsAddress(data, set));
+  drawn.open(runAddress(data, 0, 2));
   // the example's steps move something: nothing folds, every step has its own line
   assert.equal(tagged(drawn.byId['step-said'], 'DETAILS').length, 0);
-  for (const k of set) assert.ok(drawn.byId['step-said'].textContent.includes('Step ' + k + ': ' + data.steps[k].label), k);
+  for (const k of [0, 1, 2]) assert.ok(drawn.byId['step-said'].textContent.includes('Step ' + k + ': ' + data.steps[k].label), k);
   // the first two steps made quiet in the file's counts: a claim, nothing moved, no verdict
   const calm = example();
-  for (const k of set.slice(0, 2)) {
+  for (const k of [0, 1]) {
     for (const block of Object.values(calm.counts.steps[calm.steps[k].id])) {
       for (const name of Object.keys(block.classes)) block.classes[name] = 0;
       for (const name of Object.keys(block.verdicts)) block.verdicts[name] = 0;
     }
   }
   const shown = dom.page(calm);
-  shown.open(stepsAddress(calm, set));
+  shown.open(runAddress(calm, 0, 2));
   const folded = tagged(shown.byId['step-said'], 'DETAILS');
   assert.equal(folded.length, 1);
   assert.match(folded[0].textContent, /^Steps 0 and 1: nothing moved in any of them, as each claims\./);
-  for (const k of set.slice(0, 2)) assert.ok(folded[0].textContent.includes('Step ' + k + ': ' + calm.steps[k].label), 'each is still there to open');
-  assert.ok(!folded[0].textContent.includes('Step 3: '), 'the step that moved stays outside');
-  assert.ok(shown.byId['step-said'].textContent.includes('Step 3: ' + calm.steps[3].label));
+  for (const k of [0, 1]) assert.ok(folded[0].textContent.includes('Step ' + k + ': ' + calm.steps[k].label), 'each is still there to open');
+  assert.ok(!folded[0].textContent.includes('Step 2: '), 'the step that moved stays outside');
+  assert.ok(shown.byId['step-said'].textContent.includes('Step 2: ' + calm.steps[2].label));
   // a quiet step without a claim folds too, and the line no longer says each one claims it
   const unclaimed = JSON.parse(JSON.stringify(calm));
   unclaimed.steps[1].claim = null;
   for (const block of Object.values(unclaimed.counts.steps[unclaimed.steps[1].id])) block.verdicts = null;
   const plain = dom.page(unclaimed);
-  plain.open(stepsAddress(unclaimed, set));
+  plain.open(runAddress(unclaimed, 0, 2));
   const line = tagged(plain.byId['step-said'], 'DETAILS');
   assert.equal(line.length, 1);
   assert.match(line[0].textContent, /^Steps 0 and 1: nothing moved in any of them\.Step/);

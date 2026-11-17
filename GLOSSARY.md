@@ -10,7 +10,7 @@ The words this repository uses, each in one line. [SPEC.md](SPEC.md) says the re
 - **Step 0**: the reproduction of the published results. The start, never the target. A chain that does not start from the published results has no step 0: its steps are numbered from 1.
 - **Chain**: the states in order and the steps between them.
 - **Whole way**: from the first state to the last, every step together.
-- **Set of steps**: any steps chosen together that are neither one step nor the whole way; the page composes it from every item's results. A **run** is a span of chosen steps that follow each other.
+- **Run of steps**: two or more steps that follow each other, short of the whole way; compared as the two built states it lies between. Steps apart are not compared on a chain.
 - **Pair**: one item in one indicator, before and after a step.
 - **Class**: what a pair is, by one rule: agrees, within noise, differs, beyond 10x, zero reference, zero result, sign change, near zero, missing.
 - **Moved**: a pair of class differs, beyond 10x, zero reference, zero result or sign change. Only these have a direction.

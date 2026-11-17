@@ -1,6 +1,178 @@
 {
- "about": "Counts of sets of steps of examples/local, composed by together.counts; the page is held to them.",
- "sets": [
+ "about": "Counts of every run of steps of examples/local, judged by together.counts; the page is held to them.",
+ "runs": [
+  {
+   "blocks": {
+    "x:climate": {
+     "bands": {
+      "down, factor 1-1.1": 0,
+      "down, factor 1.1-1.25": 1,
+      "down, factor 1.25-2": 1,
+      "down, factor 2-10": 0,
+      "down, factor over 10": 0,
+      "up, factor 1-1.1": 0,
+      "up, factor 1.1-1.25": 1,
+      "up, factor 1.25-2": 0,
+      "up, factor 2-10": 0,
+      "up, factor over 10": 0
+     },
+     "classes": {
+      "agrees": 7,
+      "beyond 10x": 0,
+      "differs": 3,
+      "missing": 0,
+      "near zero": 0,
+      "sign change": 0,
+      "within noise": 0,
+      "zero reference": 0,
+      "zero result": 0
+     },
+     "closer": null,
+     "directions": {
+      "down": 2,
+      "up": 1
+     },
+     "further": null,
+     "missing": {
+      "after": 0,
+      "before": 0,
+      "both": 0
+     },
+     "pairs": 10,
+     "verdicts": null
+    },
+    "x:tox": {
+     "bands": {
+      "down, factor 1-1.1": 0,
+      "down, factor 1.1-1.25": 0,
+      "down, factor 1.25-2": 0,
+      "down, factor 2-10": 0,
+      "down, factor over 10": 0,
+      "up, factor 1-1.1": 1,
+      "up, factor 1.1-1.25": 0,
+      "up, factor 1.25-2": 0,
+      "up, factor 2-10": 0,
+      "up, factor over 10": 0
+     },
+     "classes": {
+      "agrees": 7,
+      "beyond 10x": 0,
+      "differs": 1,
+      "missing": 0,
+      "near zero": 2,
+      "sign change": 0,
+      "within noise": 0,
+      "zero reference": 0,
+      "zero result": 0
+     },
+     "closer": null,
+     "directions": {
+      "down": 0,
+      "up": 1
+     },
+     "further": null,
+     "missing": {
+      "after": 0,
+      "before": 0,
+      "both": 0
+     },
+     "pairs": 10,
+     "verdicts": null
+    },
+    "x:water": {
+     "bands": {
+      "down, factor 1-1.1": 0,
+      "down, factor 1.1-1.25": 0,
+      "down, factor 1.25-2": 0,
+      "down, factor 2-10": 0,
+      "down, factor over 10": 0,
+      "up, factor 1-1.1": 0,
+      "up, factor 1.1-1.25": 0,
+      "up, factor 1.25-2": 0,
+      "up, factor 2-10": 0,
+      "up, factor over 10": 0
+     },
+     "classes": {
+      "agrees": 9,
+      "beyond 10x": 0,
+      "differs": 0,
+      "missing": 1,
+      "near zero": 0,
+      "sign change": 0,
+      "within noise": 0,
+      "zero reference": 0,
+      "zero result": 0
+     },
+     "closer": null,
+     "directions": {
+      "down": 0,
+      "up": 0
+     },
+     "further": null,
+     "missing": {
+      "after": 0,
+      "before": 1,
+      "both": 0
+     },
+     "pairs": 10,
+     "verdicts": null
+    }
+   },
+   "classes": {
+    "p01": {
+     "x:climate": "differs",
+     "x:tox": "agrees",
+     "x:water": "agrees"
+    },
+    "p02": {
+     "x:climate": "agrees",
+     "x:tox": "agrees",
+     "x:water": "agrees"
+    },
+    "p03": {
+     "x:climate": "differs",
+     "x:tox": "agrees",
+     "x:water": "agrees"
+    },
+    "p04": {
+     "x:climate": "agrees",
+     "x:tox": "agrees",
+     "x:water": "agrees"
+    },
+    "p05": {
+     "x:climate": "differs",
+     "x:tox": "near zero",
+     "x:water": "agrees"
+    },
+    "p06": {
+     "x:climate": "agrees",
+     "x:tox": "agrees",
+     "x:water": "missing"
+    },
+    "p07": {
+     "x:climate": "agrees",
+     "x:tox": "agrees",
+     "x:water": "agrees"
+    },
+    "p08": {
+     "x:climate": "agrees",
+     "x:tox": "agrees",
+     "x:water": "agrees"
+    },
+    "p09": {
+     "x:climate": "agrees",
+     "x:tox": "near zero",
+     "x:water": "agrees"
+    },
+    "p10": {
+     "x:climate": "agrees",
+     "x:tox": "differs",
+     "x:water": "agrees"
+    }
+   },
+   "first": 0,
+   "last": 1
+  },
   {
    "blocks": {
     "x:climate": {
@@ -170,533 +342,8 @@
      "x:water": "agrees"
     }
    },
-   "steps": [
-    1,
-    2
-   ]
-  },
-  {
-   "blocks": {
-    "x:climate": {
-     "bands": {
-      "down, factor 1-1.1": 0,
-      "down, factor 1.1-1.25": 0,
-      "down, factor 1.25-2": 0,
-      "down, factor 2-10": 0,
-      "down, factor over 10": 0,
-      "up, factor 1-1.1": 0,
-      "up, factor 1.1-1.25": 0,
-      "up, factor 1.25-2": 0,
-      "up, factor 2-10": 0,
-      "up, factor over 10": 0
-     },
-     "classes": {
-      "agrees": 10,
-      "beyond 10x": 0,
-      "differs": 0,
-      "missing": 0,
-      "near zero": 0,
-      "sign change": 0,
-      "within noise": 0,
-      "zero reference": 0,
-      "zero result": 0
-     },
-     "closer": null,
-     "directions": {
-      "down": 0,
-      "up": 0
-     },
-     "further": null,
-     "missing": {
-      "after": 0,
-      "before": 0,
-      "both": 0
-     },
-     "pairs": 10,
-     "verdicts": null
-    },
-    "x:tox": {
-     "bands": {
-      "down, factor 1-1.1": 0,
-      "down, factor 1.1-1.25": 0,
-      "down, factor 1.25-2": 0,
-      "down, factor 2-10": 0,
-      "down, factor over 10": 0,
-      "up, factor 1-1.1": 1,
-      "up, factor 1.1-1.25": 0,
-      "up, factor 1.25-2": 0,
-      "up, factor 2-10": 0,
-      "up, factor over 10": 0
-     },
-     "classes": {
-      "agrees": 7,
-      "beyond 10x": 0,
-      "differs": 1,
-      "missing": 0,
-      "near zero": 2,
-      "sign change": 0,
-      "within noise": 0,
-      "zero reference": 0,
-      "zero result": 0
-     },
-     "closer": null,
-     "directions": {
-      "down": 0,
-      "up": 1
-     },
-     "further": null,
-     "missing": {
-      "after": 0,
-      "before": 0,
-      "both": 0
-     },
-     "pairs": 10,
-     "verdicts": null
-    },
-    "x:water": {
-     "bands": {
-      "down, factor 1-1.1": 0,
-      "down, factor 1.1-1.25": 0,
-      "down, factor 1.25-2": 0,
-      "down, factor 2-10": 0,
-      "down, factor over 10": 0,
-      "up, factor 1-1.1": 1,
-      "up, factor 1.1-1.25": 0,
-      "up, factor 1.25-2": 0,
-      "up, factor 2-10": 0,
-      "up, factor over 10": 0
-     },
-     "classes": {
-      "agrees": 7,
-      "beyond 10x": 0,
-      "differs": 1,
-      "missing": 2,
-      "near zero": 0,
-      "sign change": 0,
-      "within noise": 0,
-      "zero reference": 0,
-      "zero result": 0
-     },
-     "closer": null,
-     "directions": {
-      "down": 0,
-      "up": 1
-     },
-     "further": null,
-     "missing": {
-      "after": 1,
-      "before": 0,
-      "both": 1
-     },
-     "pairs": 10,
-     "verdicts": null
-    }
-   },
-   "classes": {
-    "p01": {
-     "x:climate": "agrees",
-     "x:tox": "agrees",
-     "x:water": "agrees"
-    },
-    "p02": {
-     "x:climate": "agrees",
-     "x:tox": "agrees",
-     "x:water": "agrees"
-    },
-    "p03": {
-     "x:climate": "agrees",
-     "x:tox": "agrees",
-     "x:water": "missing"
-    },
-    "p04": {
-     "x:climate": "agrees",
-     "x:tox": "agrees",
-     "x:water": "differs"
-    },
-    "p05": {
-     "x:climate": "agrees",
-     "x:tox": "near zero",
-     "x:water": "agrees"
-    },
-    "p06": {
-     "x:climate": "agrees",
-     "x:tox": "agrees",
-     "x:water": "missing"
-    },
-    "p07": {
-     "x:climate": "agrees",
-     "x:tox": "agrees",
-     "x:water": "agrees"
-    },
-    "p08": {
-     "x:climate": "agrees",
-     "x:tox": "agrees",
-     "x:water": "agrees"
-    },
-    "p09": {
-     "x:climate": "agrees",
-     "x:tox": "near zero",
-     "x:water": "agrees"
-    },
-    "p10": {
-     "x:climate": "agrees",
-     "x:tox": "differs",
-     "x:water": "agrees"
-    }
-   },
-   "steps": [
-    0,
-    2
-   ]
-  },
-  {
-   "blocks": {
-    "x:climate": {
-     "bands": {
-      "down, factor 1-1.1": 0,
-      "down, factor 1.1-1.25": 1,
-      "down, factor 1.25-2": 1,
-      "down, factor 2-10": 0,
-      "down, factor over 10": 0,
-      "up, factor 1-1.1": 0,
-      "up, factor 1.1-1.25": 1,
-      "up, factor 1.25-2": 0,
-      "up, factor 2-10": 0,
-      "up, factor over 10": 0
-     },
-     "classes": {
-      "agrees": 4,
-      "beyond 10x": 0,
-      "differs": 3,
-      "missing": 1,
-      "near zero": 0,
-      "sign change": 1,
-      "within noise": 0,
-      "zero reference": 0,
-      "zero result": 1
-     },
-     "closer": 0,
-     "directions": {
-      "down": 3,
-      "up": 2
-     },
-     "further": 5,
-     "missing": {
-      "after": 1,
-      "before": 0,
-      "both": 0
-     },
-     "pairs": 10,
-     "verdicts": null
-    },
-    "x:tox": {
-     "bands": {
-      "down, factor 1-1.1": 0,
-      "down, factor 1.1-1.25": 0,
-      "down, factor 1.25-2": 1,
-      "down, factor 2-10": 0,
-      "down, factor over 10": 0,
-      "up, factor 1-1.1": 0,
-      "up, factor 1.1-1.25": 0,
-      "up, factor 1.25-2": 0,
-      "up, factor 2-10": 0,
-      "up, factor over 10": 0
-     },
-     "classes": {
-      "agrees": 7,
-      "beyond 10x": 0,
-      "differs": 1,
-      "missing": 0,
-      "near zero": 1,
-      "sign change": 0,
-      "within noise": 0,
-      "zero reference": 1,
-      "zero result": 0
-     },
-     "closer": 0,
-     "directions": {
-      "down": 1,
-      "up": 1
-     },
-     "further": 2,
-     "missing": {
-      "after": 0,
-      "before": 0,
-      "both": 0
-     },
-     "pairs": 10,
-     "verdicts": null
-    },
-    "x:water": {
-     "bands": {
-      "down, factor 1-1.1": 0,
-      "down, factor 1.1-1.25": 0,
-      "down, factor 1.25-2": 0,
-      "down, factor 2-10": 0,
-      "down, factor over 10": 0,
-      "up, factor 1-1.1": 0,
-      "up, factor 1.1-1.25": 0,
-      "up, factor 1.25-2": 0,
-      "up, factor 2-10": 0,
-      "up, factor over 10": 1
-     },
-     "classes": {
-      "agrees": 7,
-      "beyond 10x": 1,
-      "differs": 0,
-      "missing": 1,
-      "near zero": 0,
-      "sign change": 0,
-      "within noise": 1,
-      "zero reference": 0,
-      "zero result": 0
-     },
-     "closer": 0,
-     "directions": {
-      "down": 0,
-      "up": 1
-     },
-     "further": 1,
-     "missing": {
-      "after": 1,
-      "before": 0,
-      "both": 0
-     },
-     "pairs": 10,
-     "verdicts": null
-    }
-   },
-   "classes": {
-    "p01": {
-     "x:climate": "differs",
-     "x:tox": "agrees",
-     "x:water": "agrees"
-    },
-    "p02": {
-     "x:climate": "agrees",
-     "x:tox": "agrees",
-     "x:water": "agrees"
-    },
-    "p03": {
-     "x:climate": "differs",
-     "x:tox": "agrees",
-     "x:water": "missing"
-    },
-    "p04": {
-     "x:climate": "agrees",
-     "x:tox": "agrees",
-     "x:water": "within noise"
-    },
-    "p05": {
-     "x:climate": "differs",
-     "x:tox": "near zero",
-     "x:water": "agrees"
-    },
-    "p06": {
-     "x:climate": "missing",
-     "x:tox": "agrees",
-     "x:water": "agrees"
-    },
-    "p07": {
-     "x:climate": "zero result",
-     "x:tox": "agrees",
-     "x:water": "agrees"
-    },
-    "p08": {
-     "x:climate": "sign change",
-     "x:tox": "differs",
-     "x:water": "agrees"
-    },
-    "p09": {
-     "x:climate": "agrees",
-     "x:tox": "zero reference",
-     "x:water": "agrees"
-    },
-    "p10": {
-     "x:climate": "agrees",
-     "x:tox": "agrees",
-     "x:water": "beyond 10x"
-    }
-   },
-   "steps": [
-    1,
-    3
-   ]
-  },
-  {
-   "blocks": {
-    "x:climate": {
-     "bands": {
-      "down, factor 1-1.1": 0,
-      "down, factor 1.1-1.25": 1,
-      "down, factor 1.25-2": 1,
-      "down, factor 2-10": 0,
-      "down, factor over 10": 0,
-      "up, factor 1-1.1": 0,
-      "up, factor 1.1-1.25": 1,
-      "up, factor 1.25-2": 0,
-      "up, factor 2-10": 0,
-      "up, factor over 10": 0
-     },
-     "classes": {
-      "agrees": 4,
-      "beyond 10x": 0,
-      "differs": 3,
-      "missing": 1,
-      "near zero": 0,
-      "sign change": 1,
-      "within noise": 0,
-      "zero reference": 0,
-      "zero result": 1
-     },
-     "closer": null,
-     "directions": {
-      "down": 3,
-      "up": 2
-     },
-     "further": null,
-     "missing": {
-      "after": 1,
-      "before": 0,
-      "both": 0
-     },
-     "pairs": 10,
-     "verdicts": null
-    },
-    "x:tox": {
-     "bands": {
-      "down, factor 1-1.1": 0,
-      "down, factor 1.1-1.25": 0,
-      "down, factor 1.25-2": 1,
-      "down, factor 2-10": 0,
-      "down, factor over 10": 0,
-      "up, factor 1-1.1": 1,
-      "up, factor 1.1-1.25": 0,
-      "up, factor 1.25-2": 0,
-      "up, factor 2-10": 0,
-      "up, factor over 10": 0
-     },
-     "classes": {
-      "agrees": 6,
-      "beyond 10x": 0,
-      "differs": 2,
-      "missing": 0,
-      "near zero": 1,
-      "sign change": 0,
-      "within noise": 0,
-      "zero reference": 1,
-      "zero result": 0
-     },
-     "closer": null,
-     "directions": {
-      "down": 1,
-      "up": 2
-     },
-     "further": null,
-     "missing": {
-      "after": 0,
-      "before": 0,
-      "both": 0
-     },
-     "pairs": 10,
-     "verdicts": null
-    },
-    "x:water": {
-     "bands": {
-      "down, factor 1-1.1": 0,
-      "down, factor 1.1-1.25": 0,
-      "down, factor 1.25-2": 0,
-      "down, factor 2-10": 0,
-      "down, factor over 10": 0,
-      "up, factor 1-1.1": 0,
-      "up, factor 1.1-1.25": 0,
-      "up, factor 1.25-2": 0,
-      "up, factor 2-10": 0,
-      "up, factor over 10": 1
-     },
-     "classes": {
-      "agrees": 6,
-      "beyond 10x": 1,
-      "differs": 0,
-      "missing": 2,
-      "near zero": 0,
-      "sign change": 0,
-      "within noise": 1,
-      "zero reference": 0,
-      "zero result": 0
-     },
-     "closer": null,
-     "directions": {
-      "down": 0,
-      "up": 1
-     },
-     "further": null,
-     "missing": {
-      "after": 1,
-      "before": 0,
-      "both": 1
-     },
-     "pairs": 10,
-     "verdicts": null
-    }
-   },
-   "classes": {
-    "p01": {
-     "x:climate": "differs",
-     "x:tox": "agrees",
-     "x:water": "agrees"
-    },
-    "p02": {
-     "x:climate": "agrees",
-     "x:tox": "agrees",
-     "x:water": "agrees"
-    },
-    "p03": {
-     "x:climate": "differs",
-     "x:tox": "agrees",
-     "x:water": "missing"
-    },
-    "p04": {
-     "x:climate": "agrees",
-     "x:tox": "agrees",
-     "x:water": "within noise"
-    },
-    "p05": {
-     "x:climate": "differs",
-     "x:tox": "near zero",
-     "x:water": "agrees"
-    },
-    "p06": {
-     "x:climate": "missing",
-     "x:tox": "agrees",
-     "x:water": "missing"
-    },
-    "p07": {
-     "x:climate": "zero result",
-     "x:tox": "agrees",
-     "x:water": "agrees"
-    },
-    "p08": {
-     "x:climate": "sign change",
-     "x:tox": "differs",
-     "x:water": "agrees"
-    },
-    "p09": {
-     "x:climate": "agrees",
-     "x:tox": "zero reference",
-     "x:water": "agrees"
-    },
-    "p10": {
-     "x:climate": "agrees",
-     "x:tox": "differs",
-     "x:water": "beyond 10x"
-    }
-   },
-   "steps": [
-    0,
-    1,
-    3
-   ]
+   "first": 1,
+   "last": 2
   },
   {
    "blocks": {
@@ -867,10 +514,352 @@
      "x:water": "beyond 10x"
     }
    },
-   "steps": [
-    2,
-    3
-   ]
+   "first": 2,
+   "last": 3
+  },
+  {
+   "blocks": {
+    "x:climate": {
+     "bands": {
+      "down, factor 1-1.1": 0,
+      "down, factor 1.1-1.25": 1,
+      "down, factor 1.25-2": 1,
+      "down, factor 2-10": 0,
+      "down, factor over 10": 0,
+      "up, factor 1-1.1": 0,
+      "up, factor 1.1-1.25": 1,
+      "up, factor 1.25-2": 0,
+      "up, factor 2-10": 0,
+      "up, factor over 10": 0
+     },
+     "classes": {
+      "agrees": 7,
+      "beyond 10x": 0,
+      "differs": 3,
+      "missing": 0,
+      "near zero": 0,
+      "sign change": 0,
+      "within noise": 0,
+      "zero reference": 0,
+      "zero result": 0
+     },
+     "closer": null,
+     "directions": {
+      "down": 2,
+      "up": 1
+     },
+     "further": null,
+     "missing": {
+      "after": 0,
+      "before": 0,
+      "both": 0
+     },
+     "pairs": 10,
+     "verdicts": null
+    },
+    "x:tox": {
+     "bands": {
+      "down, factor 1-1.1": 0,
+      "down, factor 1.1-1.25": 0,
+      "down, factor 1.25-2": 0,
+      "down, factor 2-10": 0,
+      "down, factor over 10": 0,
+      "up, factor 1-1.1": 1,
+      "up, factor 1.1-1.25": 0,
+      "up, factor 1.25-2": 0,
+      "up, factor 2-10": 0,
+      "up, factor over 10": 0
+     },
+     "classes": {
+      "agrees": 7,
+      "beyond 10x": 0,
+      "differs": 1,
+      "missing": 0,
+      "near zero": 2,
+      "sign change": 0,
+      "within noise": 0,
+      "zero reference": 0,
+      "zero result": 0
+     },
+     "closer": null,
+     "directions": {
+      "down": 0,
+      "up": 1
+     },
+     "further": null,
+     "missing": {
+      "after": 0,
+      "before": 0,
+      "both": 0
+     },
+     "pairs": 10,
+     "verdicts": null
+    },
+    "x:water": {
+     "bands": {
+      "down, factor 1-1.1": 0,
+      "down, factor 1.1-1.25": 0,
+      "down, factor 1.25-2": 0,
+      "down, factor 2-10": 0,
+      "down, factor over 10": 0,
+      "up, factor 1-1.1": 1,
+      "up, factor 1.1-1.25": 0,
+      "up, factor 1.25-2": 0,
+      "up, factor 2-10": 0,
+      "up, factor over 10": 0
+     },
+     "classes": {
+      "agrees": 7,
+      "beyond 10x": 0,
+      "differs": 1,
+      "missing": 2,
+      "near zero": 0,
+      "sign change": 0,
+      "within noise": 0,
+      "zero reference": 0,
+      "zero result": 0
+     },
+     "closer": null,
+     "directions": {
+      "down": 0,
+      "up": 1
+     },
+     "further": null,
+     "missing": {
+      "after": 1,
+      "before": 1,
+      "both": 0
+     },
+     "pairs": 10,
+     "verdicts": null
+    }
+   },
+   "classes": {
+    "p01": {
+     "x:climate": "differs",
+     "x:tox": "agrees",
+     "x:water": "agrees"
+    },
+    "p02": {
+     "x:climate": "agrees",
+     "x:tox": "agrees",
+     "x:water": "agrees"
+    },
+    "p03": {
+     "x:climate": "differs",
+     "x:tox": "agrees",
+     "x:water": "missing"
+    },
+    "p04": {
+     "x:climate": "agrees",
+     "x:tox": "agrees",
+     "x:water": "differs"
+    },
+    "p05": {
+     "x:climate": "differs",
+     "x:tox": "near zero",
+     "x:water": "agrees"
+    },
+    "p06": {
+     "x:climate": "agrees",
+     "x:tox": "agrees",
+     "x:water": "missing"
+    },
+    "p07": {
+     "x:climate": "agrees",
+     "x:tox": "agrees",
+     "x:water": "agrees"
+    },
+    "p08": {
+     "x:climate": "agrees",
+     "x:tox": "agrees",
+     "x:water": "agrees"
+    },
+    "p09": {
+     "x:climate": "agrees",
+     "x:tox": "near zero",
+     "x:water": "agrees"
+    },
+    "p10": {
+     "x:climate": "agrees",
+     "x:tox": "differs",
+     "x:water": "agrees"
+    }
+   },
+   "first": 0,
+   "last": 2
+  },
+  {
+   "blocks": {
+    "x:climate": {
+     "bands": {
+      "down, factor 1-1.1": 0,
+      "down, factor 1.1-1.25": 1,
+      "down, factor 1.25-2": 1,
+      "down, factor 2-10": 0,
+      "down, factor over 10": 0,
+      "up, factor 1-1.1": 0,
+      "up, factor 1.1-1.25": 1,
+      "up, factor 1.25-2": 0,
+      "up, factor 2-10": 0,
+      "up, factor over 10": 0
+     },
+     "classes": {
+      "agrees": 4,
+      "beyond 10x": 0,
+      "differs": 3,
+      "missing": 1,
+      "near zero": 0,
+      "sign change": 1,
+      "within noise": 0,
+      "zero reference": 0,
+      "zero result": 1
+     },
+     "closer": 0,
+     "directions": {
+      "down": 3,
+      "up": 2
+     },
+     "further": 5,
+     "missing": {
+      "after": 1,
+      "before": 0,
+      "both": 0
+     },
+     "pairs": 10,
+     "verdicts": null
+    },
+    "x:tox": {
+     "bands": {
+      "down, factor 1-1.1": 0,
+      "down, factor 1.1-1.25": 0,
+      "down, factor 1.25-2": 1,
+      "down, factor 2-10": 0,
+      "down, factor over 10": 0,
+      "up, factor 1-1.1": 0,
+      "up, factor 1.1-1.25": 0,
+      "up, factor 1.25-2": 0,
+      "up, factor 2-10": 0,
+      "up, factor over 10": 0
+     },
+     "classes": {
+      "agrees": 7,
+      "beyond 10x": 0,
+      "differs": 1,
+      "missing": 0,
+      "near zero": 1,
+      "sign change": 0,
+      "within noise": 0,
+      "zero reference": 1,
+      "zero result": 0
+     },
+     "closer": 0,
+     "directions": {
+      "down": 1,
+      "up": 1
+     },
+     "further": 2,
+     "missing": {
+      "after": 0,
+      "before": 0,
+      "both": 0
+     },
+     "pairs": 10,
+     "verdicts": null
+    },
+    "x:water": {
+     "bands": {
+      "down, factor 1-1.1": 0,
+      "down, factor 1.1-1.25": 0,
+      "down, factor 1.25-2": 0,
+      "down, factor 2-10": 0,
+      "down, factor over 10": 0,
+      "up, factor 1-1.1": 1,
+      "up, factor 1.1-1.25": 1,
+      "up, factor 1.25-2": 0,
+      "up, factor 2-10": 0,
+      "up, factor over 10": 1
+     },
+     "classes": {
+      "agrees": 7,
+      "beyond 10x": 1,
+      "differs": 2,
+      "missing": 0,
+      "near zero": 0,
+      "sign change": 0,
+      "within noise": 0,
+      "zero reference": 0,
+      "zero result": 0
+     },
+     "closer": 0,
+     "directions": {
+      "down": 0,
+      "up": 3
+     },
+     "further": 3,
+     "missing": {
+      "after": 0,
+      "before": 0,
+      "both": 0
+     },
+     "pairs": 10,
+     "verdicts": null
+    }
+   },
+   "classes": {
+    "p01": {
+     "x:climate": "differs",
+     "x:tox": "agrees",
+     "x:water": "agrees"
+    },
+    "p02": {
+     "x:climate": "agrees",
+     "x:tox": "agrees",
+     "x:water": "agrees"
+    },
+    "p03": {
+     "x:climate": "differs",
+     "x:tox": "agrees",
+     "x:water": "differs"
+    },
+    "p04": {
+     "x:climate": "agrees",
+     "x:tox": "agrees",
+     "x:water": "differs"
+    },
+    "p05": {
+     "x:climate": "differs",
+     "x:tox": "near zero",
+     "x:water": "agrees"
+    },
+    "p06": {
+     "x:climate": "missing",
+     "x:tox": "agrees",
+     "x:water": "agrees"
+    },
+    "p07": {
+     "x:climate": "zero result",
+     "x:tox": "agrees",
+     "x:water": "agrees"
+    },
+    "p08": {
+     "x:climate": "sign change",
+     "x:tox": "differs",
+     "x:water": "agrees"
+    },
+    "p09": {
+     "x:climate": "agrees",
+     "x:tox": "zero reference",
+     "x:water": "agrees"
+    },
+    "p10": {
+     "x:climate": "agrees",
+     "x:tox": "agrees",
+     "x:water": "beyond 10x"
+    }
+   },
+   "first": 1,
+   "last": 3
   }
  ]
 }

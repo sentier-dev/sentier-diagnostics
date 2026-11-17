@@ -253,8 +253,9 @@
   // ------------------------------------------------------------------ steps together
 
   // the counting rule, as rule.judge: the class, direction and band of one pair. The page
-  // judges with it only what no file holds, several steps chosen together, and only after it
-  // has judged each chosen step again and found the file's own class on every item.
+  // judges with it only what no file holds, a run of steps, and only after it has judged each
+  // step of the run again and found the file's own class on every item. Held to the Python
+  // rule by the shared cases and the boundaries the Python writes (tests/test_boundaries.py).
   var BEYOND_FACTOR = 10; // rule.BEYOND_FACTOR; the validator holds every file to it
   function classify(before, after, floor, tolerance, noise) {
     if (before === null || after === null) return 'missing';
@@ -288,25 +289,15 @@
     return out;
   }
 
-  // the pair of a set of steps in one indicator, from its results over the states: the result
-  // before the first chosen step, and that result with each run's difference added. One run
-  // is its own pair, exactly: the result after its last step. Runs apart add what each did in
-  // this chain, built on the steps before it. A side that needs a missing result is missing.
-  function composePair(values, runs) {
-    var before = values[runs[0][0]];
-    if (runs.length === 1) return [before, values[runs[0][1] + 1]];
-    if (before === null) return [null, null];
-    var sum = 0;
-    for (var i = 0; i < runs.length; i++) {
-      var a = values[runs[i][0]], b = values[runs[i][1] + 1];
-      if (a === null || b === null) return [before, null];
-      sum += b - a;
-    }
-    return [before, before + sum];
-  }
+  // the pair of a run of steps in one indicator, from its results over the states: the result
+  // before its first step and the result after its last, two built states, never a sum. Steps
+  // apart are not compared on a chain: each step was measured with every step before it
+  // applied, so its difference belongs to that place in the order (SPEC section 3).
+  function runPair(values, first, last) { return [values[first], values[last + 1]]; }
 
-  // the noise of several steps together, per indicator: the largest measured in any of them
-  // (fileformat.noise_together); an indicator none measured is left out, not measured
+  // the noise of a run of steps, per indicator: the largest measured in any of them
+  // (fileformat.noise_together; the builds inside a run cancel); an indicator none measured
+  // is left out, not measured
   function noiseTogether(steps) {
     var out = {};
     steps.forEach(function (s) {
@@ -578,10 +569,11 @@
     function indicatorIds() { return D.indicators.map(function (i) { return i.id; }); }
     // ---------------------------------------------------------------- the steps chosen
 
-    // What is compared is a set of steps, by their places in the chain: one step, every step
-    // (the whole way), or any other set. The file holds the first two, an item's lists one
-    // entry per step and then the whole way; any other set this page composes from every
-    // item's results (`compose`), and it stands at SET, which no list of the file holds.
+    // What is compared is a run of steps, by their places in the chain: one step, every step
+    // (the whole way), or a run of two or more short of every step. The file holds the first
+    // two, an item's lists one entry per step and then the whole way; a run this page judges
+    // from every item's results in the two states it lies between (`compose`), and it stands
+    // at SET, which no list of the file holds.
     var SET = -1;
     function isSet(k) { return k === SET; }
     function allSteps() { var out = []; for (var k = 0; k < D.steps.length; k++) out.push(k); return out; }
@@ -637,16 +629,15 @@
       return listWords(parts);
     }
     function stepList(ks) { return runWords(ks.map(function (k) { return [k, k]; })); }
-    // what a set of steps is called, in the fewer words: "Step 4", "Steps 2, 5 and 7
-    // together", "Steps 3 to 9 together", or "Every step but 6"
+    // what a run of steps is called: "The whole way", "Step 4", "Steps 2 and 3 together",
+    // "Steps 3 to 9 together"
     function setWords(set) {
       if (set.length === D.steps.length) return 'The whole way';
       if (set.length === 1) return 'Step ' + stepNo(set[0]);
-      var runs = runsOf(set);
-      var left = allSteps().filter(function (k) { return set.indexOf(k) < 0; });
-      if (runsOf(left).length < runs.length) return 'Every step but ' + (left.length === 1 ? 'step ' : 'steps ') + runWords(runsOf(left));
-      return 'Steps ' + runWords(runs) + ' together';
+      return 'Steps ' + runWords([[set[0], set[set.length - 1]]]) + ' together';
     }
+    // the steps an address or a reader asked for, which need not be a run
+    function askedWords(set) { return set.length === 1 ? 'step ' + stepNo(set[0]) : 'steps ' + runWords(runsOf(set)); }
     // the comparison chosen, in words for a heading or a sentence
     function nowLabel() {
       return isSet(kNow()) ? setWords(view.set) + ' (' + view.set.length + ' of ' + D.steps.length + ' steps)' : compLabel(compNow());
@@ -772,10 +763,10 @@
     }
     // why no set of steps can be composed now; null where one can
     function composeSaid() {
-      if (D.tier === 'counts') return 'This file holds counts only: several steps together are composed from every ' + D.item.one + '\'s results, which it does not hold.';
+      if (D.tier === 'counts') return 'This file holds counts only: a run of steps is judged from every ' + D.item.one + '\'s results, which it does not hold.';
       if (heldAll()) return null;
       var c = D.items_count;
-      var need = 'Several steps together are composed from every ' + D.item.one + '\'s results';
+      var need = 'A run of steps is judged from every ' + D.item.one + '\'s results';
       if (matrix.state === 'loading') return need + ': the matrix that holds them is loading.';
       if (matrix.state === 'refused') return need + ', and the matrix that holds them was not loaded (' + matrix.said + ').';
       return need + ': this file lists ' + groupThousands(c.listed) + ' of its ' + groupThousands(c.all) + ' and names no matrix of them. One step and the whole way are the file\'s own.';
@@ -783,7 +774,7 @@
 
     // The page holds its rule to the file's before it composes with it: each chosen step is
     // judged again on every item, and must give the file's own class and direction every time.
-    // Once per step; a step where it does not refuses every set that takes it in.
+    // Once per step; a step where it does not refuses every run that takes it in.
     var CHECKED = {}, C = null;
     function checkStep(k) {
       if (Object.prototype.hasOwnProperty.call(CHECKED, k)) return CHECKED[k];
@@ -805,7 +796,7 @@
       return said;
     }
 
-    // a block of counts, as the file holds one per step, for a set of steps: no verdicts (each
+    // a block of counts, as the file holds one per step, for a run of steps: no verdicts (each
     // claim is judged in its own step), and no closer or further, which the page shows for no
     // comparison (together.counts has them, for a reader of the file's blocks)
     function emptyBlock(indicator) {
@@ -815,10 +806,10 @@
         verdicts: null, closer: null, further: null };
     }
 
-    // the set of steps composed over every item, with the rule of the file: its pair (the
-    // result before its first step, and that result with each run's difference added), its
-    // class with the largest tolerance of its steps and the largest noise measured in them,
-    // and its counts. Kept until another set is chosen. Returns why it cannot be, or null.
+    // a run of steps judged over every item, with the rule of the file: its pair (the two
+    // built states it lies between), its class with the largest tolerance of its steps and the
+    // largest noise measured in them, and its counts. Kept until another run is chosen.
+    // Returns why it cannot be, or null.
     function compose(set) {
       var key = set.join(',');
       if (C && C.key === key) return null;
@@ -826,18 +817,18 @@
       if (why) return why;
       for (var i = 0; i < set.length; i++) {
         var problem = checkStep(set[i]);
-        if (problem) return 'This page\'s rule does not give the file\'s classes in step ' + stepNo(set[i]) + ' (' + problem + '), so it composes no set of steps that takes it in. Run sentier-diagnostics check on the file.';
+        if (problem) return 'This page\'s rule does not give the file\'s classes in step ' + stepNo(set[i]) + ' (' + problem + '), so it judges no run of steps that takes it in. Run sentier-diagnostics check on the file.';
       }
       var steps = set.map(function (k) { return D.steps[k]; });
       var tolerance = Math.max.apply(null, steps.map(function (s) { return s.tolerance.value; }));
       var noise = noiseTogether(steps);
-      var runs = runsOf(set), ids = indicatorIds();
+      var first = set[0], last = set[set.length - 1], ids = indicatorIds();
       var blocks = {};
       ids.forEach(function (id) { blocks[id] = emptyBlock(id); });
       heldAll().forEach(function (row) {
         var t = { key: key, cls: {}, dir: {}, band: {}, pair: {} };
         ids.forEach(function (id) {
-          var values = row.values[id], pair = composePair(values, runs);
+          var values = row.values[id], pair = runPair(values, first, last);
           var got = judge(pair[0], pair[1], floorOf(id, row.unit), tolerance, Object.prototype.hasOwnProperty.call(noise, id) ? noise[id] : null);
           t.pair[id] = pair; t.cls[id] = got[0]; t.dir[id] = got[1]; t.band[id] = got[2];
           var b = blocks[id];
@@ -849,7 +840,7 @@
         });
         row.together = t;
       });
-      C = { key: key, set: set, runs: runs, tolerance: tolerance, noise: noise, blocks: blocks };
+      C = { key: key, set: set, tolerance: tolerance, noise: noise, blocks: blocks };
       return null;
     }
 
@@ -857,8 +848,9 @@
 
     // The steps are chosen in two places that show one choice. The strip has one cell per
     // step in the order of the chain, its bar as high as what moved in that step, so that a
-    // chain of hundreds of steps fits in one line and shows where things moved. The list
-    // finds steps by number, name or kind, or those where something moved, and ticks any set.
+    // long chain fits in one line and shows where things moved. The list finds steps by
+    // number, name or kind, or those where something moved. Either chooses one step, or with
+    // Shift every step from the one chosen before: a run.
     function stepMoved(k) { return sumOver(D.steps[k].id, moved); }
     function looksOf(s) {
       if (!s.claim) return [];
@@ -928,9 +920,10 @@
         shown += ks.length;
         var first = g.steps[0], last = g.steps[g.steps.length - 1];
         // a group of one step is a row with its kind; a group of several has a head that
-        // ticks every one of them
+        // chooses its run
         var head = first === last ? null : el('div', { cls: 'sd-pick-group' }, [
-          el('label', null, [el('input', { type: 'checkbox', 'data-group': String(first), 'aria-label': 'Every step of ' + g.kind }),
+          el('button', { type: 'button', cls: 'sd-pick-run', 'data-group': String(first), 'aria-pressed': 'false',
+            title: 'Steps ' + stepNo(first) + ' to ' + stepNo(last) + ' together' }, [
             el('strong', { text: capital(g.kind) }),
             el('span', { cls: 'sd-quiet', text: ' steps ' + stepNo(first) + ' to ' + stepNo(last) })]),
           el('span', { cls: 'sd-quiet sd-pick-count', 'data-group-count': String(first) })
@@ -938,9 +931,9 @@
         if (head) list.appendChild(head);
         ks.forEach(function (k) {
           var s = D.steps[k], m = stepMoved(k);
-          list.appendChild(el('div', { cls: 'sd-pick-row', 'data-row': String(k) }, [
-            el('label', { title: s.about || s.label }, [
-              el('input', { type: 'checkbox', 'data-k': String(k) }),
+          list.appendChild(el('button', { type: 'button', cls: 'sd-pick-row', 'data-row': String(k), 'data-pick': String(k), 'aria-pressed': 'false',
+            title: (s.about ? s.about + ' ' : '') + 'Click for this step alone, Shift-click for every step from the one chosen before.' }, [
+            el('span', { cls: 'sd-pick-name' }, [
               el('span', { cls: 'sd-pick-no', text: String(stepNo(k)) }),
               el('span', { cls: 'sd-pick-label', text: s.label }),
               head ? null : el('span', { cls: 'sd-pick-kind', text: s.kind }),
@@ -948,8 +941,7 @@
             ]),
             el('span', { cls: 'sd-pick-moved' + (m ? '' : ' sd-quiet'), text: m ? n(m) + ' moved' : 'nothing moved' }),
             el('span', { cls: 'sd-pick-marks', text: looksOf(s).map(function (p) { return LOOK_MARK[p[0]]; }).join(' '),
-              title: looksOf(s).map(function (p) { return n(p[1]) + ' ' + p[0]; }).join(', ') || null }),
-            el('button', { type: 'button', cls: 'sd-only', 'data-only': String(k), title: 'Step ' + stepNo(k) + ' alone', text: 'only' })
+              title: looksOf(s).map(function (p) { return n(p[1]) + ' ' + p[0]; }).join(', ') || null })
           ]));
         });
       });
@@ -970,30 +962,24 @@
       var locked = composeSaid();
       var list = q('pick-list');
       if (list) {
-        var boxes = list.querySelectorAll('input[data-k]');
-        for (var j = 0; j < boxes.length; j++) {
-          var k = +boxes[j].getAttribute('data-k');
-          boxes[j].checked = view.set.indexOf(k) >= 0;
-          // the last step chosen stays chosen: a comparison of no step is none
-          boxes[j].disabled = !!locked || (view.set.length === 1 && view.set[0] === k);
+        var rowsShown = list.querySelectorAll('button[data-pick]');
+        for (var j = 0; j < rowsShown.length; j++) {
+          rowsShown[j].setAttribute('aria-pressed', !whole && view.set.indexOf(+rowsShown[j].getAttribute('data-pick')) >= 0 ? 'true' : 'false');
         }
-        var groups = list.querySelectorAll('input[data-group]');
         var byFirst = {};
         groupsOf().forEach(function (g) { byFirst[g.steps[0]] = g.steps; });
+        var groups = list.querySelectorAll('button[data-group]');
         for (var gi = 0; gi < groups.length; gi++) {
           var ks = byFirst[groups[gi].getAttribute('data-group')] || [];
-          var chosen = ks.filter(function (x) { return view.set.indexOf(x) >= 0; }).length;
-          groups[gi].checked = chosen === ks.length;
-          groups[gi].indeterminate = chosen > 0 && chosen < ks.length;
-          groups[gi].disabled = !!locked || chosen === view.set.length && chosen === ks.length;
+          groups[gi].setAttribute('aria-pressed', sameList(ks, view.set) ? 'true' : 'false');
         }
         var counts = list.querySelectorAll('span[data-group-count]');
         for (var ci = 0; ci < counts.length; ci++) {
           var gs = byFirst[counts[ci].getAttribute('data-group-count')] || [];
-          counts[ci].textContent = gs.filter(function (x) { return view.set.indexOf(x) >= 0; }).length + ' of ' + gs.length + ' chosen';
+          var chosen = whole ? 0 : gs.filter(function (x) { return view.set.indexOf(x) >= 0; }).length;
+          counts[ci].textContent = chosen ? chosen + ' of ' + gs.length + ' chosen' : gs.length + ' steps';
         }
       }
-      if (q('pick-active')) q('pick-active').disabled = !!locked;
       if (q('pick-locked')) { q('pick-locked').textContent = locked || ''; q('pick-locked').hidden = !locked; }
       if (q('pick-summary')) q('pick-summary').textContent = whole ? 'Every step: ' + D.steps.length
         : view.set.length + ' of ' + D.steps.length + ' steps';
@@ -1065,16 +1051,9 @@
     }
 
     function renderSetSaid(node) {
-      var set = view.set, runs = runsOf(set), first = set[0], last = set[set.length - 1];
-      node.appendChild(el('p', null, [el('strong', { text: setWords(set) + '. ' }), el('span', { cls: 'sd-quiet', text: runs.length === 1
-        ? D.states[first].label + ' → ' + D.states[last + 1].label + '. Each cell holds the result after the last of these steps divided by the result before the first: what they did together.'
-        : 'From the state before step ' + stepNo(first) + ' (' + D.states[first].label + '): each cell holds that result with the difference each of these steps made added, divided by it.' })]));
-      if (runs.length > 1) {
-        var left = [];
-        for (var j = first; j <= last; j++) if (set.indexOf(j) < 0) left.push(j);
-        node.appendChild(el('p', { cls: 'sd-quiet', text: (left.length === 1 ? 'Step ' : 'Steps ') + runWords(runsOf(left)) + (left.length === 1 ? ' is' : ' are') +
-          ' left out. Each chosen step adds the difference it made in this chain, built on every step before it, the ones left out too. Where steps change the same results, what one does depends on the others, and the sum is not what the chosen steps would do alone.' }));
-      }
+      var set = view.set, first = set[0], last = set[set.length - 1];
+      node.appendChild(el('p', null, [el('strong', { text: setWords(set) + '. ' }), el('span', { cls: 'sd-quiet', text:
+        D.states[first].label + ' → ' + D.states[last + 1].label + '. Each cell holds the result after the last of these steps divided by the result before the first: two built states, what the steps did together.' })]));
       // the steps where something moved or was judged come first; the quiet ones (explained,
       // nothing moved, no verdict, with a claim or without) fold into one line, each still
       // there to open: a set of hundreds of steps is mostly these
@@ -1098,7 +1077,7 @@
           ': nothing moved in any of them' + (claimed ? ', as each claims.' : '.') }), folded]));
       }
       node.appendChild(el('p', { cls: 'sd-quiet', text: 'Tolerance ' + C.tolerance + ', the largest of these steps. Noise ' + noiseOfSet(C.noise, 'these steps') +
-        '. No verdict: each claim is judged in its own step. This page works out the classes with the rule of the file, after holding it to the file\'s own class of each of these steps for every ' + D.item.one + '.' }));
+        '. No verdict: each claim is judged in its own step. This page works out the classes with the rule of the file, from the two states, after holding it to the file\'s own class of each of these steps for every ' + D.item.one + '.' }));
     }
 
     // what the page holds of the items: the listed ones, or every one once the matrix is here
@@ -1905,11 +1884,9 @@
     function decoded(text) {
       try { return decodeURIComponent(text); } catch (error) { return null; }
     }
+    // a run in the address: its first and last step
     function setText(set) {
-      return runsOf(set).map(function (r) {
-        var a = encodeURIComponent(D.steps[r[0]].id);
-        return r[0] === r[1] ? a : a + ':' + encodeURIComponent(D.steps[r[1]].id);
-      }).join(',');
+      return encodeURIComponent(D.steps[set[0]].id) + ':' + encodeURIComponent(D.steps[set[set.length - 1]].id);
     }
     // the steps an address names, and the ids it names that this file does not have
     function setFrom(text) {
@@ -1941,17 +1918,14 @@
       for (var k = Math.min(a, b); k <= Math.max(a, b); k++) out.push(k);
       return out;
     }
-    function withStep(set, k, on) {
-      var out = set.filter(function (x) { return x !== k; });
-      if (on) out.push(k);
-      return out.sort(function (a, b) { return a - b; });
-    }
 
-    // Choose a set of steps and draw what they did. A set the page cannot compose is said and
-    // changes nothing; returns why, or null.
+    var APART = 'Steps apart are not compared on a chain: each step was measured with every step before it applied, so adding up steps apart would use differences measured in a state the set never had. Choose one step, or a run (Shift).';
+    // Choose a run of steps and draw what they did. A run the page cannot judge, or steps
+    // that are not a run, are said and change nothing; returns why, or null.
     function choose(set) {
       set = set.filter(function (k, i) { return set.indexOf(k) === i; }).sort(function (a, b) { return a - b; });
       if (!set.length) return 'At least one step stays chosen: "The whole way" chooses every step.';
+      if (set[set.length - 1] - set[0] + 1 !== set.length) return APART;
       if (isSet(posOf(set))) {
         var why = compose(set);
         if (why) return why;
@@ -1980,31 +1954,21 @@
       setHash(view.open);
     }
 
-    // one step by hand. "one": that step alone. "to" (Shift on the strip): every step from the
-    // one chosen before to this one. "toggle" (⌘ or Ctrl on the strip, a tick in the list):
-    // this step added or taken off. "ticks" (Shift in the list): every step the list shows
-    // from the one ticked before to this one, added or taken off as this one is.
+    // one step by hand. "one": that step alone. "to" (Shift, or ⌘ or Ctrl, on the strip or in
+    // the list): every step from the one chosen before to this one.
     function pickStep(k, how) {
-      var set = view.set, anchor = view.anchor === null ? k : view.anchor;
-      if (how === 'one') { set = [k]; view.anchor = k; }
-      else if (how === 'to') { set = stepsFrom(anchor, k); view.anchor = anchor; }
-      else if (how === 'ticks') {
-        var on = set.indexOf(k) < 0;
-        stepsFrom(anchor, k).filter(shownInList).forEach(function (j) { set = withStep(set, j, on); });
-        view.anchor = k;
-      } else { set = withStep(set, k, set.indexOf(k) < 0); view.anchor = k; }
-      pickSet(set);
+      var anchor = view.anchor === null ? k : view.anchor;
+      if (how === 'to') pickSet(stepsFrom(anchor, k));
+      else { view.anchor = k; pickSet([k]); }
     }
 
-    // every step of a group of the list added, or taken off where all of it is chosen
+    // the run of a group of the list: every step of it
     function pickGroup(first) {
       var group = null;
       groupsOf().forEach(function (g) { if (g.steps[0] === first) group = g.steps; });
       if (!group) return;
-      var all = group.every(function (k) { return view.set.indexOf(k) >= 0; });
-      var set = view.set;
-      group.forEach(function (k) { set = withStep(set, k, !all); });
-      pickSet(set);
+      view.anchor = group[0];
+      pickSet(group.slice());
     }
 
     // the address, read: what it names is chosen; what it names that the file does not have,
@@ -2024,7 +1988,7 @@
       }
       var why = choose(wanted);
       if (why) {
-        said = 'The address asks for ' + setWords(wanted).toLowerCase() + '. ' + why + ' The whole way is shown.';
+        said = 'The address asks for ' + askedWords(wanted) + '. ' + why + ' The whole way is shown.';
         choose(allSteps());
       }
       view.notice = said;
@@ -2054,7 +2018,7 @@
         if (!cell || !D) return;
         var comp = cell.getAttribute('data-comp');
         if (comp === 'total') { view.anchor = null; pickSet(allSteps()); return; }
-        pickStep(stepIndex(comp), e.shiftKey ? 'to' : e.metaKey || e.ctrlKey ? 'toggle' : 'one');
+        pickStep(stepIndex(comp), e.shiftKey || e.metaKey || e.ctrlKey ? 'to' : 'one');
       });
       // the arrow keys move along the strip, a step alone at a time; with Shift they grow or
       // shrink the steps chosen at the end away from where they started
@@ -2083,11 +2047,9 @@
       if (q('pick-list')) {
         q('pick-list').addEventListener('click', function (e) {
           if (!D) return;
-          var only = e.target.closest ? e.target.closest('button[data-only]') : null;
-          if (only) { pickStep(+only.getAttribute('data-only'), 'one'); return; }
-          var box = e.target.closest ? e.target.closest('input[data-k]') : null;
-          if (box) { pickStep(+box.getAttribute('data-k'), e.shiftKey ? 'ticks' : 'toggle'); return; }
-          var group = e.target.closest ? e.target.closest('input[data-group]') : null;
+          var row = e.target.closest ? e.target.closest('button[data-pick]') : null;
+          if (row) { pickStep(+row.getAttribute('data-pick'), e.shiftKey || e.metaKey || e.ctrlKey ? 'to' : 'one'); return; }
+          var group = e.target.closest ? e.target.closest('button[data-group]') : null;
           if (group) pickGroup(+group.getAttribute('data-group'));
         });
       }
@@ -2101,15 +2063,6 @@
       if (q('pick-find')) q('pick-find').addEventListener('input', function (e) { view.pickFind = e.target.value; renderPickList(); });
       if (q('pick-moved')) q('pick-moved').addEventListener('change', function (e) { view.pickMoved = !!e.target.checked; renderPickList(); });
       if (q('pick-all')) q('pick-all').addEventListener('click', function () { if (D) { view.anchor = null; pickSet(allSteps()); } });
-      if (q('pick-active')) {
-        q('pick-active').addEventListener('click', function () {
-          if (!D) return;
-          var active = allSteps().filter(function (k) { return stepMoved(k) > 0; });
-          if (!active.length) { view.notice = 'Nothing moved in any step.'; renderStepSaid(); return; }
-          view.anchor = active[0];
-          pickSet(active);
-        });
-      }
       q('size').addEventListener('change', function (e) { view.size = +e.target.value; view.limit = PAGE; renderWorst(); renderGrid(); });
       q('worst-n').addEventListener('change', function (e) { view.worstN = +e.target.value; renderWorst(); });
       q('dist-scale').addEventListener('change', function (e) { view.distScale = e.target.value === 'one' ? 'one' : 'card'; renderDistributions(); });
@@ -2181,7 +2134,7 @@
     sizeAtLeast: sizeAtLeast, cellView: cellView, ratioView: ratioView, severityKey: severityKey, compareKeys: compareKeys,
     bandStep: bandStep, bandOf: bandOf, checkShape: checkShape, checkMatrix: checkMatrix, matrixRows: matrixRows,
     safeLink: safeLink, safeName: safeName, splitOf: splitOf, splitText: splitText, distance: distance, quantileTexts: quantileTexts, RANK: RANK,
-    judge: judge, runsOf: runsOf, composePair: composePair, noiseTogether: noiseTogether,
+    judge: judge, runsOf: runsOf, runPair: runPair, noiseTogether: noiseTogether,
     mount: mount, mountAll: mountAll };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else if (typeof global.document !== 'undefined') {

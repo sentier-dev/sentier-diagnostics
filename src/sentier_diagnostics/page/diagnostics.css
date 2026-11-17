@@ -97,21 +97,20 @@
 .sentier-diagnostics .sd-pick-hint { margin: 0.4rem 0; font-size: var(--sd-t-xs); }
 .sentier-diagnostics .sd-pick-list { max-height: 22rem; overflow-y: auto; font-size: var(--sd-t-sm); border-top: 1px solid var(--sd-line); }
 .sentier-diagnostics .sd-pick-group { position: sticky; top: 0; z-index: 1; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem; padding: 0.35rem 0.25rem; background: var(--sd-paper-deep); border-bottom: 1px solid var(--sd-line); }
-.sentier-diagnostics .sd-pick-group label { display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer; }
-.sentier-diagnostics .sd-pick-list input[type="checkbox"] { flex: none; width: auto; min-height: 0; margin: 0; padding: 0; }
-.sentier-diagnostics .sd-pick-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: 0.75rem; padding: 0.2rem 0.25rem; border-bottom: 1px solid var(--sd-line); }
+.sentier-diagnostics .sd-pick-run { padding: 0.1rem 0.4rem; border: 1px solid transparent; border-radius: var(--sd-radius); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.sentier-diagnostics .sd-pick-run:hover, .sentier-diagnostics .sd-pick-run[aria-pressed="true"] { border-color: var(--sd-accent); }
+.sentier-diagnostics .sd-pick-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 0.75rem; width: 100%; min-height: 0; margin: 0; padding: 0.25rem 0.4rem; border: 0; border-bottom: 1px solid var(--sd-line); border-left: 3px solid transparent; border-radius: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .sentier-diagnostics .sd-pick-row:hover { background: var(--sd-paper-deep); }
-.sentier-diagnostics .sd-pick-row label { display: flex; align-items: center; gap: 0.45rem; min-width: 0; cursor: pointer; }
+.sentier-diagnostics .sd-pick-row[aria-pressed="true"] { border-left-color: var(--sd-accent); background: color-mix(in srgb, var(--sd-accent) 12%, var(--sd-surface)); }
+.sentier-diagnostics .sd-pick-row:focus-visible, .sentier-diagnostics .sd-pick-run:focus-visible { outline: 2px solid var(--sd-accent); outline-offset: -2px; }
+.sentier-diagnostics .sd-pick-name { display: flex; align-items: center; gap: 0.45rem; min-width: 0; }
 .sentier-diagnostics .sd-pick-no { min-width: 2ch; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
 .sentier-diagnostics .sd-pick-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sentier-diagnostics .sd-pick-kind { flex: none; font-size: var(--sd-t-xs); color: var(--sd-muted); }
 .sentier-diagnostics .sd-pick-flag { font-weight: 800; color: var(--sd-fail); }
 .sentier-diagnostics .sd-pick-moved { font-size: var(--sd-t-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .sentier-diagnostics .sd-pick-marks { font-size: var(--sd-t-xs); min-width: 1ch; }
-.sentier-diagnostics .sd-only { padding: 0 0.4rem; border: 0; background: none; color: var(--sd-accent); font: inherit; font-size: var(--sd-t-xs); cursor: pointer; opacity: 0; }
-.sentier-diagnostics .sd-pick-row:hover .sd-only, .sentier-diagnostics .sd-only:focus-visible { opacity: 1; }
-@media (hover: none) { .sentier-diagnostics .sd-only { opacity: 1; } }
-@media (max-width: 40rem) { .sentier-diagnostics .sd-pick-row { grid-template-columns: minmax(0, 1fr) auto auto; } .sentier-diagnostics .sd-pick-marks { display: none; } }
+@media (max-width: 40rem) { .sentier-diagnostics .sd-pick-row { grid-template-columns: minmax(0, 1fr) auto; } .sentier-diagnostics .sd-pick-marks { display: none; } }
 .sentier-diagnostics .sd-chips-label { font-size: var(--sd-t-xs); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--sd-muted); }
 /* a step taken into a run only because it lies between two chosen ones: pressed, and hatched */
 .sentier-diagnostics .sd-switch { display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 600; cursor: pointer; }

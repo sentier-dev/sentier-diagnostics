@@ -24,18 +24,17 @@
         <span class="sd-quiet sd-pick-summary" data-sd="pick-summary"></span>
         <button type="button" class="sd-button sd-pick-open" data-sd="pick-open" aria-expanded="false">Find and choose steps</button>
       </div>
-      <div class="sd-strip" data-sd="comparison" title="Click a step for it alone, Shift-click for every step from the one before, ⌘- or Ctrl-click to add or take off one. A bar is as high as what moved in that step."></div>
+      <div class="sd-strip" data-sd="comparison" title="Click a step for it alone, Shift-click for every step from the one chosen before. A bar is as high as what moved in that step."></div>
       <div class="sd-pick-panel" data-sd="pick-panel" hidden>
         <div class="sd-pick-tools">
           <label class="sd-field sd-grow"><span>Find a step</span><input type="search" data-sd="pick-find" placeholder="Number, name or kind" autocomplete="off" spellcheck="false"></label>
           <label class="sd-switch"><input type="checkbox" data-sd="pick-moved"> Only steps where something moved</label>
           <span class="sd-pick-actions">
             <button type="button" class="sd-button" data-sd="pick-all">Every step: the whole way</button>
-            <button type="button" class="sd-button" data-sd="pick-active">The steps where something moved</button>
           </span>
         </div>
         <p class="sd-notice" data-sd="pick-locked" hidden></p>
-        <p class="sd-quiet sd-pick-hint">Tick any steps to see what they did together; Shift ticks every step shown from the one ticked before. <span data-sd="pick-shown"></span></p>
+        <p class="sd-quiet sd-pick-hint">Click a step for it alone; Shift-click for every step from the one chosen before, a run. A heading chooses its run. <span data-sd="pick-shown"></span></p>
         <div class="sd-pick-list" data-sd="pick-list"></div>
       </div>
     </div>
