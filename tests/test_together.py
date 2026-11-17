@@ -34,6 +34,11 @@ P = [2.0, 2.0, 1.0, 1.0, 1.0]
 R = [3.0, 3.0, 3.0, 3.0, 3.0]
 #: step one measured 3% in A and nothing in B; step three measured 1% in A
 NOISE = {"one": {A: 0.03}, "three": {A: 0.01}}
+#: three steps whose tolerances are 1e-5, 1e-2 and 1e-5: `t` moves by 5e-3 in the first, which
+#: differs in that step and agrees in the run of the first two, judged with the larger of
+#: their tolerances; judged with the smaller it would differ. `r` does not move.
+TOLERANCES = (1e-5, 1e-2, 1e-5)
+T = [1.0, 1.005, 1.005, 1.005]
 
 
 def five_states(noise=NOISE, **more):
@@ -53,6 +58,22 @@ def five_states(noise=NOISE, **more):
         values=values,
         units=dict.fromkeys("npr", "kg"),
         **more,
+    )
+
+
+def mixed_tolerances():
+    """A chain of four states and three steps whose tolerances differ (`TOLERANCES`), and its
+    matrix."""
+    states = [chain.state(f"s{n}", f"State {n}") for n in range(4)]
+    steps = [chain.step(f"t{k}", f"Step t{k}", kind="fix", tolerance=chain.tolerance(t)) for k, t in enumerate(TOLERANCES)]
+    values = {f"s{n}": {A: {"t": T[n], "r": 3.0}, B: {"t": T[n], "r": 3.0}} for n in range(4)}
+    return chain.build_with_matrix(
+        "Mixed tolerances",
+        indicators=helpers.INDICATORS,
+        states=states,
+        steps=steps,
+        values=values,
+        units=dict.fromkeys("tr", "kg"),
     )
 
 
@@ -171,6 +192,20 @@ def fixture() -> dict:
     return {
         "about": "Counts of every run of steps of examples/local, judged by together.counts; the page is held to them.",
         "runs": [{"first": a, "last": b, **together.counts(data, full, a, b)} for a, b in RUNS],
+        "tolerances": tolerances_fixture(),
+    }
+
+
+def tolerances_fixture() -> dict:
+    """The chain of `mixed_tolerances`, file and matrix, with the counts of its first two steps
+    as a run: the page is held to them, so a page that took the smaller tolerance fails."""
+    data, full = mixed_tolerances()
+    return {
+        "data": json.loads(chain.dumps(data)),
+        "matrix": json.loads(matrix.dumps(full)),
+        "first": 0,
+        "last": 1,
+        **together.counts(data, full, 0, 1),
     }
 
 
@@ -196,6 +231,17 @@ class Together(unittest.TestCase):
                 noise = fileformat.noise_together(self.data["steps"][1:3]).get(indicator)
                 kind = rule.judge(values[1], values[3], floor=floors[(indicator, row[4])], tolerance=tolerance, noise=noise)[0]
                 self.assertEqual(found["classes"][row[0]][indicator], kind)
+
+    def test_a_run_takes_the_largest_tolerance_of_its_steps(self):
+        data, full = mixed_tolerances()
+        # `t` differs in the first step, by 5e-3 against its tolerance of 1e-5
+        self.assertEqual(item(data, "t")["classes"][A][0], rule.DIFFERS)
+        # the run of the first two steps takes 1e-2, the larger: there it agrees
+        found = together.counts(data, full, 0, 1)
+        self.assertEqual(found["classes"]["t"], {A: rule.AGREES, B: rule.AGREES})
+        self.assertEqual(found["blocks"][A]["classes"][rule.AGREES], 2)
+        # the same pair with the smaller tolerance differs: the test tells the two apart
+        self.assertEqual(rule.judge(T[0], T[2], floor=0.0, tolerance=min(TOLERANCES[:2]))[0], rule.DIFFERS)
 
     def test_a_run_takes_no_verdict_and_its_noise_is_the_largest_of_its_steps(self):
         found = together.counts(self.data, self.full, 2, 3)

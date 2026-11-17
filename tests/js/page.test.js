@@ -867,6 +867,21 @@ test('a run judged by the page has the classes and counts of the Python referenc
   }
 });
 
+test('a run is judged with the largest tolerance of its steps, never the smallest', () => {
+  // steps of 1e-5 and 1e-2: an item that moves by 5e-3 in the first differs there and
+  // agrees in the run of the two (tests/test_together.py, `mixed_tolerances`)
+  const mixed = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'together.json'), 'utf8')).tolerances;
+  const opened = (address) => {
+    const drawn = dom.page(mixed.data, undefined, { globals: { SENTIER_DIAGNOSTICS_MATRIX: mixed.matrix } });
+    drawn.open(address);
+    return gridClasses(drawn, mixed.data);
+  };
+  assert.deepEqual(opened('step=' + mixed.data.steps[0].id).t, { 'x:a': 'differs', 'x:b': 'differs' });
+  const run = opened(runAddress(mixed.data, mixed.first, mixed.last));
+  assert.deepEqual(run.t, mixed.classes.t);
+  assert.deepEqual(mixed.classes.t, { 'x:a': 'agrees', 'x:b': 'agrees' });
+});
+
 test('the strip: the whole way first, then a cell per step, its bar as high as what moved in it', () => {
   const data = example();
   const drawn = dom.page(data);

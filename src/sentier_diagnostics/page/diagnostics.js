@@ -572,7 +572,7 @@
     // What is compared is a run of steps, by their places in the chain: one step, every step
     // (the whole way), or a run of two or more short of every step. The file holds the first
     // two, an item's lists one entry per step and then the whole way; a run this page judges
-    // from every item's results in the two states it lies between (`compose`), and it stands
+    // from every item's results in the two states it lies between (`judgeRun`), and it stands
     // at SET, which no list of the file holds.
     var SET = -1;
     function isSet(k) { return k === SET; }
@@ -741,10 +741,10 @@
       renderStepSaid();
     }
 
-    // ---------------------------------------------------------------- steps composed
+    // ---------------------------------------------------------------- a run, judged
 
     // the floor of an indicator and a reference unit, as the file holds it; null where it
-    // holds none, and the page then composes nothing with that indicator
+    // holds none, and the page then judges no run in that indicator
     var FLOORS = {};
     function floorKey(indicator, unit) { return JSON.stringify([indicator, unit === undefined ? null : unit]); }
     function floorOf(indicator, unit) {
@@ -755,14 +755,14 @@
       var by = s.noise && s.noise.measured ? s.noise.by || {} : {};
       return typeof by[indicator] === 'number' ? by[indicator] : null;
     }
-    // every item's results, which a set of steps is composed from: the matrix, or the file
+    // every item's results, which a run of steps is judged from: the matrix, or the file
     // where it lists every item; null where the page holds only some
     function heldAll() {
       if (M) return M;
       return D.tier !== 'counts' && D.items_count.listed === D.items_count.all ? LISTED : null;
     }
-    // why no set of steps can be composed now; null where one can
-    function composeSaid() {
+    // why no run of steps can be judged now; null where one can
+    function runRefused() {
       if (D.tier === 'counts') return 'This file holds counts only: a run of steps is judged from every ' + D.item.one + '\'s results, which it does not hold.';
       if (heldAll()) return null;
       var c = D.items_count;
@@ -772,7 +772,7 @@
       return need + ': this file lists ' + groupThousands(c.listed) + ' of its ' + groupThousands(c.all) + ' and names no matrix of them. One step and the whole way are the file\'s own.';
     }
 
-    // The page holds its rule to the file's before it composes with it: each chosen step is
+    // The page holds its rule to the file's before it judges a run with it: each chosen step is
     // judged again on every item, and must give the file's own class and direction every time.
     // Once per step; a step where it does not refuses every run that takes it in.
     var CHECKED = {}, C = null;
@@ -810,10 +810,10 @@
     // built states it lies between), its class with the largest tolerance of its steps and the
     // largest noise measured in them, and its counts. Kept until another run is chosen.
     // Returns why it cannot be, or null.
-    function compose(set) {
+    function judgeRun(set) {
       var key = set.join(',');
       if (C && C.key === key) return null;
-      var why = composeSaid();
+      var why = runRefused();
       if (why) return why;
       for (var i = 0; i < set.length; i++) {
         var problem = checkStep(set[i]);
@@ -959,7 +959,7 @@
         var on = comp === 'total' ? whole : view.set.indexOf(stepIndex(comp)) >= 0;
         cells[i].setAttribute('aria-pressed', on ? 'true' : 'false');
       }
-      var locked = composeSaid();
+      var locked = runRefused();
       var list = q('pick-list');
       if (list) {
         var rowsShown = list.querySelectorAll('button[data-pick]');
@@ -1748,8 +1748,8 @@
       M = matrixRows(m, D);
       matrix.state = 'loaded';
       matrix.said = '';
-      // a set composed from the listed items is composed again from every item, and the
-      // address, which may ask for a set the page could not compose before, is read again
+      // a run judged from the listed items is judged again from every item, and the
+      // address, which may ask for a run the page could not judge before, is read again
       C = null; CHECKED = {};
       view.limit = PAGE;
       tierSaid();
@@ -1927,7 +1927,7 @@
       if (!set.length) return 'At least one step stays chosen: "The whole way" chooses every step.';
       if (set[set.length - 1] - set[0] + 1 !== set.length) return APART;
       if (isSet(posOf(set))) {
-        var why = compose(set);
+        var why = judgeRun(set);
         if (why) return why;
       }
       var same = sameList(set, view.set);
@@ -1972,7 +1972,7 @@
     }
 
     // the address, read: what it names is chosen; what it names that the file does not have,
-    // or that cannot be composed now, is said, and the whole way shown
+    // or that cannot be judged now, is said, and the whole way shown
     function route() {
       if (!D) return;
       var parts = hashParts();
