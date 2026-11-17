@@ -60,7 +60,7 @@
   };
   var NO_CLAIM = '.';
   // what a column's heading sorts by, in the words of its title (furthestKey)
-  var COLUMN_ORDER = 'Sort by this column: the largest factor between the two results first, then the moves that have no factor (from or to zero, a sign change), then the rest';
+  var COLUMN_ORDER = 'Sort by this column: the moves that have no factor first (from or to zero, a sign change), then the largest factor between the two results, then the rest';
   var SAME = '='; // matrix.SAME: a result equal to the one of the state before it
 
   // ------------------------------------------------------------------ pure helpers
@@ -426,6 +426,44 @@
       if (a[i] > b[i]) return 1;
     }
     return a.length - b.length;
+  }
+
+  // The relative luminance of a colour as CSS writes it (WCAG 2), or null where it cannot be
+  // read. Hex and rgb() are read here; any other form (a name, hsl(), oklch() ...) is drawn
+  // on a canvas of one pixel and read back.
+  function luminance(text, doc) {
+    text = String(text || '').trim();
+    var rgb = null, m;
+    if ((m = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(text))) {
+      var h = m[1].length <= 4 ? m[1].replace(/(.)/g, '$1$1') : m[1];
+      rgb = [0, 2, 4].map(function (at) { return parseInt(h.slice(at, at + 2), 16); });
+    } else if ((m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(text))) {
+      rgb = [+m[1], +m[2], +m[3]];
+    } else if (text && doc && doc.createElement) {
+      try {
+        var canvas = doc.createElement('canvas');
+        canvas.width = canvas.height = 1;
+        var context = canvas.getContext('2d');
+        context.fillStyle = '#000'; context.fillStyle = text;
+        context.fillRect(0, 0, 1, 1);
+        var d = context.getImageData(0, 0, 1, 1).data;
+        rgb = [d[0], d[1], d[2]];
+      } catch (error) { return null; }
+    }
+    if (!rgb || rgb.some(function (v) { return !isFinite(v); })) return null;
+    var lin = rgb.map(function (v) { v = Math.min(255, v) / 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+    return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+  }
+
+  // Whether the host's tokens make a dark page: a light ink (whatever its ground), or a dark
+  // ground with no ink. Light and dark part where a colour contrasts as much with black as
+  // with white, at a relative luminance of about 0.179.
+  var SCHEME_PARTS = Math.sqrt(1.05 * 0.05) - 0.05;
+  function schemeIsDark(ink, surface, lum) {
+    ink = String(ink || '').trim(); surface = String(surface || '').trim();
+    var l = ink ? lum(ink) : surface ? lum(surface) : null;
+    if (l === null || l === undefined) return false;
+    return ink ? l > SCHEME_PARTS : l < SCHEME_PARTS;
   }
 
   // what a page needs of a file before it shows anything
@@ -1448,17 +1486,19 @@
       return keyed.map(function (one) { return one.row; });
     }
 
-    // where a row stands over the indicators `ids`: the largest factor between its two results,
-    // among the values that moved and have a ratio, the furthest from 1 first; a row whose
-    // moves have no ratio (from or to zero, a sign change) follows, by its worst value as
-    // severityKey orders values; a row that did not move comes last. Over every indicator it
-    // is the order the grid opens in; over one, the order of that column's heading: one order,
-    // the one the headings' titles say.
+    // where a row stands over the indicators `ids`: a move that has no factor (from or to
+    // zero, a sign change) lies further apart than any factor, so such a row comes first;
+    // then the largest factor between its two results, among the values that moved, the
+    // furthest from 1 first; a row that did not move comes last; among equals, by its worst
+    // value as severityKey orders values. Over every indicator it is the order the grid opens
+    // in; over one, the order of that column's heading: one order, the one the titles say.
+    var NO_FACTOR = ['zero reference', 'zero result', 'sign change'];
     function furthestKey(row, k, ids) {
       var furthest = 0, worst = null;
       ids.forEach(function (id) {
         var pair = pairOf(row, id, k), cls = clsAt(row, id, k);
-        if (cls === 'differs' || cls === 'beyond 10x') furthest = Math.max(furthest, distance(pair[0], pair[1]));
+        if (NO_FACTOR.indexOf(cls) >= 0) furthest = Infinity;
+        else if (cls === 'differs' || cls === 'beyond 10x') furthest = Math.max(furthest, distance(pair[0], pair[1]));
         var one = severityKey(pair[0], pair[1], cls);
         if (worst === null || compareKeys(one, worst) < 0) worst = one;
       });
@@ -1474,14 +1514,24 @@
       return key;
     }
 
-    // a heading sorts by itself; a second click goes back to the furthest apart first
+    // a heading sorts by itself; a second click goes back to the furthest apart first. The
+    // headings are drawn anew, so the focus goes to the new button of the same heading, not
+    // to the end of the page.
     function sortButton(label, sort, title) {
       var button = el('button', { type: 'button', cls: 'sd-sort', text: label, title: title });
+      button.sdSort = sort;
       button.addEventListener('click', function () {
+        var focused = doc.activeElement === button;
         view.sort = sortIs(sort) ? WORST : sort;
         view.limit = PAGE;
         renderGrid();
         markChosenCard();
+        if (!focused) return;
+        var again = q('grid-table').querySelectorAll('button[type="button"]');
+        for (var i = 0; i < again.length; i++) {
+          var other = again[i].sdSort;
+          if (other && other.by === sort.by && other.id === sort.id) { again[i].focus(); break; }
+        }
       });
       return button;
     }
@@ -1733,7 +1783,8 @@
       if (drawer.hidden) lastFocus = doc.activeElement || null;
       view.open = row.id;
       drawer.hidden = false;
-      popover(drawer, true);
+      drawer.setAttribute('aria-label', row.name);
+      showDrawer(drawer);
       q('item-title').textContent = row.name;
       q('item-meta').textContent = [row.id, row.place, row.group, row.unit ? 'per ' + row.unit : 'unit unknown',
         row.item ? null : 'from the matrix: not listed in this file'].filter(Boolean).join(' · ');
@@ -1776,13 +1827,28 @@
       if (!quiet && title.focus) title.focus({ preventScroll: true });
     }
 
-    // The drawer as a popover, drawn above everything on the host's page, where the browser has
-    // popovers; a fixed element with its z-index where it has not, or where showing it fails.
-    function popover(node, up) {
+    // The drawer is a dialog, drawn above everything on the host's page however the host
+    // stacks or transforms what holds the page. On a wide window it opens as a popover, the
+    // grid beside it still in use. Where it fills the window (a phone), or where the browser
+    // knows no popovers, it opens as a modal dialog, the rest of the page inert behind it. A
+    // browser that knows neither, or where showing it fails, shows it as a fixed element.
+    var NARROW = '(max-width: 47.99rem)'; // the width at which the style makes it the whole window
+    function popoverOpen(node) {
+      try { return !!node.showPopover && node.matches(':popover-open'); } catch (error) { return false; }
+    }
+    function showDrawer(node) {
+      if (node.open || popoverOpen(node)) return;
+      var narrow = !!(win.matchMedia && win.matchMedia(NARROW).matches);
       try {
-        if (up && node.showPopover && !node.matches(':popover-open')) node.showPopover();
-        if (!up && node.hidePopover && node.matches(':popover-open')) node.hidePopover();
-      } catch (error) { /* not a popover here: the fixed element stands */ }
+        if (node.showPopover && !(narrow && node.showModal)) node.showPopover();
+        else if (node.showModal) node.showModal();
+      } catch (error) { /* the fixed element stands */ }
+    }
+    function hideDrawer(node) {
+      try {
+        if (popoverOpen(node)) node.hidePopover();
+        if (node.open && node.close) node.close();
+      } catch (error) { /* hidden as an element all the same */ }
     }
 
     function markOpen() {
@@ -1798,7 +1864,7 @@
       var drawer = q('item');
       if (!drawer || drawer.hidden) return;
       drawer.hidden = true;
-      popover(drawer, false);
+      hideDrawer(drawer);
       view.open = null;
       markOpen();
       if (hashParts().item) setHash(null);
@@ -1816,7 +1882,7 @@
       var from = comp === 'total' ? D.states[0].id : D.steps[k].from;
       var to = comp === 'total' ? D.states[D.states.length - 1].id : D.steps[k].to;
       if (data.item !== row.id || data.from !== from || data.to !== to) return 'is of another ' + D.item.one + ' or another step';
-      if (!data.indicators || typeof data.indicators !== 'object' || Array.isArray(data.indicators)) return 'holds no indicators';
+      if (!data.indicators || typeof data.indicators !== 'object' || Array.isArray(data.indicators) || !Object.keys(data.indicators).length) return 'holds no indicators';
       var sides = [D.states.map(function (s) { return s.id; }).indexOf(from), D.states.map(function (s) { return s.id; }).indexOf(to)];
       var pairOk = function (p) { return Array.isArray(p) && p.length === 2 && p.every(function (v) { return typeof v === 'number' && isFinite(v); }); };
       var keys = Object.keys(data.indicators);
@@ -1904,36 +1970,44 @@
 
     function refuseMatrix(said) { matrix.state = 'refused'; matrix.said = said; matrixSaid(); if (D) markPicker(); }
 
-    // The matrices handed to the pages of a document: the list the scripts `page.write` puts
-    // beside a page add to (`SENTIER_DIAGNOSTICS_MATRICES`), and a host's single global. A
-    // document may hold several pages, each with its own matrix; a page takes the one of its
-    // own file, never the first it finds.
-    function handed() {
-      var list = Array.isArray(win.SENTIER_DIAGNOSTICS_MATRICES) ? win.SENTIER_DIAGNOSTICS_MATRICES.slice() : [];
-      if (win.SENTIER_DIAGNOSTICS_MATRIX) list.push(win.SENTIER_DIAGNOSTICS_MATRIX);
-      return list;
-    }
-    function ownHanded() {
-      var list = handed();
-      for (var i = 0; i < list.length; i++) if (!checkMatrix(list[i], D)) return list[i];
+    // The matrices handed to the pages of a document. A script `page.write` puts beside a
+    // page adds an entry to a list, `SENTIER_DIAGNOSTICS_MATRICES`: the address it was loaded
+    // from and its matrix. A document may hold several pages, each with its own script, so a
+    // page takes the entry of the script it names, by its address, and no other. A host that
+    // keeps a page's matrix in a script of its own sets one global instead,
+    // `SENTIER_DIAGNOSTICS_MATRIX`, for one page.
+    function handedAt(address) {
+      var list = Array.isArray(win.SENTIER_DIAGNOSTICS_MATRICES) ? win.SENTIER_DIAGNOSTICS_MATRICES : [];
+      for (var i = list.length - 1; i >= 0; i--) if (list[i] && list[i].src && list[i].src === address) return list[i].matrix;
       return null;
     }
+    // the address a name beside the page is loaded from, as a script's `src` reads it
+    function addressOf(name) {
+      var a = doc.createElement('a');
+      a.setAttribute('href', base + name);
+      return a.href || base + name;
+    }
 
-    // the matrix comes after the page is drawn: one handed over that is this file's, or the
-    // file the root or the diagnostics file names, as a script beside the page (which opens
-    // from disk too) or as JSON over http
+    // The matrix comes after the page is drawn: the one handed over by the host where it is
+    // this file's, or the file the root or the diagnostics file names, as a script beside the
+    // page (which opens from disk too) or as JSON over http. A page that names no matrix
+    // looks only at the host's global: another page's matrix in the list was never meant
+    // for it.
     function loadMatrix() {
       if (given.matrix) { takeMatrix(given.matrix); return; }
-      var mine = ownHanded();
-      if (mine) { takeMatrix(mine); return; }
+      var hostMatrix = D.tier === 'counts' ? null : win.SENTIER_DIAGNOSTICS_MATRIX || null;
+      if (hostMatrix && !checkMatrix(hostMatrix, D)) { takeMatrix(hostMatrix); return; }
       var name = root.getAttribute('data-sd-matrix') || (D.matrix ? D.matrix.file : null);
       if (!name || D.tier === 'counts') {
-        // nothing of its own to load: a matrix handed over that is not this file's is said
-        var other = D.tier === 'counts' ? null : handed()[0];
-        if (other) takeMatrix(other); else matrixSaid();
+        if (hostMatrix) takeMatrix(hostMatrix); // refused, and said why
+        else matrixSaid();
         return;
       }
       if (!safeName(name)) { refuseMatrix('its name is not a plain file name beside the page'); return; }
+      if (/\.js$/.test(name)) {
+        var there = handedAt(addressOf(name)); // a host that put the script in its page itself
+        if (there) { takeMatrix(there); return; }
+      }
       matrix.state = 'loading';
       matrix.said = name;
       matrixSaid();
@@ -1942,9 +2016,9 @@
         var script = doc.createElement('script');
         script.setAttribute('src', base + name);
         script.onload = function () {
-          var got = ownHanded(), all = handed();
-          if (got) takeMatrix(got);
-          else if (all.length) takeMatrix(all[all.length - 1]); // refused, and said why
+          var got = handedAt(script.src || addressOf(name));
+          if (got) takeMatrix(got); // refused, and said why, if not this file's
+          else if (win.SENTIER_DIAGNOSTICS_MATRIX && win.SENTIER_DIAGNOSTICS_MATRIX !== hostMatrix) takeMatrix(win.SENTIER_DIAGNOSTICS_MATRIX); // a script that sets the global
           else refuseMatrix(name + ' holds no matrix');
         };
         script.onerror = function () { refuseMatrix(name + ' is not beside the page'); };
@@ -2040,17 +2114,19 @@
     // that an id holding a comma or a colon is still one id.
     //
     // The address is the host's too, and may hold other pages: a page reads and writes only
-    // its own parts, and leaves every other part where it was. The first page of a document
-    // writes its parts as above; another writes them after its key (`data-sd-key`, or its
-    // place among the pages: `2.step=…`), so that two pages never take each other's step or
-    // item.
+    // its own parts, and leaves every other part where it was. A page of its own writes its
+    // parts as above. A page in a host's page writes them after its key, so that it never
+    // reads a host's own `item=` and two pages never take each other's step or item: the
+    // host's name for it (`data-sd-key`), or else `sd.` for the first page mounted in the
+    // document and `sd2.`, `sd3.` … for the next. The count is of mounting, not of places in
+    // the document, so a page mounted later but placed earlier takes a key of its own.
     var OWN_PARTS = ['step', 'steps', 'item'];
     var KEY = (function () {
       var named = root.getAttribute('data-sd-key');
       if (named) return named + '.';
-      var all = doc.querySelectorAll ? doc.querySelectorAll('[data-sentier-diagnostics]') : [];
-      var at = Array.prototype.indexOf.call(all, root);
-      return at > 0 ? (at + 1) + '.' : '';
+      if (standalone) return '';
+      var n = win.SENTIER_DIAGNOSTICS_MOUNTED = (win.SENTIER_DIAGNOSTICS_MOUNTED || 0) + 1;
+      return 'sd' + (n > 1 ? n : '') + '.';
     })();
     function hashList() {
       var text = (win.location.hash || '').replace(/^#/, '');
@@ -2224,7 +2300,28 @@
       return JSON.parse(node.textContent);
     }
 
+    // The page's own colours follow the host's. A host that sets a light ink is a dark page:
+    // the page takes its dark ground and its other dark colours for every token the host did
+    // not set, so that the host's ink is never set on the page's white. A host that sets a
+    // dark ground and no ink gets the light ink. A host that sets neither keeps the light
+    // colours, the ground set with the ink. Read again when the reader's colour scheme
+    // changes, as a host's tokens may follow it.
+    function matchScheme() {
+      var style = win.getComputedStyle ? win.getComputedStyle(root) : null;
+      if (!style || !style.getPropertyValue) return;
+      root.removeAttribute('data-sd-scheme');
+      var dark = schemeIsDark(style.getPropertyValue('--ink'), style.getPropertyValue('--surface'), function (text) {
+        return luminance(text, doc);
+      });
+      if (dark) root.setAttribute('data-sd-scheme', 'dark');
+    }
+
     function start() {
+      matchScheme();
+      if (win.matchMedia) {
+        var scheme = win.matchMedia('(prefers-color-scheme: dark)');
+        if (scheme && scheme.addEventListener) scheme.addEventListener('change', matchScheme);
+      }
       q('comparison').addEventListener('click', function (e) {
         var cell = e.target.closest ? e.target.closest('button[data-comp]') : null;
         if (!cell || !D) return;
@@ -2286,6 +2383,8 @@
       q('grid-more').addEventListener('click', function () { view.limit += PAGE; renderGrid(); });
       q('item-close').addEventListener('click', closeItem);
       root.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeItem(); });
+      // a modal drawer the browser closed itself (a phone's back gesture) is closed here too
+      q('item').addEventListener('close', function () { if (!q('item').hidden) closeItem(); });
       ['grid-table', 'worst-table'].forEach(function (name) {
         q(name).addEventListener('click', openFrom);
         q(name).addEventListener('keydown', function (e) { if (e.key === 'Enter') openFrom(e); else moveRow(e); });
@@ -2347,7 +2446,7 @@
     bandStep: bandStep, bandOf: bandOf, checkShape: checkShape, checkMatrix: checkMatrix, matrixRows: matrixRows,
     safeLink: safeLink, safeName: safeName, splitOf: splitOf, splitText: splitText, distance: distance, quantileTexts: quantileTexts, RANK: RANK,
     judge: judge, runsOf: runsOf, runPair: runPair, noiseOfStates: noiseOfStates, endsKnown: endsKnown, statesCarryNoise: statesCarryNoise,
-    mount: mount, mountAll: mountAll };
+    luminance: luminance, schemeIsDark: schemeIsDark, mount: mount, mountAll: mountAll };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else if (typeof global.document !== 'undefined') {
     global.SentierDiagnostics = api;

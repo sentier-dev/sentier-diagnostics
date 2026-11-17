@@ -530,7 +530,10 @@ page that holds a measure).
 the body in it, the two assets, and `standalone.css`, which sets the tokens and font a site
 would. It opens from disk; no build step, no server, no network, no font or script from
 elsewhere. Where the file names a matrix that lies beside it, the page writes it as
-`matrix.js`, which loads from disk too; a site serving `matrix.json` needs nothing else, as
+`matrix.js`, which loads from disk too: it adds the matrix to a list,
+`SENTIER_DIAGNOSTICS_MATRICES`, with the address it was loaded from, and a page takes the
+entry of the script it names and no other, so that several pages in one document each take
+their own. A site serving `matrix.json` needs nothing else, as
 the page fetches it over HTTP. Served over HTTP the page can also read `?file=...`, and it
 opens a file a reader chooses (read in the browser, sent nowhere). **For one step and the whole way, the page works out no class, no direction and no count
 of its own.** It reads them from the file, which the validator has checked, and only adds
@@ -562,7 +565,11 @@ filter) with the count and the legend in the row under it; then the matrix (10.5
 opens an item in a drawer (10.6); directly under it, always open, the distributions of the
 chosen comparison (10.3). The address keeps what is chosen and an open item, so that a
 reviewer can send someone to exactly that view: nothing for the whole way, `#step=<id>` for
-one step, `#steps=<first>:<last>` for a run (each id URL-encoded), and `&item=<id>`. An
+one step, `#steps=<first>:<last>` for a run (each id URL-encoded), and `&item=<id>`. In a
+host's page each part carries the page's key, so that the page never reads the host's own
+parts and two pages never take each other's: the host's name for it (`data-sd-key`), else
+`sd.` for the first page mounted and `sd2.`, `sd3.` … for the next (`#sd.step=<id>`). Every
+part the page does not own is kept as it was. An
 address naming a step the file does not have, steps apart, or a run the page cannot judge
 (no matrix), says so and shows the whole way. Below
 them, each closed until a reader opens it: the steps and the whole way (10.2), the worst
@@ -670,7 +677,9 @@ filter changes no count.
 
 ### 10.6 Item
 A drawer at the right (the whole window on a phone), opened from a row of the matrix or the
-worst list, closed with Close or Escape. First **why it differs**: the explanations about
+worst list, closed with Close or Escape. It is a dialog drawn above the host's page, named
+by the item: beside the matrix, which stays in use, where the window is wide; modal, the
+rest inert, where it fills the window or the browser knows no popovers. First **why it differs**: the explanations about
 the item, then those about a step or an indicator in which it moved (said to be so, as they
 may not be about it), or "none given" when the file holds neither; the file holds every
 explanation, so this "none" is never said over a part of a list. Then per indicator, the

@@ -56,10 +56,14 @@ def as_script(name: str, value) -> str:
 
 
 def matrix_script(matrix: Mapping) -> str:
-    """A matrix as the script beside a page: it adds the matrix to the list of matrices handed
+    """A matrix as the script beside a page: it adds an entry to the list of matrices handed
     to the pages of a document (`SENTIER_DIAGNOSTICS_MATRICES`) rather than setting one
-    global, so that two pages in one host each take the matrix of their own file."""
-    return f"(window.SENTIER_DIAGNOSTICS_MATRICES = window.SENTIER_DIAGNOSTICS_MATRICES || []).push({_json(matrix)});\n"
+    global: the address the script was loaded from and the matrix. A page takes the entry of
+    the script it names, so that two pages in one host each take the matrix of their own file."""
+    return (
+        "(window.SENTIER_DIAGNOSTICS_MATRICES = window.SENTIER_DIAGNOSTICS_MATRICES || []).push("
+        f'{{"src": document.currentScript ? document.currentScript.src : null, "matrix": {_json(matrix)}}});\n'
+    )
 
 
 def _read(name: str) -> str:
