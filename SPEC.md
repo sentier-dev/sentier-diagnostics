@@ -568,8 +568,13 @@ reviewer can send someone to exactly that view: nothing for the whole way, `#ste
 one step, `#steps=<first>:<last>` for a run (each id URL-encoded), and `&item=<id>`. In a
 host's page each part carries the page's key, so that the page never reads the host's own
 parts and two pages never take each other's: the host's name for it (`data-sd-key`), else
-`sd.` for the first page mounted and `sd2.`, `sd3.` … for the next (`#sd.step=<id>`). Every
-part the page does not own is kept as it was. An
+`sd.` for the first page mounted and `sd2.`, `sd3.` … for the next (`#sd.step=<id>`). A
+host's name is a plain word (a letter, then up to 39 letters, digits, `-` or `_`), not `sd`
+or `sdN`, and not the key of another page in the document; the page refuses any other and
+says why. A page mounted in place of one that was removed takes the key it left, so an
+address made before the host drew the page again still opens it; a host that draws pages
+again while the old ones are still in the document names them. Every part the page does not
+own is kept as it was. An
 address naming a step the file does not have, steps apart, or a run the page cannot judge
 (no matrix), says so and shows the whole way. Below
 them, each closed until a reader opens it: the steps and the whole way (10.2), the worst

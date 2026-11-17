@@ -1291,7 +1291,9 @@ test('where the drawer fills the window, or no popover is known, it opens modal;
   const css = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'sentier_diagnostics', 'page', 'diagnostics.css'), 'utf8');
   const drawerRule = css.slice(css.indexOf(' .sd-drawer {'), css.indexOf('}', css.indexOf(' .sd-drawer {')));
   for (const said of ['position: fixed', 'z-index: 2147483000', 'max-height: none', 'margin: 0', 'border: 0']) assert.ok(drawerRule.includes(said), said);
-  assert.match(css, /\.sd-drawer::backdrop \{/);
+  // a drawer that leaves the grid in use does not darken it: only the modal one
+  assert.match(css, /\.sd-drawer:modal::backdrop \{/);
+  assert.doesNotMatch(css, /\.sd-drawer::backdrop/);
 });
 
 test('a "%" in the address leaves the page drawn, the host\'s part kept and the page\'s own one set aside (issue 26)', () => {
@@ -1468,6 +1470,137 @@ test('the page\'s colours follow the host\'s ink: a light ink never stands on th
   vars['--ink'] = '#1d232a';
   listeners.filter(([type]) => type === 'change').forEach(([, f]) => f({ matches: false }));
   assert.equal(following.root.getAttribute('data-sd-scheme'), null);
+});
+
+test('a host colour the page cannot read is unknown, never black (review of issue 30)', () => {
+  // a canvas as a browser's: it takes a colour it can read, and keeps its own for any other
+  const known = { white: [255, 255, 255], 'oklch(0.95 0 0)': [242, 242, 242], '#010203': [1, 2, 3], '#fdfeff': [253, 254, 255] };
+  const canvasDoc = {
+    createElement: () => {
+      let fill = '#010203';
+      const context = {
+        get fillStyle() { return fill; },
+        set fillStyle(text) { if (known[text]) fill = text; },
+        fillRect() {},
+        getImageData: () => ({ data: [...known[fill], 255] }),
+      };
+      return { getContext: () => context };
+    },
+  };
+  assert.equal(page.luminance('light-dark(#fff, #111)', canvasDoc), null);
+  assert.equal(page.luminance('0 0% 100%', canvasDoc), null);
+  assert.ok(Math.abs(page.luminance('white', canvasDoc) - 1) < 1e-12);
+  assert.ok(Math.abs(page.luminance('oklch(0.95 0 0)', canvasDoc) - page.luminance('#f2f2f2')) < 1e-12);
+  const lum = (c) => page.luminance(c, canvasDoc);
+  assert.equal(page.schemeIsDark('', 'light-dark(#fff, #111)', lum), false, 'an unreadable ground is not a dark one');
+  assert.equal(page.schemeIsDark('0 0% 100%', '', lum), false, 'an unreadable ink is not a dark one');
+  assert.equal(page.schemeIsDark('0 0% 100%', '#111', lum), true, 'where the ink says nothing, the ground decides');
+  assert.equal(page.schemeIsDark('white', '#111', lum), true);
+  assert.equal(page.schemeIsDark(null, '', lum), false);
+});
+
+// a browser's styles, as far as the page reads them: the tokens on the page, and the colour of
+// a probe set to `var(--token)`, which the browser resolves (light-dark() to one of its two)
+// or, for a token that is no colour, leaves the colour of the probe's parent
+const RESOLVED = { 'light-dark(#fff, #111)': 'rgb(255, 255, 255)', 'light-dark(#eee, #1d232a)': 'rgb(238, 238, 238)', 'light-dark(#1d232a, #eee)': 'rgb(29, 35, 42)', '#eee': 'rgb(238, 238, 238)', '#1d232a': 'rgb(29, 35, 42)' };
+const browserStyles = (vars) => ({
+  getComputedStyle: (node) => {
+    const color = node.style.getPropertyValue('color');
+    if (color.startsWith('var(')) return { color: RESOLVED[vars[color.slice(4, -1)]] || node.parentNode.style.getPropertyValue('color') };
+    return { getPropertyValue: (name) => vars[name] || '', color: '' };
+  },
+});
+
+test('the page reads the host\'s tokens as the browser resolves them, and follows a theme switched by a class (review of issue 30)', () => {
+  const scheme = (vars) => dom.page(example(), undefined, { globals: browserStyles(vars) }).root.getAttribute('data-sd-scheme');
+  assert.equal(scheme({ '--surface': 'light-dark(#fff, #111)' }), null, 'a light host keeps the light page');
+  assert.equal(scheme({ '--surface': '0 0% 100%' }), null, 'a bare triplet is no colour, and not black');
+  assert.equal(scheme({ '--ink': '0 0% 100%' }), null);
+  assert.equal(scheme({ '--ink': 'light-dark(#1d232a, #eee)' }), null);
+  assert.equal(scheme({ '--ink': '#eee' }), 'dark');
+  assert.equal(scheme({ '--ink': 'light-dark(#eee, #1d232a)' }), 'dark', 'only the browser can say what light-dark() is');
+  // the probe leaves nothing behind
+  const probed = dom.page(example(), undefined, { globals: browserStyles({ '--ink': '#eee' }) });
+  const plain = dom.page(example(), undefined, { globals: {} }); // the data as a global, as above: no script element
+  assert.equal(probed.root.childNodes.length, plain.root.childNodes.length);
+  assert.ok(probed.root.childNodes.every((n) => !n.style.getPropertyValue('color')));
+
+  // a host that switches its theme by a class of an element around the page, after it drew it
+  const observers = [];
+  class Observer {
+    constructor(react) { this.react = react; this.watched = []; observers.push(this); }
+    observe(node, options) { this.watched.push([node, options]); }
+    disconnect() { this.watched = []; }
+  }
+  const vars = { '--ink': '#1d232a' };
+  const first = dom.page(example(), undefined, { globals: { ...browserStyles(vars), MutationObserver: Observer } });
+  const around = new dom.FakeNode('main');
+  around.nodeType = 1;
+  const themed = dom.body({ data: example() });
+  themed.ownerDocument = first.document;
+  around.appendChild(themed);
+  first.context.SentierDiagnostics.mount(themed);
+  const watch = observers[observers.length - 1];
+  assert.ok(watch.watched.some(([node, options]) => node === around && options.attributes), 'what is around the page is watched');
+  assert.ok(watch.watched.some(([node, options]) => node === themed && !options.attributeFilter.includes('data-sd-scheme')),
+    'the page itself, but not the mark it sets');
+  assert.equal(themed.getAttribute('data-sd-scheme'), null);
+  vars['--ink'] = '#eee';
+  watch.react([]);
+  assert.equal(themed.getAttribute('data-sd-scheme'), 'dark');
+  vars['--ink'] = '#1d232a';
+  watch.react([]);
+  assert.equal(themed.getAttribute('data-sd-scheme'), null);
+  // a page no longer in the document stops watching
+  themed.isConnected = false;
+  watch.react([]);
+  assert.deepEqual(watch.watched, []);
+});
+
+test('a key the host names is a plain word, neither the page\'s own nor another page\'s (review of issue 27)', () => {
+  for (const [key, why] of [['a&b', /is not a plain word/], ['left.item', /is not a plain word/], ['', /is not a plain word/],
+    ['x'.repeat(41), /is not a plain word/], ['sd', /is one the page gives/], ['SD2', /is one the page gives/]]) {
+    const drawn = dom.page(example(), undefined, { attributes: { 'data-sd-key': key }, hash: 'item=p01' });
+    assert.match(drawn.byId['load-error'].textContent, why, JSON.stringify(key));
+    assert.equal(drawn.byId.load.hidden, false, key);
+    assert.equal(drawn.byId.content.hidden, true, key);
+    assert.equal(drawn.context.location.hash, '#item=p01', 'the address is left as it was');
+  }
+  assert.equal(dom.page(example(), undefined, { attributes: { 'data-sd-key': 'x'.repeat(40) } }).byId.load.hidden, true);
+  // two pages named alike: the second is refused while the first is in the document
+  const mountBeside = (drawn, key) => {
+    const next = dom.body({ data: example() });
+    if (key !== undefined) next.setAttribute('data-sd-key', key);
+    next.ownerDocument = drawn.document;
+    drawn.context.SentierDiagnostics.mount(next);
+    return next;
+  };
+  const errorOf = (root) => root.querySelector('[data-sd="load-error"]').textContent;
+  const left = dom.page(example(), undefined, { attributes: { 'data-sd-key': 'left' } });
+  assert.match(errorOf(mountBeside(left, 'left')), /Another page in this document has the key data-sd-key="left"/);
+  assert.equal(errorOf(mountBeside(left, 'right')), '');
+  // once it is gone, a page drawn in its place takes its key
+  left.root.isConnected = false;
+  assert.equal(errorOf(mountBeside(left, 'left')), '');
+});
+
+test('a page drawn again in place of a removed one takes the key it left, so an address made before still opens it (review of issue 27)', () => {
+  const drawn = dom.page(example()); // "sd."
+  drawn.root.isConnected = false; // the host removed it, and draws it again
+  drawn.context.location.hash = '#sd.item=p01';
+  const again = dom.body({ data: example() });
+  again.ownerDocument = drawn.document;
+  drawn.context.SentierDiagnostics.mount(again);
+  assert.equal(again.querySelector('[data-sd="item"]').hidden, false);
+  // while the first is still there, the next page takes the next key
+  const kept = dom.page(example());
+  const beside = dom.body({ data: example() });
+  beside.ownerDocument = kept.document;
+  kept.context.location.hash = '#sd.item=p01';
+  kept.context.SentierDiagnostics.mount(beside);
+  assert.equal(beside.querySelector('[data-sd="item"]').hidden, true);
+  kept.open('sd2.item=p01');
+  assert.equal(beside.querySelector('[data-sd="item"]').hidden, false);
 });
 
 test('an item the file does not list is said to carry no explanation, never "none given" (issue 31)', () => {

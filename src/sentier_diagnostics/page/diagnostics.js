@@ -430,7 +430,9 @@
 
   // The relative luminance of a colour as CSS writes it (WCAG 2), or null where it cannot be
   // read. Hex and rgb() are read here; any other form (a name, hsl(), oklch() ...) is drawn
-  // on a canvas of one pixel and read back.
+  // on a canvas of one pixel and read back. A canvas keeps its colour when it is given one it
+  // cannot read (light-dark(), a bare "0 0% 100%"): set over two different colours, such a
+  // text leaves two different colours, and is unknown, never black.
   function luminance(text, doc) {
     text = String(text || '').trim();
     var rgb = null, m;
@@ -444,7 +446,11 @@
         var canvas = doc.createElement('canvas');
         canvas.width = canvas.height = 1;
         var context = canvas.getContext('2d');
-        context.fillStyle = '#000'; context.fillStyle = text;
+        var taken = ['#010203', '#fdfeff'].map(function (over) {
+          context.fillStyle = over; context.fillStyle = text;
+          return String(context.fillStyle);
+        });
+        if (taken[0] !== taken[1]) return null;
         context.fillRect(0, 0, 1, 1);
         var d = context.getImageData(0, 0, 1, 1).data;
         rgb = [d[0], d[1], d[2]];
@@ -456,14 +462,25 @@
   }
 
   // Whether the host's tokens make a dark page: a light ink (whatever its ground), or a dark
-  // ground with no ink. Light and dark part where a colour contrasts as much with black as
-  // with white, at a relative luminance of about 0.179.
+  // ground where no ink can be read. A token that is no colour the page can read says
+  // nothing: it is never taken for black. Light and dark part where a colour contrasts as
+  // much with black as with white, at a relative luminance of about 0.179.
   var SCHEME_PARTS = Math.sqrt(1.05 * 0.05) - 0.05;
+
+  // the keys a host may name a page by in the address (`data-sd-key`), and the page's own
+  var KEY_LONGEST = 40;
+  var KEY_WORD = new RegExp('^[A-Za-z][A-Za-z0-9_-]{0,' + (KEY_LONGEST - 1) + '}$');
+  var OWN_KEY = /^sd[0-9]*$/i;
   function schemeIsDark(ink, surface, lum) {
-    ink = String(ink || '').trim(); surface = String(surface || '').trim();
-    var l = ink ? lum(ink) : surface ? lum(surface) : null;
-    if (l === null || l === undefined) return false;
-    return ink ? l > SCHEME_PARTS : l < SCHEME_PARTS;
+    function read(text) {
+      text = String(text || '').trim();
+      var l = text ? lum(text) : null;
+      return l === null || l === undefined || !isFinite(l) ? null : l;
+    }
+    var l = read(ink);
+    if (l !== null) return l > SCHEME_PARTS;
+    l = read(surface);
+    return l !== null && l < SCHEME_PARTS;
   }
 
   // what a page needs of a file before it shows anything
@@ -2120,13 +2137,35 @@
     // host's name for it (`data-sd-key`), or else `sd.` for the first page mounted in the
     // document and `sd2.`, `sd3.` … for the next. The count is of mounting, not of places in
     // the document, so a page mounted later but placed earlier takes a key of its own.
+    //
+    // A key the host names is a plain word (a letter, then letters, digits, - or _), not one
+    // of the page's own (`sd`, `sd2` ...) and not the key of another page still in the
+    // document: anything else would write an address the page cannot read back, or open
+    // two pages on one item. The page refuses it and says why. A page put in place of one
+    // that was removed takes the key that page left, so that an address made before a host
+    // drew it again still opens it; a host that draws two pages at once names them.
     var OWN_PARTS = ['step', 'steps', 'item'];
+    var keyProblem = null;
     var KEY = (function () {
+      var keys = win.SENTIER_DIAGNOSTICS_KEYS = win.SENTIER_DIAGNOSTICS_KEYS || {};
+      function free(key) {
+        var holder = keys[key];
+        return !holder || holder === root || holder.isConnected === false;
+      }
       var named = root.getAttribute('data-sd-key');
-      if (named) return named + '.';
+      if (named !== null) {
+        if (!KEY_WORD.test(named)) keyProblem = 'The page\'s key, data-sd-key="' + named + '", is not a plain word: a letter, then up to ' + (KEY_LONGEST - 1) + ' letters, digits, - or _. An address could not hold it.';
+        else if (OWN_KEY.test(named)) keyProblem = 'The page\'s key, data-sd-key="' + named + '", is one the page gives a page the host names none for (sd, sd2 ...): name it otherwise.';
+        else if (!free(named)) keyProblem = 'Another page in this document has the key data-sd-key="' + named + '": two pages with one key open on each other\'s items. Give each its own.';
+        if (keyProblem) return null;
+        keys[named] = root;
+        return named + '.';
+      }
       if (standalone) return '';
-      var n = win.SENTIER_DIAGNOSTICS_MOUNTED = (win.SENTIER_DIAGNOSTICS_MOUNTED || 0) + 1;
-      return 'sd' + (n > 1 ? n : '') + '.';
+      for (var n = 1; ; n++) {
+        var key = 'sd' + (n > 1 ? n : '');
+        if (free(key)) { keys[key] = root; return key + '.'; }
+      }
     })();
     function hashList() {
       var text = (win.location.hash || '').replace(/^#/, '');
@@ -2310,18 +2349,56 @@
       var style = win.getComputedStyle ? win.getComputedStyle(root) : null;
       if (!style || !style.getPropertyValue) return;
       root.removeAttribute('data-sd-scheme');
-      var dark = schemeIsDark(style.getPropertyValue('--ink'), style.getPropertyValue('--surface'), function (text) {
+      var dark = schemeIsDark(tokenColour(style, '--ink'), tokenColour(style, '--surface'), function (text) {
         return luminance(text, doc);
       });
       if (dark) root.setAttribute('data-sd-scheme', 'dark');
     }
 
-    function start() {
-      matchScheme();
+    // A host's colour token as the browser resolves it, set on a probe in the page, so that
+    // whatever the host wrote (a name, light-dark(), another var()) comes back as a colour.
+    // A token that is no colour (a bare "0 0% 100%", kept by some hosts for their own hsl())
+    // leaves the probe the colour of its parent; under two parents of different colours it
+    // is told apart, and is null. Without a browser's styles: the token as written.
+    function tokenColour(style, name) {
+      var said = String(style.getPropertyValue(name) || '').trim();
+      if (!said) return '';
+      var got = [];
+      try {
+        ['rgb(1, 2, 3)', 'rgb(4, 5, 6)'].forEach(function (parent) {
+          var outer = doc.createElement('span'), probe = doc.createElement('span');
+          outer.hidden = true;
+          outer.style.setProperty('color', parent);
+          probe.style.setProperty('color', 'var(' + name + ')');
+          outer.appendChild(probe);
+          root.appendChild(outer);
+          try { got.push(String(win.getComputedStyle(probe).color || '')); } finally { root.removeChild(outer); }
+        });
+      } catch (error) { return said; }
+      if (!got[0]) return said;
+      return got[0] === got[1] ? got[0] : null;
+    }
+
+    // Read the scheme again when the reader's colour scheme changes, and when the host
+    // switches its theme by a class or an attribute of the page or of anything around it.
+    function followScheme() {
       if (win.matchMedia) {
         var scheme = win.matchMedia('(prefers-color-scheme: dark)');
         if (scheme && scheme.addEventListener) scheme.addEventListener('change', matchScheme);
       }
+      if (!win.MutationObserver) return;
+      var watch = new win.MutationObserver(function () {
+        if (root.isConnected === false) { watch.disconnect(); return; }
+        matchScheme();
+      });
+      watch.observe(root, { attributes: true, attributeFilter: ['class', 'style'] });
+      for (var up = root.parentNode; up && up.nodeType === 1; up = up.parentNode) watch.observe(up, { attributes: true });
+    }
+
+    function start() {
+      if (keyProblem) { refuse(keyProblem); return; }
+      matchScheme();
+      followScheme();
       q('comparison').addEventListener('click', function (e) {
         var cell = e.target.closest ? e.target.closest('button[data-comp]') : null;
         if (!cell || !D) return;

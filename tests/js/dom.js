@@ -34,6 +34,9 @@ class FakeNode {
     this.value = '';
     this.disabled = false;
     this.focused = false;
+    // the inline style, as the CSSOM sets it: by property
+    const values = {};
+    this.style = { setProperty: (name, value) => { values[name] = String(value); }, getPropertyValue: (name) => values[name] || '' };
   }
 
   get firstChild() { return this.childNodes[0] || null; }
