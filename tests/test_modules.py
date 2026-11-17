@@ -907,6 +907,8 @@ class Summary(unittest.TestCase):
             "#1": f"\\#{j}1", "GH-1": f"GH{j}-1", "o/r/issues/1": f"o/r/issues/{j}1", "@team": f"@{j}team",
             "$x$": f"{j}\\$x{j}\\$", "a|b": "a\\|b", "&amp;": "\\&amp;", "<b>": "\\<b\\>",
             "high-level": "high-level", "a857d60": "a857d60",
+            # nine digits still start a list, ten do not; two tildes strike through
+            "123456789. a": "123456789\\. a", "1234567890. a": "1234567890. a", "~~a~~": "\\~\\~a\\~\\~",
         }  # fmt: skip
         shown = lambda md: re.sub(r"\\(.)", r"\1", md.replace(j, "")).replace(s, " ")  # noqa: E731
         for text, md in cases.items():
