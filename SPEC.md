@@ -1048,7 +1048,10 @@ result that is missing. It is judged by the rule (section 5) against the base:
   Per indicator the page says the largest noise an item is judged with, and at how many of
   the builds those items stand on the noise is known ("noise known at 3 of 5 builds"; the
   published results are known, and exact), never reading not measured as none; where no
-  build measured it the page says "not measured", never "identical". A noise names its two
+  build measured it the page says "not measured", never "identical". Where the set changes
+  nothing in an indicator, no item is judged and the noise stands on no build (`builds` 0,
+  `value` null): the page says nothing changed there, never "not measured", which is a gap
+  in what was measured and not the absence of anything to measure. A noise names its two
   builds (`between`): two builds in one process on one solve route measure the engine's
   determinism and read 0, two routes measure how a result moves with the route; the note
   says which;

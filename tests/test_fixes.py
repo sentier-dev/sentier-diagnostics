@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import itertools
 import json
 import tempfile
 import unittest
@@ -920,18 +921,29 @@ class Noise(unittest.TestCase):
         self.assertEqual(fixes.noise_of(f, ["a", "b"])[A], {"value": 1e-4 + 5e-3, "known": 2, "builds": 2})
 
     def test_a_sum_runs_in_the_order_of_the_file(self):
-        """Three fixes change p1, their builds' noise 0.1, 0.2 and 0.3: summed in the order of
-        the file it is 0.6000000000000001, in the other order 0.6. The page's port sums in the
-        same order, so the two agree bit for bit."""
+        """Six fixes change p1, the base is the published results. Their builds' noise summed in
+        the order of the file is 0.26099999999999995; of the 720 orders only that one and the
+        one with its first two swapped give that float, so an order by id, by the set's own
+        hashing or by anything else is caught: the page's port must sum as the file runs, not
+        as an object's keys come. (sentier-bafu's review: 3 fixes already in id order let an
+        id-sorted sum through.)"""
+        order = (("f", 0.084), ("b", 0.012), ("e", 0.058), ("a", 0.016), ("d", 0.05), ("c", 0.041))
         data, full = chain_and_matrix()
-        f = fixes.build("Three on one item", data=data, full=full, base="s1",
-                        fixes=[fixes.fix(x, f"Fix {x}", kind="amount", noise=measured(n))
-                               for x, n in (("x", 0.1), ("y", 0.2), ("z", 0.3))],
-                        results={"x": {A: {"p1": 1.1}}, "y": {A: {"p1": 1.2}}, "z": {A: {"p1": 1.3}}},
+        f = fixes.build("Six on one item", data=data, full=full, base="s1",
+                        fixes=[fixes.fix(x, f"Fix {x}", kind="amount", noise=measured(n)) for x, n in order],
+                        results={x: {A: {"p1": 1.0 + n}} for x, n in order},
                         interactions=checked_pairs())  # fmt: skip
-        drawn = fixes.compose(f, ["z", "y", "x"])
-        self.assertEqual(drawn["item_noise"][A][at(f, "p1")], 0.1 + 0.2 + 0.3)
-        self.assertNotEqual(0.1 + 0.2 + 0.3, 0.3 + 0.2 + 0.1)
+
+        def summed(noises):
+            level = None
+            for n in noises:
+                level = n if level is None else level + n
+            return level
+
+        in_file = summed(n for _, n in order)
+        self.assertEqual(fixes.compose(f, sorted(x for x, _ in order))["item_noise"][A][at(f, "p1")], in_file)
+        alike = [p for p in itertools.permutations(order) if summed(n for _, n in p) == in_file]
+        self.assertEqual(alike, [order, (order[1], order[0], *order[2:])], "the test no longer tells orders apart")
 
     def test_a_result_taken_from_a_build_inside_the_set_takes_that_builds_noise(self):
         """The set of a, b and c takes p1 in A from the build of a and b: p1 stands on that
@@ -973,6 +985,23 @@ class Noise(unittest.TestCase):
         self.assertEqual(fixes.errors(changed(f, add(3.09 * 1.018))), [], "1.8 % from c's build: within 2 %")
         found = fixes.errors(changed(f, add(3.09 * 1.025)))
         self.assertTrue(said(found, "built set 'abc', item 'p3', x:a"), found)
+
+    def test_a_built_set_is_held_at_an_item_none_of_its_fixes_change_to_the_base(self):
+        """a and b built together move p3, which neither changes: there the sum is the base, so
+        the build is held to it with the base's noise and its own (1.5 %). 1.2 % passes; it
+        would not with the built set's noise alone (1 %). 1.6 % is refused. (sentier-bafu's
+        review: no test had a built set move an item none of its fixes move.)"""
+        f = disjoint()
+        p1, p2, p3 = (at(f, p) for p in ("p1", "p2", "p3"))
+
+        def add(value):
+            return lambda g: g["built"].append({"id": "ab", "label": "A and B", "fixes": ["a", "b"], "state": None,
+                                                "results": {A: sorted([[p1, 1.5], [p2, 2.5], [p3, value]]), B: []},
+                                                "noise": measured(0.01)})  # fmt: skip
+
+        self.assertEqual(fixes.errors(changed(f, add(3.0 * 1.012))), [], "1.2 % from the base: within 1.5 %")
+        found = fixes.errors(changed(f, add(3.0 * 1.016)))
+        self.assertTrue(said(found, "built set 'ab', item 'p3', x:a"), found)
 
     def test_a_release_is_held_to_its_state_with_the_noise_of_both(self):
         """1.0028 is 1.5e-3 from the state's 1.0013: within the two builds' noise (2e-3),
