@@ -577,7 +577,9 @@ ancestor's opacity, filter, backdrop filter or blend mode, an element placed or 
 away from its parents, and an element of `display: contents` (a slot among them), which
 paints no background and whose background is read all the same. It looks
 again when the reader's colour scheme changes, when anything changes in the document or in
-a shadow root the page sits in, and when a stylesheet loads: once a frame at most, and it
+a shadow root the page sits in, when a stylesheet loads, and when a transition or an
+animation ends there (a host that animates its switch changes a background and nothing in
+the document): once a frame at most, and it
 reads the tokens again only where they, the computed `color-scheme`, the reader's scheme or
 what a translucent ground shows changed (it reads what is around the page only where the
 ground as written may have alpha), so that a host's observer that answers the page's

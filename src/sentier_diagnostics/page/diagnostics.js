@@ -852,9 +852,36 @@
   // it is put back. Once no page is left, the listeners are taken off. Where the browser has
   // no WeakRef, the pages are held until unmount(), as each page held itself before.
   var shared = null;
+  // A node's property (a getter) or method (`call`) as the DOM itself holds it, read through
+  // the prototype of `type` in the window `win`. A plain property can say something else: a
+  // document gives its named elements for their names (with an image named addEventListener
+  // in it, document.addEventListener is that image; an inline frame named host makes
+  // document.host its window), a form gives its controls for theirs, and a link's `host` is
+  // the host name of its address. Without the prototype (no DOM, as in the tests' stand-in),
+  // the plain property. Null where the call throws or the node has no such thing.
+  function domRelation(win, type, name, call) {
+    var proto = win && win[type] && win[type].prototype, own = null;
+    try { own = proto ? Object.getOwnPropertyDescriptor(proto, name) : null; } catch (error) { own = null; }
+    var read = own && (call ? own.value : own.get);
+    return function (node) {
+      if (!node) return null;
+      var args = Array.prototype.slice.call(arguments, 1);
+      try {
+        if (typeof read === 'function') return call ? read.apply(node, args) : read.call(node);
+        var said = node[name];
+        return call ? (typeof said === 'function' ? said.apply(node, args) : null) : said;
+      } catch (error) { return null; }
+    };
+  }
+
   function sharedListeners() {
     if (shared) return shared;
     var win = global;
+    // what a theme switch can change with no change in the document: a transition or an
+    // animation of a background, heard where it ends
+    var HEARD = ['load', 'transitionend', 'animationend'];
+    var on = domRelation(win, 'EventTarget', 'addEventListener', true);
+    var off = domRelation(win, 'EventTarget', 'removeEventListener', true);
     var pages = []; // a weak reference to each page that joined: {changed, look, address}
     var tops = []; // a weak reference to the document and each shadow root watched
     var observer = null, reader = null, armed = false, queued = false;
@@ -903,7 +930,7 @@
       if (observer) observer.disconnect();
       tops.forEach(function (ref) {
         var top = ref.deref();
-        if (top && top.removeEventListener) top.removeEventListener('load', later, true);
+        if (top) HEARD.forEach(function (type) { off(top, type, later, true); });
       });
       tops = [];
     }
@@ -918,14 +945,15 @@
           settle();
         };
       },
-      // a root the page sits in, watched for changes and for loads (a load does not leave a
-      // shadow root) from now on, once whichever pages sit in it
+      // a root the page sits in, watched for changes, and for loads and the ends of
+      // transitions and animations (heard as they go down, so whether or not they leave a
+      // shadow root), from now on, once whichever pages sit in it
       watch: function (top) {
         for (var i = 0; i < tops.length; i++) if (tops[i].deref() === top) return;
         tops = tops.filter(function (ref) { return ref.deref(); });
         tops.push(weakly(top));
         if (observer) observer.observe(top, WATCHED);
-        if (top.addEventListener) top.addEventListener('load', later, true);
+        HEARD.forEach(function (type) { on(top, type, later, true); });
       }
     };
     return shared;
@@ -3965,28 +3993,13 @@
     // document's tree has no loop, and none is near this deep: the limit holds a walk that
     // was handed something else for a node.
     var WALK_LIMIT = 4096;
-    // A node's relations as the DOM holds them, read through the getters of its prototypes.
-    // A plain property can say something else: a document's named elements (with a
-    // `<form name="host">` in it, `document.host` is that form), a form's controls (a field
-    // named parentNode, nodeType or host is what the form gives for that name), and a link's
-    // `host` (the host name of its address). Without the prototypes (no DOM, as in the tests'
-    // stand-in), the plain property.
-    function related(type, name, call) {
-      var proto = win[type] && win[type].prototype, own = null;
-      try { own = proto ? Object.getOwnPropertyDescriptor(proto, name) : null; } catch (error) { own = null; }
-      var read = own && (call ? own.value : own.get);
-      return function (node) {
-        if (!node) return null;
-        try {
-          if (typeof read === 'function') return read.call(node);
-          var said = node[name];
-          return call ? (typeof said === 'function' ? said.call(node) : null) : said;
-        } catch (error) { return null; }
-      };
-    }
+    // A node's relations as the DOM holds them (domRelation): a host's names, a form's
+    // controls among them, do not stand in for them.
+    function related(type, name, call) { return domRelation(win, type, name, call); }
     var parentOf = related('Node', 'parentNode'), typeOf = related('Node', 'nodeType'),
       slotOf = related('Element', 'assignedSlot'), hostOf = related('ShadowRoot', 'host'),
-      rootNodeOf = related('Node', 'getRootNode', true);
+      rootNodeOf = related('Node', 'getRootNode', true), rootElementOf = related('Document', 'documentElement'),
+      firstOf = related('Document', 'querySelector', true);
     // the element a node is drawn in: its slot where it is slotted, its parent, or the host
     // of the shadow root it is the top of; none above the document's root element, and none
     // where what is above is not an element
@@ -4005,11 +4018,11 @@
     // with the reader's dark. Browsers paint a dark canvas a little apart (#121212 in
     // Chrome); any of them is dark.
     function canvasScheme() {
-      var top = doc.documentElement, said = '';
+      var top = rootElementOf(doc), said = '';
       try {
-        var style = top && win.getComputedStyle ? win.getComputedStyle(top) : null;
+        var style = top && typeOf(top) === 1 && win.getComputedStyle ? win.getComputedStyle(top) : null;
         said = style && style.getPropertyValue ? String(style.getPropertyValue('color-scheme') || '') : '';
-        var meta = !/\b(light|dark)\b/i.test(said) && doc.querySelector ? doc.querySelector('meta[name="color-scheme"]') : null;
+        var meta = !/\b(light|dark)\b/i.test(said) ? firstOf(doc, 'meta[name="color-scheme"]') : null;
         if (meta) said = String(meta.getAttribute('content') || '');
       } catch (error) { said = ''; }
       return said.toLowerCase();
@@ -4097,9 +4110,11 @@
 
     // Look again whenever the host may have switched its theme: the reader's colour scheme
     // changed, the document changed (a class or an attribute anywhere, an element put in or
-    // taken out, the page itself put in after it was built), or a stylesheet finished
-    // loading. Watched: the document and every shadow root the page sits in, for changes
-    // and for loads (a load does not leave a shadow root). A look reads only what the
+    // taken out, the page itself put in after it was built), a stylesheet finished loading,
+    // or a transition or an animation ended (a switch animated over time moves a background
+    // and changes nothing in the document). Watched: the document and every shadow root the
+    // page sits in, for changes, loads and those ends (heard on their way down, as a load
+    // does not leave a shadow root). A look reads only what the
     // scheme is read from (schemeSign), once a frame however much changed, and reads the
     // scheme itself only where that changed. So the page's own probes, and a host's
     // observer that answers them, end after one look. Not seen: a rule a host adds or edits

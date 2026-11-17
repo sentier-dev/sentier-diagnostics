@@ -2188,7 +2188,11 @@ const inHost = (vars, grounds, options = {}) => {
       return { getPropertyValue: (name) => (name === 'background-color' ? node.bg || '' : name === 'color-scheme' ? (node.isRoot ? scheme.value : '') : vars[name] || '') };
     },
   };
-  const first = dom.page(example(), undefined, { globals: { ...styles, matchMedia: () => reader, MutationObserver: Observer, ...(options.globals || {}) } });
+  // `manual`: the first page waits, so that `before` changes the document before any page mounts
+  const first = dom.page(example(), undefined, {
+    attributes: options.manual ? { 'data-sentier-diagnostics': 'manual' } : {},
+    globals: { ...styles, matchMedia: () => reader, MutationObserver: Observer, ...(options.globals || {}) },
+  });
   const html = new dom.FakeNode('html'), body = new dom.FakeNode('body'), main = new dom.FakeNode('main');
   html.isRoot = true;
   [html.bg, body.bg, main.bg] = [grounds.html, grounds.body, grounds.main];
@@ -2210,6 +2214,8 @@ const inHost = (vars, grounds, options = {}) => {
     dark: () => themed.getAttribute('data-sd-scheme') === 'dark',
     ended: () => reads <= 50000, // every walk ended (a page that threw is refused, and light)
     wasRead: (node) => read.has(node),
+    // an event the document hears on its way down (capture): a transition or animation ending
+    fire: (type) => (first.documentListeners[type] || []).filter(([, capture]) => capture).forEach(([react]) => react({ type })),
   };
 };
 
@@ -2367,6 +2373,16 @@ test('the walk around the page follows the tree, not what a host\'s names put in
     },
   });
   assert.equal(wrapped({ Node, Element, ShadowRoot }).dark(), true, 'inside a form whose controls take its names');
+  // a page deep in its host is read out to its body: the limit is far above any real depth
+  const deep = faint({
+    before: ({ main, themed }) => {
+      main.removeChild(themed);
+      let at = main;
+      for (let n = 0; n < 300; n++) { const div = new dom.FakeNode('div'); at.appendChild(div); at = div; }
+      at.appendChild(themed);
+    },
+  });
+  assert.equal(deep.dark(), true, 'a page 300 elements deep reads its body');
   // without the getters, a form whose control is named assignedSlot leads the walk round
   // and round between them: it ends at its limit, and the ground is unknown (light), never
   // a hang or an error, nor the canvas behind
@@ -2389,6 +2405,58 @@ test('the walk around the page follows the tree, not what a host\'s names put in
   });
   looped.look();
   assert.ok(asked <= 50000);
+});
+
+test('a host that animates its switch is followed where the transition or animation ends (review of #46)', () => {
+  // a transition moves the body's background and changes nothing in the document: no look is
+  // asked for until it ends, and then one is
+  const host = inHost({ '--surface': 'rgb(255 255 255 / .05)' }, { body: 'rgb(255, 255, 255)' });
+  assert.equal(host.dark(), false);
+  host.body.bg = 'rgb(17, 17, 17)';
+  assert.equal(host.dark(), false, 'nothing heard while it runs');
+  host.fire('transitionend');
+  assert.equal(host.dark(), true);
+  host.body.bg = 'rgb(255, 255, 255)'; // a theme switched by @keyframes
+  host.fire('animationend');
+  assert.equal(host.dark(), false);
+  // A document whose names stand in for its own: an <img name="addEventListener">, an
+  // <iframe name="documentElement"> (a window), an <img name="querySelector">. The page reads
+  // the document through its prototypes: it hears the ends, and reads the canvas's scheme
+  // from the root element or the meta, as in any document.
+  const own = new WeakMap(); // what the document's prototype holds, once its names stand in for it
+  const ownOf = (node) => (own.has(node) ? own.get(node) : node);
+  const by = (name) => function (...args) { return ownOf(this)[name].apply(this, args); };
+  class EventTarget {}
+  EventTarget.prototype.addEventListener = by('addEventListener');
+  EventTarget.prototype.removeEventListener = by('removeEventListener');
+  class Document {}
+  Object.defineProperty(Document.prototype, 'documentElement', { get() { return ownOf(this).documentElement; } });
+  Document.prototype.querySelector = by('querySelector');
+  const named = (globals, options, names = ['addEventListener', 'removeEventListener', 'documentElement', 'querySelector']) => inHost({ '--surface': 'transparent' }, {}, {
+    ...options,
+    globals,
+    manual: true, // the document's names stand in before the first page mounts
+    before: ({ document }) => {
+      const kept = {};
+      names.forEach((name) => { kept[name] = document[name]; });
+      own.set(document, kept);
+      const img = new dom.FakeNode('img');
+      names.forEach((name) => { document[name] = name === 'documentElement' ? { closed: false } : img; });
+    },
+  });
+  const read = named({ EventTarget, Document }, { scheme: 'dark' });
+  assert.equal(read.dark(), true, 'the root element\'s scheme, read through the document\'s getter');
+  assert.equal(named({ EventTarget, Document }, { meta: 'dark' }).dark(), true, 'the meta, found through the document\'s own querySelector');
+  read.body.bg = 'rgb(255, 255, 255)';
+  read.fire('transitionend');
+  assert.equal(read.dark(), false, 'the end heard through the document\'s own addEventListener');
+  // without the prototypes those names are all the page has: nothing is read or heard, and
+  // nothing throws
+  const unread = named({}, { scheme: 'dark' });
+  assert.equal(unread.dark(), false);
+  assert.ok(unread.ended());
+  // and a root element that is not one is not read: the meta still is
+  assert.equal(named({}, { meta: 'dark' }, ['documentElement']).dark(), true);
 });
 
 test('the reader\'s scheme alone is followed: a token in light-dark() resolves anew, its text unchanged (review of #34)', () => {
@@ -3101,7 +3169,7 @@ test('a page a host removed without unmount() is let go once nothing holds it, a
   drawn.changed();
   assert.equal(drawn.listeners.hashchange.length, 0);
   assert.deepEqual(observers[0].watched, [], 'the document is watched no more');
-  assert.equal((drawn.documentListeners.load || []).length, 0);
+  ['load', 'transitionend', 'animationend'].forEach((type) => assert.equal((drawn.documentListeners[type] || []).length, 0, type));
   assert.equal(listening(lists), 0, 'nor the reader\'s colour scheme');
   assert.ok(drawn.context.SENTIER_DIAGNOSTICS_WAITERS.every((ref) => ref.deref() === undefined), 'no page is held waiting');
   // the scripts left in the head call nothing
@@ -3148,7 +3216,7 @@ test('the pages of a window share one observer, one listener of each kind and on
   assert.equal(observers.length, 1);
   assert.equal(observers[0].watched.length, 1, 'the document watched once');
   assert.equal(drawn.listeners.hashchange.length, 1);
-  assert.equal(drawn.documentListeners.load.length, 1);
+  ['load', 'transitionend', 'animationend'].forEach((type) => assert.equal(drawn.documentListeners[type].length, 1, type));
   assert.equal(listening(lists), 1);
   for (let n = 0; n < 100; n++) observers[0].react([{ type: 'attributes' }]);
   assert.equal(frames.length, 1, 'a hundred changes, one look for every page');
