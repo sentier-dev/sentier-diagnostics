@@ -78,6 +78,11 @@ class FakeNode {
 
   addEventListener(type, listener) { (this.listeners[type] = this.listeners[type] || []).push(listener); }
 
+  removeEventListener(type, listener) {
+    const held = this.listeners[type] || [];
+    if (held.indexOf(listener) >= 0) held.splice(held.indexOf(listener), 1);
+  }
+
   // an event on this node, passed up to its parents as a browser does
   dispatch(type, event) {
     const full = { target: this, ...event };

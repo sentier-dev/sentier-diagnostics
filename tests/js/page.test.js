@@ -1472,25 +1472,79 @@ test('the page\'s colours follow the host\'s ink: a light ink never stands on th
   assert.equal(following.root.getAttribute('data-sd-scheme'), null);
 });
 
-test('a host colour the page cannot read is unknown, never black (review of issue 30)', () => {
-  // a canvas as a browser's: it takes a colour it can read, and keeps its own for any other
-  const known = { white: [255, 255, 255], 'oklch(0.95 0 0)': [242, 242, 242], '#010203': [1, 2, 3], '#fdfeff': [253, 254, 255] };
-  const canvasDoc = {
+// a canvas as a browser's: it takes a colour it can read, and keeps its own for any other.
+// `shown` stands for what a browser that hides what a canvas holds gives back instead.
+const canvasOf = (shown) => {
+  const known = { white: [255, 255, 255], 'color(srgb 0.949 0.949 0.949)': [242, 242, 242], 'color(srgb 0.1 0.1 0.1)': [26, 26, 26], 'color(srgb 1 1 1 / 0.5)': [255, 255, 255, 128], '#010203': [1, 2, 3], '#fdfeff': [253, 254, 255] };
+  return {
     createElement: () => {
       let fill = '#010203';
+      let pixel = [0, 0, 0, 0];
       const context = {
         get fillStyle() { return fill; },
         set fillStyle(text) { if (known[text]) fill = text; },
-        fillRect() {},
-        getImageData: () => ({ data: [...known[fill], 255] }),
+        clearRect() { pixel = [0, 0, 0, 0]; },
+        // a colour drawn over what is there: a translucent one is mixed with it
+        fillRect() {
+          const [r, g, b, a = 255] = known[fill];
+          const over = a / 255;
+          pixel = pixel[3] ? [r, g, b].map((v, i) => Math.round(v * over + pixel[i] * (1 - over))).concat(255) : [r, g, b, a];
+        },
+        getImageData: () => ({ data: shown ? [...shown] : [...pixel] }),
       };
       return { getContext: () => context };
     },
   };
+};
+
+test('a colour in oklch() or oklab() is read as it is written, without a canvas (review of 3a80142)', () => {
+  // Tailwind 4 writes every colour in oklch, and a browser gives it back so
+  const near = (a, b, within) => assert.ok(Math.abs(a - b) < within, a + ' and ' + b);
+  near(page.luminance('oklch(0.95 0 0)'), 0.857375, 1e-12); // grey: the cube of L
+  near(page.luminance('oklab(0.95 0 0)'), 0.857375, 1e-12);
+  near(page.luminance('OKLCH(95% 0 0)'), 0.857375, 1e-12);
+  near(page.luminance('OKLCH(0.95 0.3 330)'), 0.4887679976337716, 1e-12);
+  // Tailwind's gray-900 and slate-50 against their sRGB fallbacks, to the rounding of a hex
+  near(page.luminance('oklch(21% 0.034 264.665)'), page.luminance('#101828'), 1e-6);
+  near(page.luminance('oklch(98.4% 0.003 247.858)'), page.luminance('#f8fafc'), 1e-3);
+  // beyond sRGB: clipped as a canvas draws it (unclipped, it would read 0.757)
+  near(page.luminance('oklch(0.95 0.3 330)'), 0.4887679976337716, 1e-12);
+  near(page.luminance('oklch(0.95 75% 330deg)'), 0.4887679976337716, 1e-12); // C as a percentage of 0.4
+  near(page.luminance('oklch(0.95 0.3 0.9166666666666666turn)'), 0.4887679976337716, 1e-12);
+  near(page.luminance('oklch(0.95 0.3 5.759586531581287rad)'), 0.4887679976337716, 1e-12);
+  near(page.luminance('oklab(0.95 75% -10%)'), page.luminance('oklab(0.95 0.3 -0.04)'), 1e-15);
+  assert.equal(page.luminance('oklch(0.5 0.1 200 / 0.5)'), page.luminance('oklch(0.5 0.1 200)')); // alpha aside, as rgb() leaves it
+  assert.equal(page.luminance('oklch(none 0 0)'), 0);
+  for (const wrong of ['oklch(0.5deg 0.1 200)', 'oklch(0.5 0.1 200%)', 'oklab(0.5 0.1)', 'oklch(0.5 0.1deg 200)'])
+    assert.equal(page.luminance(wrong), null, wrong);
+  assert.equal(page.schemeIsDark('oklch(0.967 0.003 264.542)', '', page.luminance), true, 'a light ink in oklch makes a dark page');
+  assert.equal(page.schemeIsDark('oklch(0.21 0.034 264.665)', '', page.luminance), false);
+});
+
+test('a browser that hides what a canvas holds says nothing of a colour, and never a wrong one (review of 3a80142)', () => {
+  // blank white (as Tor Browser gives), all zeros, and a colour altered by one, in red or in blue
+  for (const shown of [[255, 255, 255, 255], [0, 0, 0, 0], [2, 2, 3, 255], [1, 2, 4, 255]]) {
+    const hidden = canvasOf(shown);
+    assert.equal(page.luminance('color(srgb 0.1 0.1 0.1)', hidden), null, String(shown));
+    assert.equal(page.luminance('white', hidden), null, String(shown));
+    assert.equal(page.schemeIsDark('color(srgb 0.1 0.1 0.1)', '', (c) => page.luminance(c, hidden)), false, 'a dark ink is not read as a light one');
+    // what is read without a canvas is still read
+    assert.ok(Math.abs(page.luminance('oklch(0.95 0 0)', hidden) - 0.857375) < 1e-12);
+    assert.ok(Math.abs(page.luminance('#fff', hidden) - 1) < 1e-12);
+  }
+  assert.ok(Math.abs(page.luminance('color(srgb 0.1 0.1 0.1)', canvasOf()) - page.luminance('#1a1a1a')) < 1e-12, 'a canvas that shows what it holds is read');
+  // the colour is drawn on a clear pixel, not over the one that tried the canvas: a
+  // translucent colour reads as its own, as on a canvas tried by nothing
+  assert.ok(Math.abs(page.luminance('color(srgb 1 1 1 / 0.5)', canvasOf()) - 1) < 1e-12);
+});
+
+test('a host colour the page cannot read is unknown, never black (review of issue 30)', () => {
+  // a canvas as a browser's: it takes a colour it can read, and keeps its own for any other
+  const canvasDoc = canvasOf();
   assert.equal(page.luminance('light-dark(#fff, #111)', canvasDoc), null);
   assert.equal(page.luminance('0 0% 100%', canvasDoc), null);
   assert.ok(Math.abs(page.luminance('white', canvasDoc) - 1) < 1e-12);
-  assert.ok(Math.abs(page.luminance('oklch(0.95 0 0)', canvasDoc) - page.luminance('#f2f2f2')) < 1e-12);
+  assert.ok(Math.abs(page.luminance('color(srgb 0.949 0.949 0.949)', canvasDoc) - page.luminance('#f2f2f2')) < 1e-12);
   const lum = (c) => page.luminance(c, canvasDoc);
   assert.equal(page.schemeIsDark('', 'light-dark(#fff, #111)', lum), false, 'an unreadable ground is not a dark one');
   assert.equal(page.schemeIsDark('0 0% 100%', '', lum), false, 'an unreadable ink is not a dark one');
@@ -1958,6 +2012,138 @@ test('unmount takes a page\'s listeners off and gives its key up; the address ke
   next.ownerDocument = drawn.document;
   drawn.context.SentierDiagnostics.mount(next);
   assert.equal(next.querySelector('[data-sd="item"]').hidden, false);
+});
+
+test('an element unmounted can be mounted again, and only the page mounted last answers on it (review of 3a80142)', () => {
+  // React's StrictMode in development: mount, unmount and mount again, on one element
+  const observers = [];
+  const drawn = dom.page(undefined, undefined, { attributes: { 'data-sentier-diagnostics': 'manual' }, globals: { MutationObserver: observerKind(observers) } });
+  const root = dom.body({});
+  root.setAttribute('data-sd-matrix', 'matrix.js');
+  root.ownerDocument = drawn.document;
+  const { mount } = drawn.context.SentierDiagnostics;
+  const part = (name) => root.querySelector('[data-sd="' + name + '"]');
+  const first = mount(root);
+  first.show(local(), true);
+  // how many listeners each element of the page holds, the page's own element first
+  const held = () => [root].concat(root.querySelectorAll('[data-sd]')).map((node) => Object.values(node.listeners).reduce((n, list) => n + list.length, 0));
+  const heldByOne = held();
+  const sortOfFirst = part('grid-table').querySelectorAll('th[scope="col"]')[0].querySelector('button[type="button"]');
+  const cardOfFirst = part('dist-cards').querySelectorAll('div[data-indicator]')[0].querySelector('button[type="button"]');
+  const scriptOfFirst = drawn.head.querySelectorAll('script[src]')[0];
+  first.unmount();
+  assert.equal(root.getAttribute('data-sd-mounted'), null, 'the element is free again');
+  // what the first page drew, and the matrix it asked for, do nothing once it is unmounted
+  const said = part('matrix-said').textContent;
+  sortOfFirst.dispatch('click', {});
+  cardOfFirst.dispatch('click', {});
+  drawn.context.SENTIER_DIAGNOSTICS_MATRIX = full();
+  scriptOfFirst.onload();
+  delete drawn.context.SENTIER_DIAGNOSTICS_MATRIX;
+  scriptOfFirst.onerror();
+  assert.equal(part('content').hidden, true);
+  assert.equal(part('matrix-said').textContent, said, 'neither taken nor refused');
+  const api = mount(root);
+  assert.ok(api, 'mounted again');
+  api.show(local(), true);
+  assert.equal(part('content').hidden, false);
+  assert.deepEqual(held(), heldByOne, 'every element holds the listeners of one page, not of two');
+  // the first page's matrix that failed to come does not speak for the second
+  assert.match(part('matrix-said').textContent, /^Loading the matrix/);
+  drawn.open('sd.item=' + local().items[0].id);
+  assert.equal(part('item').hidden, false);
+  part('item-close').dispatch('click', {});
+  assert.equal(part('item').hidden, true);
+  assert.equal(drawn.context.location.hash, '', 'the address says the drawer is closed');
+  // and the second page's own matrix is taken when it comes
+  drawn.context.SENTIER_DIAGNOSTICS_MATRIX = full();
+  drawn.head.querySelectorAll('script[src]')[1].onload();
+  assert.equal(part('pick-locked').hidden, true);
+});
+
+test('a page that gives a key up wakes the page waiting for it, which no change to the document may reach (review of 3a80142)', () => {
+  // the holder sits in a closed shadow root the waiter does not watch: only its own
+  // observer sees it leave
+  const observers = [];
+  const drawn = dom.page(undefined, undefined, { attributes: { 'data-sentier-diagnostics': 'manual' }, globals: { MutationObserver: observerKind(observers) } });
+  const named = () => {
+    const root = dom.body({ data: example() });
+    root.setAttribute('data-sd-key', 'left');
+    root.ownerDocument = drawn.document;
+    const api = drawn.context.SentierDiagnostics.mount(root);
+    return { root, api, watch: observers[observers.length - 1] };
+  };
+  const waits = (page) => /Another page in the document has the key/.test(page.root.querySelector('[data-sd="load-error"]').textContent);
+  const holder = named();
+  const waiter = named();
+  assert.ok(waits(waiter));
+  holder.root.isConnected = false;
+  holder.watch.react([{ type: 'childList' }]);
+  assert.ok(!waits(waiter), 'drawn once the holder is gone');
+  assert.equal(waiter.root.querySelector('[data-sd="content"]').hidden, false);
+  // a holder unmounted in the document wakes it too, with no change delivered at all
+  const third = named();
+  assert.ok(waits(third));
+  third.watch.react([{ type: 'childList' }]); // asked again while it waits: it waits once
+  const fourth = named();
+  fourth.api.unmount(); // a page unmounted while it waits waits no more
+  waiter.api.unmount();
+  assert.ok(!waits(third));
+  drawn.open('left.item=p01');
+  assert.equal(third.root.querySelector('[data-sd="item"]').hidden, false);
+  assert.equal(drawn.context.SENTIER_DIAGNOSTICS_WAITERS.length, 0, 'no page is left waiting');
+});
+
+test('a page out of the document writes nothing to the address, whatever is clicked in it (review of 3a80142)', () => {
+  // its key is free for another page, which may hold it by now: the address is not its own
+  const drawn = dom.page(example(), undefined, { hash: 'other=1' }); // takes "sd"
+  drawn.root.isConnected = false;
+  drawn.byId['grid-table'].querySelectorAll('tr[data-item]')[0].childNodes[0].dispatch('click', {});
+  assert.equal(drawn.context.location.hash, '#other=1');
+});
+
+test('a file that fails to come after the page was unmounted draws nothing (review of 3a80142)', async () => {
+  let fail = null;
+  const drawn = dom.page(undefined, undefined, { attributes: { 'data-sentier-diagnostics': 'manual' }, protocol: 'http:', fetch: () => new Promise((resolve, reject) => { fail = reject; }) });
+  drawn.context.location.search = '?file=diagnostics.json';
+  const root = dom.body({});
+  root.ownerDocument = drawn.document;
+  const api = drawn.context.SentierDiagnostics.mount(root);
+  assert.ok(fail, 'the file was asked for');
+  api.unmount();
+  fail(new Error('gone'));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(root.querySelector('[data-sd="load"]').hidden, true);
+  assert.equal(root.querySelector('[data-sd="load-error"]').textContent, '');
+});
+
+test('a look the page asked for before it was unmounted watches nothing again (review of 3a80142)', () => {
+  const observers = [];
+  const frames = [];
+  const drawn = dom.page(undefined, undefined, { attributes: { 'data-sentier-diagnostics': 'manual' }, globals: { ...browserStyles({ '--ink': '#1d232a' }), MutationObserver: observerKind(observers), requestAnimationFrame: (f) => frames.push(f) } });
+  const root = dom.body({ data: example() });
+  root.ownerDocument = drawn.document;
+  const api = drawn.context.SentierDiagnostics.mount(root);
+  const watch = observers[observers.length - 1];
+  while (frames.length) frames.shift()();
+  assert.ok(watch.watched.length > 0, 'it watches the host\'s theme');
+  watch.react([{ type: 'attributes' }]);
+  assert.equal(frames.length, 1, 'a look asked for');
+  api.unmount();
+  frames.shift()();
+  assert.deepEqual(watch.watched, [], 'the look it asked for before does not watch again');
+  assert.equal(frames.length, 0);
+});
+
+test('a page put in and clicked before the document\'s change reaches it writes the address with its key (review of 3a80142)', () => {
+  const drawn = dom.page(undefined, undefined, { attributes: { 'data-sentier-diagnostics': 'manual' } });
+  const root = dom.body({ data: example() });
+  root.ownerDocument = drawn.document;
+  root.isConnected = false;
+  drawn.context.SentierDiagnostics.mount(root); // drawn out of the document, with no key
+  root.isConnected = true;
+  root.querySelector('[data-sd="grid-table"]').querySelectorAll('tr[data-item]')[0].childNodes[0].dispatch('click', {});
+  assert.match(drawn.context.location.hash, /^#?sd\.item=/);
 });
 
 test('a matrix the host put in its page under another query is taken where it is this file\'s (review of issue 27)', () => {

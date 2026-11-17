@@ -521,7 +521,10 @@ site's accent. A test reads the sheet and holds this. Where the site's ink is li
 with no ink, its ground dark), the script marks the root `data-sd-scheme="dark"` and every
 token the site did not set falls back to a dark colour, so that a light ink never stands
 on the page's white. It reads the tokens as the browser resolves them (`light-dark()`,
-another `var()`), and a token it cannot read as a colour is unknown, never black. It looks
+another `var()`), and a token it cannot read as a colour is unknown, never black. A colour
+the browser gives in sRGB, `oklab()` or `oklch()` is read as written; any other is drawn on
+a canvas of one pixel and read back, and where the browser hides what a canvas holds (a
+known colour does not come back as it went) it is unknown as well. It looks
 again when the reader's colour scheme changes, when anything changes in the document or in
 a shadow root the page sits in, and when a stylesheet loads: once a frame at most, and it
 reads the tokens again only where they, the computed `color-scheme` or the reader's
@@ -593,8 +596,11 @@ document answers no address. Put back, it takes its key again where no page in t
 document holds it, or else the next free one; a page the host named waits instead, says
 why, and is drawn once the other page with that name has left. Two pages in the document
 never hold one key. `mount` returns `{show, open, close, unmount}`: `unmount()` takes the
-page's listeners on the window and the document off, gives its key up and draws nothing
-more, leaving the address as it was. A host that removes a page for good calls it; a page
+page's listeners off (on the window, the document and its own elements), gives its key up
+and draws nothing more, leaving the address as it was; a file or a matrix that comes after
+it is not drawn. The element is left free: a page may be mounted on it again, as React's
+StrictMode does. A page that gives a key up, by `unmount()` or by leaving the document,
+wakes a page waiting for it. A host that removes a page for good calls `unmount()`; a page
 removed without it stays in memory, in case it is put back. Every part the page does not
 own is kept as it was. An
 address naming a step the file does not have, steps apart, or a run the page cannot judge

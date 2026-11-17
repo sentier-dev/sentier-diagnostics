@@ -429,10 +429,14 @@
   }
 
   // The relative luminance of a colour as CSS writes it (WCAG 2), or null where it cannot be
-  // read. Hex and rgb() are read here; any other form (a name, hsl(), oklch() ...) is drawn
-  // on a canvas of one pixel and read back. A canvas keeps its colour when it is given one it
-  // cannot read (light-dark(), a bare "0 0% 100%"): set over two different colours, such a
-  // text leaves two different colours, and is unknown, never black.
+  // read. Hex, rgb(), oklab() and oklch() are read here: the browser gives a host's colour in
+  // one of these where the host wrote it in sRGB or in OKLab (Tailwind 4 writes every colour
+  // in oklch). Any other form (lab(), color() ...) is drawn on a canvas of one pixel and read
+  // back. A canvas keeps its colour when it is given one it cannot read (light-dark(), a bare
+  // "0 0% 100%"): set over two different colours, such a text leaves two different colours,
+  // and is unknown, never black. A browser that hides what a canvas holds (against
+  // fingerprinting) gives back blank or altered pixels: a known colour that does not come
+  // back as it went says that nothing drawn can be read, and the colour is unknown.
   function luminance(text, doc) {
     text = String(text || '').trim();
     var rgb = null, m;
@@ -441,6 +445,8 @@
       rgb = [0, 2, 4].map(function (at) { return parseInt(h.slice(at, at + 2), 16); });
     } else if ((m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(text))) {
       rgb = [+m[1], +m[2], +m[3]];
+    } else if ((m = OKLAB.exec(text))) {
+      return oklabLuminance(m);
     } else if (text && doc && doc.createElement) {
       try {
         var canvas = doc.createElement('canvas');
@@ -451,13 +457,54 @@
           return String(context.fillStyle);
         });
         if (taken[0] !== taken[1]) return null;
-        context.fillRect(0, 0, 1, 1);
-        var d = context.getImageData(0, 0, 1, 1).data;
-        rgb = [d[0], d[1], d[2]];
+        var drawn = function (fill) {
+          context.clearRect(0, 0, 1, 1);
+          context.fillStyle = fill;
+          context.fillRect(0, 0, 1, 1);
+          var d = context.getImageData(0, 0, 1, 1).data;
+          return [d[0], d[1], d[2]];
+        };
+        if (drawn('#010203').join() !== '1,2,3') return null;
+        rgb = drawn(text);
       } catch (error) { return null; }
     }
     if (!rgb || rgb.some(function (v) { return !isFinite(v); })) return null;
     var lin = rgb.map(function (v) { v = Math.min(255, v) / 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+    return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+  }
+
+  // oklab(L a b) and oklch(L C H), as CSS Color 4 writes them: L a number or a percentage of
+  // 1, a, b and C a number or a percentage of 0.4, H in degrees (or deg, grad, rad, turn),
+  // "none" as zero; an alpha after "/" is left aside, as rgb() leaves it
+  var OKNUM = '(none|[+-]?(?:\\d+\\.?\\d*|\\.\\d+)(?:e[+-]?\\d+)?(?:%|deg|grad|rad|turn)?)';
+  var OKLAB = new RegExp('^okl(ab|ch)\\(\\s*' + OKNUM + '\\s+' + OKNUM + '\\s+' + OKNUM + '\\s*(?:\\/[^)]*)?\\)$', 'i');
+  var TURN = { deg: 1, grad: 0.9, rad: 180 / Math.PI, turn: 360 };
+  function oklabLuminance(m) {
+    function part(t, whole) {
+      if (/^none$/i.test(t)) return 0;
+      var unit = /[a-z%]+$/i.exec(t), v = parseFloat(t);
+      if (!unit) return v;
+      if (unit[0] === '%') return whole === undefined ? NaN : v / 100 * whole;
+      return whole === undefined ? v * TURN[unit[0].toLowerCase()] : NaN; // an angle only in a hue
+    }
+    var lch = m[1].toLowerCase() === 'ch';
+    var L = part(m[2], 1), a, b;
+    if (lch) {
+      var C = part(m[3], 0.4), hue = part(m[4]) * Math.PI / 180;
+      a = C * Math.cos(hue); b = C * Math.sin(hue);
+    } else {
+      a = part(m[3], 0.4); b = part(m[4], 0.4);
+    }
+    if (![L, a, b].every(isFinite)) return null;
+    // OKLab to linear sRGB (Ottosson 2020), clipped to sRGB as a canvas draws it
+    var l = Math.pow(L + 0.3963377774 * a + 0.2158037573 * b, 3);
+    var mm = Math.pow(L - 0.1055613458 * a - 0.0638541728 * b, 3);
+    var s = Math.pow(L - 0.0894841775 * a - 1.2914855480 * b, 3);
+    var lin = [
+      4.0767416621 * l - 3.3077115913 * mm + 0.2309699292 * s,
+      -1.2684380046 * l + 2.6097574011 * mm - 0.3413193965 * s,
+      -0.0041960863 * l - 0.7034186147 * mm + 1.7076147010 * s,
+    ].map(function (v) { return Math.min(1, Math.max(0, v)); });
     return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
   }
 
@@ -1422,6 +1469,7 @@
         var button = el('button', { type: 'button', cls: 'sd-dist-pick', 'aria-pressed': sortIs(column) ? 'true' : 'false',
           title: 'Sort the matrix by ' + ind.name }, [ind.name]);
         button.addEventListener('click', function () {
+          if (released) return; // drawn by a page since unmounted: another may be mounted here
           view.sort = sortIs(column) ? WORST : column;
           view.limit = PAGE;
           renderGrid();
@@ -1540,6 +1588,7 @@
       var button = el('button', { type: 'button', cls: 'sd-sort', text: label, title: title });
       button.sdSort = sort;
       button.addEventListener('click', function () {
+        if (released) return;
         var focused = doc.activeElement === button;
         view.sort = sortIs(sort) ? WORST : sort;
         view.limit = PAGE;
@@ -1969,7 +2018,7 @@
     }
 
     function takeMatrix(m) {
-      if (!D) return;
+      if (!D) return; // none drawn, or the page was unmounted
       var problem = checkMatrix(m, D);
       if (problem) { refuseMatrix(problem); return; }
       M = matrixRows(m, D);
@@ -1987,7 +2036,7 @@
       route();
     }
 
-    function refuseMatrix(said) { matrix.state = 'refused'; matrix.said = said; matrixSaid(); if (D) markPicker(); }
+    function refuseMatrix(said) { if (released) return; matrix.state = 'refused'; matrix.said = said; matrixSaid(); if (D) markPicker(); }
 
     // The matrices handed to the pages of a document. A script `page.write` puts beside a
     // page adds an entry to a list, `SENTIER_DIAGNOSTICS_MATRICES`: the address it was loaded
@@ -2084,6 +2133,7 @@
 
     // a file the page cannot draw draws nothing: not even the part it drew before it failed
     function refuse(problem) {
+      if (released) return; // a file that failed to come after the page was unmounted
       D = null; M = null; LISTED = [];
       if (standalone) doc.title = 'Diagnostics';
       ['title', 'about', 'tier', 'audience', 'unchecked', 'matrix-said'].forEach(function (name) {
@@ -2179,7 +2229,10 @@
     var keyProblem = null; // a key the page can never hold: it is not a word, or it is one of the page's own
     var waiting = false; // another page in the document holds the key the host named: the page draws nothing
     var keys = win.SENTIER_DIAGNOSTICS_KEYS = win.SENTIER_DIAGNOSTICS_KEYS || {};
-    var self = { root: root }; // this page's entry in the list of keys
+    // the pages waiting for a key another holds: one that gives a key up wakes them, as no
+    // change to the document may reach them (it left from inside a shadow root they do not watch)
+    var waiters = win.SENTIER_DIAGNOSTICS_WAITERS = win.SENTIER_DIAGNOSTICS_WAITERS || [];
+    var self = { root: root, wake: function () { present(); } }; // this page's entry in the list of keys
     var named = root.getAttribute('data-sd-key');
     var KEY = standalone ? '' : null; // what the page's parts start with, while it holds a key
     var lastKey = null;
@@ -2198,6 +2251,8 @@
       var held = keys[key];
       return !held || held === self || held.root.isConnected === false;
     }
+    function stopWaiting() { var at = waiters.indexOf(self); if (at >= 0) waiters.splice(at, 1); }
+    function wakeOthers() { waiters.slice().forEach(function (other) { other.wake(); }); }
     function pick() {
       if (named !== null) return free(named) ? named : null;
       if (lastKey !== null && free(lastKey)) return lastKey;
@@ -2213,6 +2268,7 @@
       if (holding()) return true;
       var key = pick();
       if (key === null) {
+        if (waiters.indexOf(self) < 0) waiters.push(self);
         if (!waiting) {
           waiting = true;
           refuse('Another page in the document has the key data-sd-key="' + named + '": two pages with one key would open on each other\'s items. Give each its own. This page is drawn once the other has left.');
@@ -2222,6 +2278,7 @@
       keys[key] = self;
       lastKey = key;
       KEY = key + '.';
+      stopWaiting();
       return true;
     }
     // Whether the page may act on the address now: it is in the document and holds its key,
@@ -2230,6 +2287,7 @@
     function present() {
       var was = acting;
       acting = mayAct();
+      if (was && !acting) wakeOthers(); // it left: its key is free for a page waiting for it
       if (acting && !was) {
         if (waiting) {
           waiting = false;
@@ -2241,17 +2299,21 @@
       return acting;
     }
     // unmounted: the page answers nothing more, draws nothing more, and gives its key up;
-    // the address keeps what it said, for a page mounted in its place
+    // the address keeps what it said, for a page mounted in its place. The element is left
+    // free: a page may be mounted on it again (React's StrictMode does, on the same element)
     function release() {
       if (released) return;
       released = true;
       acting = false;
       while (teardown.length) teardown.pop()();
+      stopWaiting();
       if (lastKey !== null && keys[lastKey] === self) delete keys[lastKey];
       closeItem();
       D = null; M = null; LISTED = []; shown = null;
       q('content').hidden = true;
       q('load').hidden = true;
+      root.removeAttribute('data-sd-mounted');
+      wakeOthers();
     }
     function hashList() {
       var text = (win.location.hash || '').replace(/^#/, '');
@@ -2487,7 +2549,9 @@
       return got[0] === got[1] ? got[0] : null;
     }
 
-    // A listener on the window or the document, taken off when the page is released.
+    // A listener, taken off when the page is released: on the window, the document, or the
+    // page's own elements, which a page mounted again on the same element would otherwise
+    // share with this one.
     function listen(target, type, react, capture) {
       if (!target || !target.addEventListener) return;
       target.addEventListener(type, react, capture);
@@ -2552,7 +2616,7 @@
       present();
       matchScheme();
       followScheme();
-      q('comparison').addEventListener('click', function (e) {
+      listen(q('comparison'), 'click', function (e) {
         var cell = e.target.closest ? e.target.closest('button[data-comp]') : null;
         if (!cell || !D) return;
         var comp = cell.getAttribute('data-comp');
@@ -2561,7 +2625,7 @@
       });
       // the arrow keys move along the strip, a step alone at a time; with Shift they grow or
       // shrink the steps chosen at the end away from where they started
-      q('comparison').addEventListener('keydown', function (e) {
+      listen(q('comparison'), 'keydown', function (e) {
         if (!D || (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft')) return;
         var step = e.key === 'ArrowRight' ? 1 : -1;
         var whole = view.set.length === D.steps.length;
@@ -2584,7 +2648,7 @@
         if (next && next.focus) next.focus();
       });
       if (q('pick-list')) {
-        q('pick-list').addEventListener('click', function (e) {
+        listen(q('pick-list'), 'click', function (e) {
           if (!D) return;
           var row = e.target.closest ? e.target.closest('button[data-pick]') : null;
           if (row) { pickStep(+row.getAttribute('data-pick'), e.shiftKey || e.metaKey || e.ctrlKey ? 'to' : 'one'); return; }
@@ -2593,35 +2657,35 @@
         });
       }
       if (q('pick-open')) {
-        q('pick-open').addEventListener('click', function () {
+        listen(q('pick-open'), 'click', function () {
           view.pickOpen = !view.pickOpen;
           q('pick-open').setAttribute('aria-expanded', view.pickOpen ? 'true' : 'false');
           q('pick-panel').hidden = !view.pickOpen;
         });
       }
-      if (q('pick-find')) q('pick-find').addEventListener('input', function (e) { view.pickFind = e.target.value; renderPickList(); });
-      if (q('pick-moved')) q('pick-moved').addEventListener('change', function (e) { view.pickMoved = !!e.target.checked; renderPickList(); });
-      if (q('pick-all')) q('pick-all').addEventListener('click', function () { if (D) { view.anchor = null; pickSet(allSteps()); } });
-      q('size').addEventListener('change', function (e) { view.size = +e.target.value; view.limit = PAGE; renderWorst(); renderGrid(); });
-      q('worst-n').addEventListener('change', function (e) { view.worstN = +e.target.value; renderWorst(); });
-      q('dist-scale').addEventListener('change', function (e) { view.distScale = e.target.value === 'one' ? 'one' : 'card'; renderDistributions(); });
-      q('worst-indicator').addEventListener('change', function (e) { view.worstIndicator = e.target.value; renderWorst(); });
-      q('grid-find').addEventListener('input', function (e) { view.find = e.target.value; view.limit = PAGE; renderGrid(); });
-      q('grid-class').addEventListener('change', function (e) { view.cls = e.target.value; view.limit = PAGE; renderGrid(); });
-      q('grid-verdict').addEventListener('change', function (e) { view.verdict = e.target.value; view.limit = PAGE; renderGrid(); });
-      q('grid-group').addEventListener('change', function (e) { view.group = e.target.value; view.limit = PAGE; renderGrid(); });
-      q('grid-more').addEventListener('click', function () { view.limit += PAGE; renderGrid(); });
-      q('item-close').addEventListener('click', closeItem);
-      root.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeItem(); });
+      if (q('pick-find')) listen(q('pick-find'), 'input', function (e) { view.pickFind = e.target.value; renderPickList(); });
+      if (q('pick-moved')) listen(q('pick-moved'), 'change', function (e) { view.pickMoved = !!e.target.checked; renderPickList(); });
+      if (q('pick-all')) listen(q('pick-all'), 'click', function () { if (D) { view.anchor = null; pickSet(allSteps()); } });
+      listen(q('size'), 'change', function (e) { view.size = +e.target.value; view.limit = PAGE; renderWorst(); renderGrid(); });
+      listen(q('worst-n'), 'change', function (e) { view.worstN = +e.target.value; renderWorst(); });
+      listen(q('dist-scale'), 'change', function (e) { view.distScale = e.target.value === 'one' ? 'one' : 'card'; renderDistributions(); });
+      listen(q('worst-indicator'), 'change', function (e) { view.worstIndicator = e.target.value; renderWorst(); });
+      listen(q('grid-find'), 'input', function (e) { view.find = e.target.value; view.limit = PAGE; renderGrid(); });
+      listen(q('grid-class'), 'change', function (e) { view.cls = e.target.value; view.limit = PAGE; renderGrid(); });
+      listen(q('grid-verdict'), 'change', function (e) { view.verdict = e.target.value; view.limit = PAGE; renderGrid(); });
+      listen(q('grid-group'), 'change', function (e) { view.group = e.target.value; view.limit = PAGE; renderGrid(); });
+      listen(q('grid-more'), 'click', function () { view.limit += PAGE; renderGrid(); });
+      listen(q('item-close'), 'click', closeItem);
+      listen(root, 'keydown', function (e) { if (e.key === 'Escape') closeItem(); });
       // a modal drawer the browser closed itself (a phone's back gesture) is closed here too
-      q('item').addEventListener('close', function () { if (!q('item').hidden) closeItem(); });
+      listen(q('item'), 'close', function () { if (!q('item').hidden) closeItem(); });
       ['grid-table', 'worst-table'].forEach(function (name) {
-        q(name).addEventListener('click', openFrom);
-        q(name).addEventListener('keydown', function (e) { if (e.key === 'Enter') openFrom(e); else moveRow(e); });
+        listen(q(name), 'click', openFrom);
+        listen(q(name), 'keydown', function (e) { if (e.key === 'Enter') openFrom(e); else moveRow(e); });
       });
       // a page that takes its key here has read the address already
       listen(win, 'hashchange', function () { var was = acting; if (present() && was) route(); });
-      q('file').addEventListener('change', function (e) {
+      listen(q('file'), 'change', function (e) {
         var file = e.target.files[0];
         if (!file) return;
         var reader = new win.FileReader();
