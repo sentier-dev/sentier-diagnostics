@@ -429,6 +429,18 @@ test('the page takes each edge it shares with the Python where the Python does: 
   assert.match(said([0.005, 0.0051]), /large: up to 1\.01 %/);
 });
 
+
+test('a class the page does not know sorts after every class it knows, and keys compare as Python compares tuples (issue 15)', () => {
+  const known = Math.max(...Object.values(page.RANK));
+  assert.ok(page.severityKey(1, 2, 'a class of a later format')[0] > known);
+  assert.ok(page.severityKey(null, 2, 'a class of a later format')[0] > known);
+  // part by part, then the shorter first: [1] < [1, 0], as (1,) < (1, 0) in Python
+  assert.ok(page.compareKeys([1], [1, 0]) < 0);
+  assert.ok(page.compareKeys([1, 0], [1]) > 0);
+  assert.equal(page.compareKeys([1, -2], [1, -2]), 0);
+  assert.ok(page.compareKeys([0, 5], [1]) < 0);
+});
+
 test('the item view splits only what can be split and draws the breakdown of its own step', () => {
   const drawn = dom.page(example(), { 'p01-fix-1.json': wheat() });
   drawn.open('sd.item=p01');

@@ -25,7 +25,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from sentier_diagnostics import chain, claims, cli, example, fileformat, from_tables, rule, summary
+from sentier_diagnostics import chain, claims, cli, example, fileformat, from_tables, matrix, rule, summary, together
+
+from . import helpers
 
 FIXTURE = Path(__file__).parent / "fixtures" / "boundaries.json"
 TOLERANCE = 1e-5
@@ -170,6 +172,61 @@ class OtherEdges(unittest.TestCase):
         self.assertEqual([e for e in fileformat._block(block, "b", step) if "closer" in e], [])
         block.update(further=1)
         self.assertIn("b: more came closer or went further than moved", fileformat._block(block, "b", step))
+
+    def test_a_result_as_far_from_the_published_one_as_it_began_came_neither_closer_nor_further(self):
+        # published 1.0; from 0.5, 1.5 ends exactly as far from it as it began, 0.9 comes
+        # closer, 0.1 goes further. Each place that counts them: the build, the file's check,
+        # the matrix's check and a run of steps (a tie counted as either changes the count).
+        a, b = helpers.A, helpers.B
+        results = [{"e": 1.0, "c": 1.0, "f": 1.0}, {"e": 0.5, "c": 0.5, "f": 0.5}] + [{"e": 1.5, "c": 0.9, "f": 0.1}] * 2
+        self.assertEqual(abs(0.5 - 1.0), abs(1.5 - 1.0))
+        data, full = chain.build_with_matrix(
+            "Equal distance",
+            indicators=helpers.INDICATORS,
+            states=[chain.state(f"s{n}", f"State {n}", kind="published" if n == 0 else "build") for n in range(4)],
+            steps=[chain.step(f"t{k}", f"Step t{k}", kind="fix") for k in range(3)],
+            values={f"s{n}": {a: dict(r), b: dict.fromkeys("ecf", 2.0)} for n, r in enumerate(results)},
+            units=dict.fromkeys("ecf", "kg"),
+        )
+        block = data["counts"]["steps"]["t1"][a]
+        self.assertEqual(block["classes"][rule.DIFFERS], 3)
+        self.assertEqual((block["closer"], block["further"]), (1, 1))
+        self.assertEqual(fileformat.errors(data), [])
+        self.assertEqual(matrix.against(full, data), [])
+        run = together.counts(data, full, 1, 2)["blocks"][a]
+        self.assertEqual((run["closer"], run["further"]), (1, 1))
+
+    def test_a_state_identity_of_12_entries_is_taken_and_one_more_refused(self):
+        # SPEC 4.4: "a state's identity has up to 12 entries", written as it says it
+        for size, refused in ((12, False), (13, True)):
+            data = example.build()
+            data["states"][1]["identity"] = {f"part{n}": "v" for n in range(size)}
+            found = [e for e in fileformat.errors(data) if "`identity`" in e]
+            self.assertEqual(found, ["state 'repro': `identity` is not a table of at most 12 entries"] if refused else [], size)
+
+    def test_a_step_that_does_not_say_whether_it_is_explained_is_explained(self):
+        # SPEC 3: a step is explained unless it says `explained: false`, in a description and
+        # in a chain built from code
+        data = chain.build(
+            "Explained",
+            indicators=helpers.INDICATORS,
+            states=[chain.state("s0", "State 0"), chain.state("s1", "State 1")],
+            steps=[{"id": "t0", "label": "Step t0", "kind": "fix"}],
+            values={f"s{n}": {helpers.A: {"e": 1.0 + n}, helpers.B: {"e": 2.0}} for n in range(2)},
+            units={"e": "kg"},
+        )
+        self.assertIs(data["steps"][0]["explained"], True)
+        spec = {"title": "t", "item": {"one": "i", "many": "is"},
+                "indicators": [{"id": "x:a", "name": "A", "short": "A", "unit": "m3"}], "items": "items.csv",
+                "states": [{"id": "s0", "label": "0", "results": "s0.csv"}, {"id": "s1", "label": "1", "results": "s1.csv"}],
+                "steps": [{"id": "st", "label": "step", "kind": "method"}]}  # fmt: skip
+        tables_ = {"items.csv": "item,unit\np,kg\n", "s0.csv": "item,x:a\np,1.0\n", "s1.csv": "item,x:a\np,2.0\n"}
+        with tempfile.TemporaryDirectory() as folder:
+            for name, text in tables_.items():
+                (Path(folder) / name).write_text(text, encoding="utf-8")
+            (Path(folder) / "d.json").write_text(json.dumps(spec), encoding="utf-8")
+            built = from_tables.build(Path(folder) / "d.json")
+        self.assertIs(built["steps"][0]["explained"], True)
 
     def test_a_file_of_12_mb_is_checked_and_one_byte_more_refused(self):
         # written as SPEC says it, not taken from the constant, so that a change of the
