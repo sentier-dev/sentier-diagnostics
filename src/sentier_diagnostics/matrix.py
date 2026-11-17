@@ -28,7 +28,7 @@ from . import claims, fileformat, rule
 FORMAT = "sentier-diagnostics-matrix/1"
 FAMILY = "sentier-diagnostics-matrix/"
 KEYS = {"format", "of", "items", "values", "classes", "verdicts"}
-OF_KEYS = {"title", "states", "indicators", "steps", "ranges"}
+OF_KEYS = {"title", "states", "indicators", "steps"}
 
 #: A result written as the same number as the state before it, in the same indicator.
 SAME = "="
@@ -38,8 +38,7 @@ MAX_BYTES = 64 * 1024 * 1024
 MAX_ITEMS = 200_000
 
 #: One character per pair: its class, and for a pair that moved its direction (upper case
-#: up, lower case down). An item has one per indicator and comparison: each step, the whole
-#: way, and each range of the file, in that order.
+#: up, lower case down).
 CODES = {
     (rule.AGREES, None): "=",
     (rule.WITHIN_NOISE, None): "~",
@@ -125,8 +124,6 @@ def make(data: Mapping, rows: list[dict]) -> dict:
             "states": [s["id"] for s in data["states"]],
             "indicators": ids,
             "steps": [s["id"] for s in steps],
-            # as the file: [] where none was asked for, left out where it was made before ranges
-            **({"ranges": [r["id"] for r in data["ranges"]]} if "ranges" in data else {}),
         },
         "items": [],
         "values": [],
@@ -232,14 +229,13 @@ def _errors(m) -> list[str]:
     of = m["of"]
     if not (
         isinstance(of, dict)
-        and set(of) in (OF_KEYS, OF_KEYS - {"ranges"})
+        and set(of) == OF_KEYS
         and fileformat.is_text(of["title"], 120)
-        and all(isinstance(of[k], list) and all(fileformat.is_text(x, 2 * fileformat.MAX_ID + 2) for x in of[k])
-                for k in ("states", "indicators", "steps", "ranges") if k in of)
+        and all(isinstance(of[k], list) and all(fileformat.is_text(x, fileformat.MAX_ID) for x in of[k])
+                for k in ("states", "indicators", "steps"))
     ):  # fmt: skip
-        return ["`of` is not {title, states, indicators, steps, ranges} (ranges left out only before ranges)"]
+        return ["`of` is not {title, states, indicators, steps}"]
     nstates, nind, nsteps = len(of["states"]), len(of["indicators"]), len(of["steps"])
-    ncodes = nsteps + 1 + len(of.get("ranges", []))
     if nsteps != nstates - 1 or not nind:
         return ["`of`: one step fewer than states, and at least one indicator"]
     items = m["items"]
@@ -270,8 +266,10 @@ def _errors(m) -> list[str]:
         except ValueError as error:
             return [f"item {row[0]!r}: {error}"]
         codes = m["classes"][at]
-        if not (isinstance(codes, str) and len(codes) == nind * ncodes and all(c in DECODE for c in codes)):
-            return [f"item {row[0]!r}: not one class code per indicator, step, the whole way and range"]
+        if not (
+            isinstance(codes, str) and len(codes) == nind * (nsteps + 1) and all(c in DECODE for c in codes)
+        ):
+            return [f"item {row[0]!r}: not one class code per indicator, step and the whole way"]
         if has_claims:
             said = m["verdicts"][at]
             if not (isinstance(said, str) and len(said) == nind * nsteps
@@ -299,26 +297,21 @@ def _against(m: Mapping, data: Mapping) -> list[str]:
     ids = [i["id"] for i in data["indicators"]]
     order = [s["id"] for s in data["states"]]
     steps = data["steps"]
-    ranges = data.get("ranges") or []
-    of = {"title": data["title"], "states": order, "indicators": ids, "steps": [s["id"] for s in steps],
-          **({"ranges": [r["id"] for r in ranges]} if "ranges" in data else {})}  # fmt: skip
+    of = {"title": data["title"], "states": order, "indicators": ids, "steps": [s["id"] for s in steps]}
     if m["of"] != of:
-        return ["it is the matrix of another file: its title, states, indicators, steps or ranges differ"]
+        return ["it is the matrix of another file: its title, states, indicators or steps differ"]
     n = len(m["items"])
     if named["items"] != n:
         found.append(f"the diagnostics file says {named['items']} items, the matrix holds {n}")
     if data["items_count"]["all"] != n:
         found.append(f"the diagnostics file counts {data['items_count']['all']} items, the matrix holds {n}")
     nstates, nsteps = len(order), len(steps)
-    ncodes = nsteps + 1 + len(ranges)
-    first_of = {s["id"]: k for k, s in enumerate(steps)}
-    ends = [(first_of[r["steps"][0]], first_of[r["steps"][0]] + len(r["steps"])) for r in ranges]
     floors = {(f["indicator"], f["unit"]): f["value"] for f in data["rule"]["floors"]}
     published_first = data["states"][0]["kind"] == "published"
     listed = {item["id"]: item for item in data["items"]}
 
     # what the counts and attribution must be, counted from every item
-    def empty(k):  # k: the step, or None for the total and a range
+    def empty(k):
         return {
             "pairs": 0,
             "classes": dict.fromkeys(rule.CLASSES, 0),
@@ -330,7 +323,7 @@ def _against(m: Mapping, data: Mapping) -> list[str]:
             "further": 0 if published_first and k not in (None, 0) else None,
         }
 
-    counted = {(at, i): empty(at if at < nsteps else None) for at in range(ncodes) for i in ids}
+    counted = {(k, i): empty(k) for k in [*range(nsteps), None] for i in ids}
     attributed = {
         i: {
             "dominant": {s["id"]: 0 for s in steps},
@@ -354,29 +347,24 @@ def _against(m: Mapping, data: Mapping) -> list[str]:
             if floor is None:
                 return [f"{where}, {indicator}: the file holds no floor for unit {unit!r}"]
             kinds = []
-            for at_k in range(ncodes):
-                k = at_k if at_k < nsteps else None
-                if at_k > nsteps:
-                    one_range = ranges[at_k - nsteps - 1]
-                    before, after = values[ends[at_k - nsteps - 1][0]], values[ends[at_k - nsteps - 1][1]]
-                    tol, level = one_range["tolerance"], None
-                elif k is None:
-                    before, after = values[0], values[-1]
-                    tol, level = data["rule"]["total_tolerance"], None
+            for k in [*range(nsteps), None]:
+                at_k = nsteps if k is None else k
+                before, after = (values[0], values[-1]) if k is None else (values[k], values[k + 1])
+                if k is None:
+                    tol, level = data["rule"]["total_tolerance"], fileformat.total_noise_level(data, indicator)
                 else:
-                    before, after = values[k], values[k + 1]
                     tol = steps[k]["tolerance"]["value"]
                     noise = steps[k]["noise"]
                     level = (noise["by"] or {}).get(indicator) if noise["measured"] else None
                 kind, way, band = rule.judge(before, after, floor=floor, tolerance=tol, noise=level)
-                code = codes[x * ncodes + at_k]
+                code = codes[x * (nsteps + 1) + at_k]
                 if code != code_of(kind, way):
-                    step_name = steps[k]["id"] if k is not None else "the whole way" if at_k == nsteps else ranges[at_k - nsteps - 1]["id"]
+                    step_name = "the whole way" if k is None else steps[k]["id"]
                     return [
                         f"{where}, {indicator}, {step_name}: written as {DECODE[code]}, the rule gives {kind}/{way}"
                     ]
                 kinds.append(kind)
-                block = counted[(at_k, indicator)]
+                block = counted[(k, indicator)]
                 block["pairs"] += 1
                 block["classes"][kind] += 1
                 if kind == rule.MISSING:
@@ -449,16 +437,13 @@ def _against(m: Mapping, data: Mapping) -> list[str]:
             f"the diagnostics file counts {data['items_count']['qualifying']} items worth a look, "
             f"the matrix holds {qualifying}"
         )
-    for (at, indicator), block in counted.items():
-        if at < nsteps:
-            name = steps[at]["id"]
-            written = data["counts"]["steps"][name][indicator]
-        elif at == nsteps:
-            name = fileformat.TOTAL
-            written = data["counts"][fileformat.TOTAL][indicator]
-        else:
-            name = ranges[at - nsteps - 1]["id"]
-            written = data["counts"]["ranges"][name][indicator]
+    for (k, indicator), block in counted.items():
+        name = fileformat.TOTAL if k is None else steps[k]["id"]
+        written = (
+            data["counts"][fileformat.TOTAL][indicator]
+            if k is None
+            else data["counts"]["steps"][name][indicator]
+        )
         for key in block:
             if block[key] != written[key]:
                 found.append(f"counts of {name!r} in {indicator!r}: `{key}` is not what the matrix holds")

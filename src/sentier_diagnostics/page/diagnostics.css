@@ -63,26 +63,57 @@
 .sentier-diagnostics .sd-made-by { margin-top: var(--sd-s6); }
 
 /* the comparison: a row of chips, the whole way first, then each step */
-.sentier-diagnostics .sd-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sd-s2) var(--sd-s3); margin: var(--sd-s3) 0 var(--sd-s2); }
+.sentier-diagnostics .sd-picker { margin: var(--sd-s3) 0 var(--sd-s2); }
+.sentier-diagnostics .sd-picker-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sd-s2) var(--sd-s3); margin-bottom: 0.35rem; }
+.sentier-diagnostics .sd-pick-summary { font-size: var(--sd-t-xs); font-variant-numeric: tabular-nums; }
+.sentier-diagnostics .sd-pick-open { margin-left: auto; }
+/* the strip: the whole way, then one cell per step; a bar as high as what moved in it */
+.sentier-diagnostics .sd-strip { display: flex; align-items: stretch; gap: 0.5rem; min-width: 0; }
+.sentier-diagnostics .sd-whole { flex: none; padding: 0.3rem 0.75rem; border: 1px solid var(--sd-line-strong); border-radius: 999px; background: var(--sd-surface); color: inherit; font: inherit; font-weight: 600; cursor: pointer; }
+.sentier-diagnostics .sd-whole[aria-pressed="true"] { border-color: var(--sd-accent); background: var(--sd-accent); color: var(--sd-on-accent); }
+.sentier-diagnostics .sd-cells { display: flex; align-items: stretch; gap: 2px; flex: 1 1 auto; min-width: 0; height: 2.6rem; overflow-x: auto; scrollbar-width: thin; }
+.sentier-diagnostics .sd-dense .sd-cells { gap: 1px; }
+.sentier-diagnostics .sd-dense .sd-cell { min-width: 2px; border-width: 0; border-radius: 1px; }
+.sentier-diagnostics .sd-cell { position: relative; flex: 1 1 0; min-width: 3px; max-width: 2.6rem; padding: 0; border: 1px solid transparent; border-radius: 3px; background: var(--sd-paper-deep); cursor: pointer; display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; user-select: none; -webkit-user-select: none; }
+.sentier-diagnostics .sd-cell:hover { border-color: var(--sd-accent); }
+.sentier-diagnostics .sd-cell:focus-visible, .sentier-diagnostics .sd-whole:focus-visible { outline: 2px solid var(--sd-accent); outline-offset: 2px; }
+.sentier-diagnostics .sd-cell-bar { display: block; width: 100%; background: var(--sd-muted); opacity: 0.45; border-radius: 2px 2px 0 0; }
+.sentier-diagnostics .sd-cell-bar.sd-none { height: 2px !important; opacity: 0.25; }
+.sentier-diagnostics .sd-cell[aria-pressed="true"] { background: color-mix(in srgb, var(--sd-accent) 16%, var(--sd-surface)); border-color: var(--sd-accent); }
+.sentier-diagnostics .sd-cell[aria-pressed="true"] .sd-cell-bar { background: var(--sd-accent); opacity: 1; }
+/* a dense strip leaves a step 2px: a chosen one is filled and underlined, so that a set of
+   hundreds of steps still reads as bands along the strip */
+.sentier-diagnostics .sd-dense .sd-cell[aria-pressed="true"] { background: color-mix(in srgb, var(--sd-accent) 45%, var(--sd-surface)); box-shadow: inset 0 -4px 0 var(--sd-accent); }
+.sentier-diagnostics .sd-numbered .sd-cell-bar { margin-bottom: 1rem; }
+.sentier-diagnostics .sd-cell-no { position: absolute; left: 0; right: 0; bottom: 0.1rem; font-size: var(--sd-t-xs); line-height: 1; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; color: var(--sd-muted); }
+.sentier-diagnostics .sd-cell[aria-pressed="true"] .sd-cell-no { color: inherit; }
+.sentier-diagnostics .sd-cell.sd-unexplained { border-top: 2px solid var(--sd-fail); }
+.sentier-diagnostics .sd-cell.sd-look::after { content: ""; position: absolute; top: 2px; right: 2px; width: 4px; height: 4px; border-radius: 50%; background: currentColor; opacity: 0.7; }
+/* the list: find steps, tick any set */
+.sentier-diagnostics .sd-pick-panel { margin-top: var(--sd-s2); padding: var(--sd-s2) var(--sd-s3); border: 1px solid var(--sd-line); border-radius: var(--sd-radius); }
+.sentier-diagnostics .sd-pick-panel[hidden] { display: none; }
+.sentier-diagnostics .sd-pick-tools { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sd-s2) var(--sd-s3); }
+.sentier-diagnostics .sd-pick-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.sentier-diagnostics .sd-pick-hint { margin: 0.4rem 0; font-size: var(--sd-t-xs); }
+.sentier-diagnostics .sd-pick-list { max-height: 22rem; overflow-y: auto; font-size: var(--sd-t-sm); border-top: 1px solid var(--sd-line); }
+.sentier-diagnostics .sd-pick-group { position: sticky; top: 0; z-index: 1; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem; padding: 0.35rem 0.25rem; background: var(--sd-paper-deep); border-bottom: 1px solid var(--sd-line); }
+.sentier-diagnostics .sd-pick-group label { display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer; }
+.sentier-diagnostics .sd-pick-list input[type="checkbox"] { flex: none; width: auto; min-height: 0; margin: 0; padding: 0; }
+.sentier-diagnostics .sd-pick-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: 0.75rem; padding: 0.2rem 0.25rem; border-bottom: 1px solid var(--sd-line); }
+.sentier-diagnostics .sd-pick-row:hover { background: var(--sd-paper-deep); }
+.sentier-diagnostics .sd-pick-row label { display: flex; align-items: center; gap: 0.45rem; min-width: 0; cursor: pointer; }
+.sentier-diagnostics .sd-pick-no { min-width: 2ch; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.sentier-diagnostics .sd-pick-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sentier-diagnostics .sd-pick-kind { flex: none; font-size: var(--sd-t-xs); color: var(--sd-muted); }
+.sentier-diagnostics .sd-pick-flag { font-weight: 800; color: var(--sd-fail); }
+.sentier-diagnostics .sd-pick-moved { font-size: var(--sd-t-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sentier-diagnostics .sd-pick-marks { font-size: var(--sd-t-xs); min-width: 1ch; }
+.sentier-diagnostics .sd-only { padding: 0 0.4rem; border: 0; background: none; color: var(--sd-accent); font: inherit; font-size: var(--sd-t-xs); cursor: pointer; opacity: 0; }
+.sentier-diagnostics .sd-pick-row:hover .sd-only, .sentier-diagnostics .sd-only:focus-visible { opacity: 1; }
+@media (hover: none) { .sentier-diagnostics .sd-only { opacity: 1; } }
+@media (max-width: 40rem) { .sentier-diagnostics .sd-pick-row { grid-template-columns: minmax(0, 1fr) auto auto; } .sentier-diagnostics .sd-pick-marks { display: none; } }
 .sentier-diagnostics .sd-chips-label { font-size: var(--sd-t-xs); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--sd-muted); }
-.sentier-diagnostics .sd-chip-row { display: flex; flex-wrap: wrap; gap: 0.35rem; min-width: 0; }
-.sentier-diagnostics .sd-chip { display: inline-flex; align-items: baseline; gap: 0.4rem; max-width: 24rem; min-width: 0; padding: 0.3rem 0.75rem; border: 1px solid var(--sd-line-strong);
-  border-radius: 999px; background: var(--sd-surface); color: var(--sd-ink); font: inherit; font-size: var(--sd-t-sm); line-height: 1.3; cursor: pointer; }
-.sentier-diagnostics .sd-chip:hover { border-color: var(--sd-accent); }
-.sentier-diagnostics .sd-chip:focus-visible { outline: 2px solid var(--sd-accent); outline-offset: 2px; }
-.sentier-diagnostics .sd-chip[aria-pressed="true"] { border-color: var(--sd-accent); background: var(--sd-accent); color: var(--sd-on-accent); }
-.sentier-diagnostics .sd-chip-no { font-weight: 800; }
-.sentier-diagnostics .sd-chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-.sentier-diagnostics .sd-chip-count { font-size: var(--sd-t-xs); font-variant-numeric: tabular-nums; white-space: nowrap; opacity: 0.75; }
-.sentier-diagnostics .sd-chip-flag { font-weight: 800; color: var(--sd-fail); }
-.sentier-diagnostics .sd-chip[aria-pressed="true"] .sd-chip-flag { color: inherit; }
-.sentier-diagnostics .sd-chip-mark { font-size: var(--sd-t-xs); }
-.sentier-diagnostics .sd-chip { user-select: none; -webkit-user-select: none; }
 /* a step taken into a run only because it lies between two chosen ones: pressed, and hatched */
-.sentier-diagnostics .sd-chip.sd-between[aria-pressed="true"] { border-style: dashed;
-  background: repeating-linear-gradient(135deg, var(--sd-accent) 0 6px, color-mix(in srgb, var(--sd-accent) 72%, var(--sd-surface)) 6px 12px); }
-.sentier-diagnostics .sd-pick { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sd-s2) var(--sd-s3); margin: 0; font-size: var(--sd-t-xs); }
-.sentier-diagnostics .sd-pick[hidden] { display: none; }
 .sentier-diagnostics .sd-switch { display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 600; cursor: pointer; }
 .sentier-diagnostics .sd-notice { padding: 0.2rem 0.5rem; border-left: 3px solid var(--sd-line-strong); background: var(--sd-surface); }
 .sentier-diagnostics .sd-claims { margin: 0.25rem 0; padding-left: 1.2rem; }

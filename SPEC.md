@@ -88,31 +88,26 @@ that step, made up, and a test holds what it shows.
 **Order matters.** Where two steps touch the same results, each one's share depends on the
 order they were applied in. The file keeps the order; the page says so.
 
-**Ranges: several steps together.** A reviewer of a chain of fixes asks what some of them
-did together, not only what each did. A **range** is a run of at least two consecutive
-steps, short of every step (that is the whole way): it compares the state before its first
-step with the state after its last, and is judged as the whole way is (section 5.3): the
-largest tolerance of its steps, no noise, and no verdict, since each claim is judged in its
-own step. Its classes are worked out by the rule from those two states, never added up
-from its steps: steps that each move 0.8 % under a tolerance of 1 % agree one by one, and
-two of them together differ.
+**Several steps together.** A file holds one comparison per step and one for the whole way.
+Any other set of steps (steps 2 and 5, steps 3 to 9, every step but 6) is not in the file:
+the page composes it from every item's results (`together.py` is the reference). A **run**
+is a span of chosen steps that follow each other. An item's pair is its result before the
+first chosen step, and that result with each run's difference added (the result after the
+run less the result before it). A single run is exactly the two states it lies between. The
+pair is judged by the one rule (section 5) with the largest tolerance of the chosen steps
+and, per indicator, the largest noise measured in any of them. A set has no verdict: each
+claim is judged in its own step.
 
-**Decision: a run, not any set.** Each state is built on the one before it, so the only
-comparisons a chain holds are between two of its states, and a set of steps with a gap,
-such as the first and the third fix, was never built on its own. A page that is asked for
-steps apart takes in the steps between them and says so; it never sums steps it cannot
-see, and it never claims what a combination nobody built would give. Building every
-combination is the producer's business: 11 fixes have 2,047 of them.
-
-**The producer chooses its ranges** (`ranges` of `chain.build`): `"all"`, a list of
-`(first step, last step)` pairs (`chain.ranges_within` gives every run between two steps,
-such as the fixes of a build), or none. Without a choice, a chain of at most 8 steps has
-every range and a longer one none (`chain.AUTO_RANGES`): n steps have n(n-1)/2 - 1 ranges,
-and each is a comparison of every item in every indicator. A chain that the default leaves
-without ranges is built with a warning that says so, so a chain that gains a ninth step does
-not lose its ranges unseen. A description of CSV tables says the same in its `ranges` key.
-A file where none was asked for holds `ranges: []`; only a file made before ranges leaves
-the key out, and the page says which of the two it is.
+Steps apart are an approximation, and the page says so. Each step's difference was made on
+top of every step before it, the left-out ones too, so where steps change the same results
+the sum is not what the chosen steps would do alone (see "order matters" below). Building
+the chosen steps alone is the only exact answer, and the tool computes no LCA (section 12).
+A set is never precomputed: there are 2^n − n − 1 of them for n steps, so a file holds the
+n steps and the whole way, and the page composes the one a reader asks for: 0.2 to 0.65 s
+over 11,947 items and 25 indicators, measured in a browser. It needs every item, so it needs the matrix,
+or a file that lists every item. Before it draws a set, the page judges every chosen step on
+its own from the same results and holds that to the file's class and direction of the step
+for every item; a set whose steps disagree with the file is refused, not drawn.
 
 **One chain per reference.** A database with two references (sentier-bafu-agribalyse has
 ADEME's published results on ecoinvent and its own build on ecoinvent) gets one file per
@@ -147,11 +142,10 @@ control characters, bounded lengths.
 | `item` | `{"one": "product", "many": "products"}`: the word for an item |
 | `indicator` | Optional. `{"one": "impact category", "many": "impact categories"}`: the word for an indicator, which the page and the summary use; null or absent for "indicator" |
 | `indicators` | `[{id, name, short, unit}]`. An indicator is matched by its exact id, never by a prefix |
-| `rule` | The floors and the tolerance of the whole way (section 5) |
+| `rule` | The floors, the tolerance of the whole way and its noise, `total_noise` (section 5.3) |
 | `states` | `[{id, label, about, kind, identity, join}]` in order. `identity` is a short table of texts (commit, release, machine); `join` is what the reader counted when it matched its rows to items: `{compared, unmatched, ambiguous, note}`, or null |
 | `steps` | `[{id, from, to, label, about, kind, explained, link, claim, tolerance, noise}]`, one fewer than the states, each from one state to the next |
-| `ranges` | Optional. `[{id, steps, from, to, tolerance}]`: the runs of consecutive steps compared as one (section 3). `id` is `first..last`, `from` the state before the first step, `to` the state after the last, `tolerance` the largest of its steps. `[]` where none was asked for; absent only in a file made before ranges |
-| `counts` | `{steps: {step: {indicator: block}}, total: {indicator: block}}`, and `ranges: {range: {indicator: block}}` where, and only where, the file has its `ranges` key (`{}` for `[]`) |
+| `counts` | `{steps: {step: {indicator: block}}, total: {indicator: block}}` |
 | `attribution` | `{indicator: {dominant: {step: n}, not_attributable: n, spread: n, unexplained_moved: n}}` (section 7) |
 | `items` | The listed items, worst first (section 10.4) |
 | `items_count` | `{all, qualifying, listed, not_listed}` |
@@ -173,16 +167,15 @@ A **block** counts one indicator in one step, or over the whole way:
  "closer": 12, "further": 9}
 ```
 
-`verdicts` is null for a step without a claim, for the whole way and for a range. `closer` and
+`verdicts` is null for a step without a claim and for the whole way. `closer` and
 `further` count, for a step after step 0, the moved values that came closer to or went
-further from the published results. They are null for step 0, the whole way and a range, null for
+further from the published results. They are null for step 0 and the whole way, null for
 every step of a chain whose first state is not the published results (there is nothing to
 come closer to), and no page shows them as better or worse.
 
 An **item** holds `id, name, place, group, unit` (its reference unit), `values` (per
 indicator, one result per state, `null` where missing), and per indicator one class,
-direction and band per step, then one for the whole way, then one per range in the order of
-`ranges`; the verdicts per step (or null
+direction and band per step plus one for the whole way, the verdicts per step (or null
 when no step has a claim), and `breakdowns` (`{step or "total": file name}`, or null).
 
 ### 4.3 The validator
@@ -199,8 +192,7 @@ many were left out. A file that disagrees with its own rule is refused, not show
 It also **works the counts out again from the listed items.** Only a pair worth a look
 adds to the classes that moved, to missing (by side), to directions, bands, the verdicts
 "as claimed", "off claim", "not claimed" and "claimed, not moved", to `closer` and
-`further`, and to the attribution; and every item with such a pair, in a step, the whole
-way or a range, is worth a look. So
+`further`, and to the attribution; and every item with such a pair is worth a look. So
 where nothing worth a look is left out (`not_listed` 0), these counts must equal what the
 listed items hold, and where some are left out, no count may be smaller than what the
 listed items hold. What only quiet pairs add to (agrees, within noise, near zero, and the
@@ -220,6 +212,10 @@ many items as a file may (5,000); a state's identity has up to 12 entries. Ids a
 100 characters, labels 80, texts 600 and an explanation's text 2,000. The limits are in
 `fileformat.py`, and a refusal names the limit it met.
 
+Thirty states is 29 steps. A chain of hundreds of fixes does not fit in one file: each step
+adds its counts to the file and its results and codes to every row of the matrix. Raising
+the limit is a format decision, open in section 15 (question 7).
+
 ### 4.5 The matrix of every item
 
 A file lists the items worth a look, up to `listed`. A project looking at its own build
@@ -231,23 +227,21 @@ writes it beside the file.
 
 ```json
 {"format": "sentier-diagnostics-matrix/1",
- "of": {"title": "...", "states": ["a", "b", "c"], "indicators": ["x:climate", "x:water"], "steps": ["s0", "s1"],
-        "ranges": []},
+ "of": {"title": "...", "states": ["a", "b", "c"], "indicators": ["x:climate", "x:water"], "steps": ["s0", "s1"]},
  "items":    [["p01", "Wheat", "FR", "crops", "kg"], ...],
- "values":   [[0.52, 0.53, 0.47, 1.2, "=", null], ...],
+ "values":   [[0.52, 0.53, 0.47, 1.2, 1.2, null], ...],
  "classes":  ["=Dd===", ...],
  "verdicts": ["a.==", ...]}
 ```
 
-`of.ranges` is as the file's `ranges`: `[]` where none was asked for, left out in a matrix
-made before ranges, as its file was. A matrix and its file always agree on which.
-
 One row per item, in the order of the listed items (worst first): `[id, name, place,
-group, unit]`; the results per indicator and state, indicator after indicator, a result
-that is the same number as the state before it (bit for bit) written `"="`; per indicator
-one code per step, one for the whole way and one per range of `of.ranges`; and, where a step has a claim, per
+group, unit]`; the results per indicator and state, indicator after indicator; per
+indicator one code per step and one for the whole way; and, where a step has a claim, per
 indicator one verdict code per step (`.` for a step without a claim; `verdicts` is null when
-no step has one). The class codes are `=` agrees, `~` within noise, `0` near zero, `-`
+no step has one). A result equal to the one before it in the same indicator, bit for bit, is
+written `"="`: in a chain of many steps most results do not change, and this keeps the
+matrix small. A `"="` that stands first in an indicator or after a missing result is
+refused. The class codes are `=` agrees, `~` within noise, `0` near zero, `-`
 missing, and for a pair that moved its class in upper case up and lower case down: `D`
 differs, `B` beyond 10x, `R` zero reference, `T` zero result, `S` sign change. The verdict
 codes are `a` as claimed, `o` off claim, `n` not claimed, `c` claimed, not moved, `~` within
@@ -260,12 +254,6 @@ counts, attribution, `items_count.all` and `qualifying` must be what the matrix 
 exactly, and every listed item must be in the matrix with the same name and results.
 `sentier-diagnostics check` does both when the matrix lies beside its file. A matrix holds
 up to 200,000 items and 64 MB.
-
-The `"="` keeps a chain of fixes small: most fixes leave most results as they were, and
-sentier-bafu's chain of 16 states over 11,947 datasets and 25 impact categories would
-otherwise hold every number 16 times. It is a writing of the results, not a finding: a
-reader writes each `=` out as the number before it, and `"="` that stands first in an
-indicator or after a missing result is refused.
 
 ## 5. The counting rule
 
@@ -318,9 +306,7 @@ The **tolerance** says when two results agree. Default 1e-5, relative to the lar
 two runners differ by up to 2.8e-7 (measured in sentier-bafu) and two solvers by about
 3e-7 (sentier-agribalyse), so differences of 1e-6 agree. Step 0 against published results takes
 the rounding of what was published (`basis: "published rounding"`, e.g. 5e-4 for four
-significant digits). The whole way is counted with the largest tolerance of its steps,
-and no noise: noise is measured between two builds of one state, and the whole way is not
-one step. A range is counted the same way, with the largest tolerance of its own steps.
+significant digits). The whole way is counted with the largest tolerance of its steps.
 
 The **noise** is measured, never assumed: the largest relative difference between two
 builds of one state, per indicator, over the items whose results lie beyond the floor in
@@ -334,6 +320,16 @@ size. A step with measured noise has a class "within noise" for differences no l
 it. Two words, two jobs:
 tolerance (agreement by rule) and noise (measured instability). A third, the reader's
 **size filter**, hides small changes on the page and changes no count (section 10.5).
+
+**The whole way takes the noise of its steps** (`rule.total_noise`): per indicator, the
+largest noise measured in any step. Only measured steps count; an indicator no step measured
+has no noise over the whole way, and the page says "not measured", never "identical". A set
+of steps takes the same: the largest of its steps (section 3). Decided by Manuel on 17 and
+18 November 2026, after sentier-agribalyse found a move within the noise of its step
+counted as "differs" over the whole way, which no step had found. The cost: one unstable
+step widens "within noise" for the whole way in that indicator. The validator holds
+`total_noise` to the steps' noise; a file made before it has none and is judged without
+noise over the whole way, as it was written.
 
 One number per indicator is coarse: a few unstable items make every smaller difference
 of that indicator "within noise". Two builds that are identical are a finding, shown as
@@ -516,11 +512,14 @@ would. It opens from disk; no build step, no server, no network, no font or scri
 elsewhere. Where the file names a matrix that lies beside it, the page writes it as
 `matrix.js`, which loads from disk too; a site serving `matrix.json` needs nothing else, as
 the page fetches it over HTTP. Served over HTTP the page can also read `?file=...`, and it
-opens a file a reader chooses (read in the browser, sent nowhere). **The page works out no
-class, no direction and no count of its own.** It reads them from the file, which the
-validator has checked, and only adds the file's counts up: the classes that moved into
-"moved", and a step's counts over its indicators. The one number it works out itself is
-the median and percentiles of a distribution (10.3), and only from every item. A file read by `?file=` or chosen by a
+opens a file a reader chooses (read in the browser, sent nowhere). **For one step and the whole way, the page works out no class, no direction and no count
+of its own.** It reads them from the file, which the validator has checked, and only adds
+the file's counts up: the classes that moved into "moved", and a step's counts over its
+indicators. Two things it works out itself, and only from every item: the median and
+percentiles of a distribution (10.3), and a set of steps (section 3), with the rule ported
+from `rule.py` (the shared acceptance cases hold the two equal) after holding every chosen
+step to the file's own classes. `tests/fixtures/together.json` holds the counts `together.py`
+gives for sets of the local example, and the page is held to them. A file read by `?file=` or chosen by a
 reader has not passed through the validator: the page checks its shape only, says so above
 everything it draws, and refuses a file it cannot draw instead of drawing part of it. A
 matrix is held to the file it says it is of (title, states, indicators, steps, number of
@@ -531,36 +530,22 @@ items, the length of every row) before a row of it is drawn; its codes are check
 The text a page renders comes from the file or from words chosen to be neutral: it avoids
 stage, triage, ledger, layer, upstream, provider and candidate (a test holds this).
 
-**The page is a matrix page.** From the top: the header (10.1); a row of chips that
-chooses the comparison, the whole way first and then each step with its number, the values
-that moved in it, a `!` where nothing explains it and a mark for each verdict worth a look
-(the arrow keys move between them); under the chips one line for the chosen step: the
-states it goes between, what it is, its claim with who made it, what the claim found, its
-tolerance and its noise; one row of controls (name, group, class, verdict, the size
+**The page is a matrix page.** From the top: the header (10.1); the steps (10.1a), which
+choose what is compared: the whole way, one step, or any set of steps; under them one line
+for what is chosen: for a step, the states it goes between, what it is, its claim with who
+made it, what the claim found, its tolerance and its noise; for a set, how it was composed,
+the steps it leaves out, each chosen step's claim and what moved in it alone (the quiet
+ones folded into one line), its tolerance and its noise; one row of controls (name, group, class, verdict, the size
 filter) with the count and the legend in the row under it; then the matrix (10.5), which
 opens an item in a drawer (10.6); directly under it, always open, the distributions of the
-chosen comparison (10.3). The address keeps the chosen step and an open item
-(`#step=<id>&item=<id>`), so that a reviewer can send someone to exactly that view. Below
+chosen comparison (10.3). The address keeps what is chosen and an open item, so that a
+reviewer can send someone to exactly that view: nothing for the whole way, `#step=<id>` for
+one step, `#steps=<id>:<id>,<id>` for a set (a run as its first and last step, each id
+URL-encoded), and `&item=<id>`. An address naming a step the file does not have, or a set
+the page cannot compose (no matrix), says so and shows the whole way. Below
 them, each closed until a reader opens it: the steps and the whole way (10.2), the worst
 values (10.4), the explanations and the rule (10.7). A host's page never offers to open a
 file; it says only why nothing is drawn.
-
-**Several steps together.** Where the file has ranges, a reader chooses several steps:
-Shift-click a second step (or Shift and an arrow key) for the steps from one to the other,
-⌘- or Ctrl-click to add a step or take one off at an end, or turn on "Several steps" so
-that a plain click does that (for a touch screen). The chips of the run are pressed, and a
-step taken in only because it lies between two chosen ones is hatched. The matrix, the
-distributions, the worst values and the drawer then show the range: the file's own counts
-and classes of it, never a sum of its steps. Its line says which states it goes between,
-which steps lie between the chosen ones and why they are taken in, and each step's claim
-with what it found in that step alone (two or more steps with a claim where nothing moved
-fold into one line, each still there to open); it says that a range has no noise and no
-verdict. An address names a run, not how it was chosen: opened from one, every step of the
-run is chosen.
-Every step chosen is the whole way. A run the file does not compare is said, with the runs
-it does, and nothing changes; a step inside a run cannot be taken off, and the page says
-so. The address keeps a range by its id (`#step=first..last`); an address that names a run
-the file does not compare, or no comparison at all, opens on the whole way and says why.
 
 The line of the chosen step names every verdict on a move with its count, "as claimed"
 first ("40 values moved as claimed, 2 off claim ◐"), and "Nothing moved, as claimed" only
@@ -573,6 +558,23 @@ it holds of how many worth a look, and, for a local file, that its writer has no
 may be published (a quiet part of the line, as a site's own notice, not a box). The states
 in order, with their identity and join counts, head the steps (10.2).
 
+### 10.1a Choosing steps
+Built for hundreds of steps, though a file holds 29 for now (4.4). **A strip**: "The whole
+way", then one thin cell per step whose height is how many values moved in it alone (on a
+log scale, so one value still shows), red at the top where nothing explains it, a dot where
+a verdict is worth a look; numbered up to 40 steps, 2 px wide past 60, and scrolling inside
+its frame. A click chooses one step, Shift a run from the step chosen before, ⌘ or Ctrl adds
+or takes off one; the arrow keys move a step at a time, with Shift they grow or shrink the
+run. Chosen steps are filled and underlined, so that a set reads as bands along the strip.
+
+**A list**, opened by "Find and choose steps": every step with its number, label, kind and
+what moved in it, a box to tick and "only" to choose it alone; consecutive steps of one kind
+under one heading whose box takes or leaves the whole group; a search by number, name or
+kind; "Only steps where something moved"; "Every step: the whole way" and "The steps where
+something moved" as one click each. Shift on a box ticks every step shown from the one ticked
+before. One step always stays chosen. Without every item the list says why a set cannot be
+chosen yet and offers one step at a time.
+
 ### 10.2 Steps and the whole way
 Steps are numbered from 0 where the first state is `published`: step 0 is then the
 reproduction (rule 1 of section 1). A chain that starts from a build of its own has no
@@ -584,8 +586,8 @@ every class, up, down, the step that carries most of the difference (section 7),
 over steps, not attributable, and moved by what nothing explains.
 
 ### 10.3 Distributions
-One card per indicator, in the order of the matrix's columns (10.5), for the comparison the
-chips have chosen: a histogram of the file's own counts, from left to right a sign change,
+One card per indicator, in the order of the matrix's columns (10.5), for the comparison
+chosen above (one step, a set of steps or the whole way): a histogram of the file's own counts, from left to right a sign change,
 the bands down from far to near, agrees and within noise (two bars, the band around 1),
 the bands up from near to far, then zero reference, zero result, near zero and missing.
 Every count is in its bar's title.
@@ -620,7 +622,7 @@ ratio). The page always says how many it shows of how many, and how many items w
 look the file does not hold.
 
 ### 10.5 Matrix
-Items by indicator for the comparison the chips have chosen. **The indicators in which that
+Items by indicator for the comparison chosen above. **The indicators in which that
 comparison moved most come first**, so that what a step did is in view without scrolling;
 an indicator in which it moved nothing and nothing is missing comes last, quietened, and
 keeps its column (a missing value counts with what moved: it is a finding, not stillness).
@@ -700,8 +702,8 @@ the page script (`tests/js/page.test.js`), so the two cannot drift apart unnotic
 | A25 | A file is local unless its writer says otherwise | sentier-bafu, sentier-bafu-agribalyse | `test_a25` |
 | A26 | A pair on both sides of the floor that agrees was a zero result, and listed second worst | review of PR 2 | cases A26-* |
 | A27 | A factor too large for a float: Python and the page ordered the pair differently, the page wrote "×Infinity" | review of PR 2 | case A27 |
-| A28 | Choosing several fixes did not change what the matrix and the distributions below it showed | sentier-bafu (Manuel, 17 November 2026) | `tests/test_ranges.py`; node "Shift-click chooses the steps from one to another together", "steps chosen apart take in the steps between them" |
-| A29 | A run of steps was judged as the sum of its steps: two moves under the tolerance each, over it together, agreed | ranges | `test_a_range_moves_where_each_of_its_steps_agrees` |
+| A28 | A move within the noise of its step was counted as "differs" over the whole way, which judged without noise | sentier-agribalyse | `TotalNoise`, node "the whole way takes the largest noise" |
+| A29 | A set of steps composed by the page must have the classes and counts of the Python reference, item by item, and is refused where its steps disagree with the file | review of PR 22 | `Together`, `tests/fixtures/together.json`, node "a set composed by the page", "refuses a set" |
 
 Also tested: the validator refuses a class, direction or verdict that contradicts the
 values, items out of order, counts that do not add up, unknown keys and other formats
@@ -809,7 +811,6 @@ sentier-bafu-agribalyse wrote their requirements. What became of each:
 | Indicators not hardcoded | agribalyse | yes: from the file |
 | The file's own word for an indicator ("impact category") | bafu | yes: the optional `indicator` |
 | No step 0 in a chain that does not start from the published results | bafu | yes: its steps are numbered from 1 (section 10.2) |
-| Choose any set of fixes at the top; the matrix and everything under it show those | bafu (from Manuel, 17 November 2026) | yes, as a run of steps: a set with a gap takes in the steps between, said on the page (section 3) |
 | Readable without JavaScript for the counts; 375 px wide | bafu-agribalyse | 375 px: yes, no sideways scroll of the page (tables scroll inside their frame; checked in a browser). Without JavaScript: the summary is Markdown; a no-script page is later |
 
 ## 15. Open questions
@@ -834,3 +835,13 @@ For Manuel, unless he names someone else:
    did, and the migration of the ADEME dashboard goes with him. sentier-agribalyse relays
    that Manuel wants his dashboard built on, not replaced; this plan retires its page and
    keeps his scorer. Which of the two Manuel means is for him and Laurenz to settle.
+7. **Hundreds of steps.** A file holds 29 steps (4.4), and Manuel expects hundreds of
+   patches, chosen in many combinations. The page composes any set already; the file and
+   the matrix grow by one comparison per step. Raising `MAX_STATES` needs the size measured
+   first: per step, the file adds a block per indicator and one class, direction and band per
+   listed item and indicator, and the matrix one result (mostly `"="`) and one code per item
+   and indicator. A run-length form (`"=n"`) would keep a matrix of mostly unchanged
+   results small.
+8. **What steps do to each other.** A set of steps apart is an approximation where they
+   touch the same results (section 3). Only building them alone measures it; that is a
+   build tool's work (sentier-bafu), whose results this tool can then compare as a chain.

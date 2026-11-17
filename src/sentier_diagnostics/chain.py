@@ -17,19 +17,12 @@ named as what nothing explains. Where an item has no result in one of the states
 steps on either side of that state cannot be measured, and its total is counted as not
 attributable instead of being split.
 
-**Ranges.** A run of consecutive steps, such as three fixes built one after another, is
-compared too where the producer asks for it (`ranges`): the state before its first step
-against the state after its last, judged as the whole way is (the largest tolerance of its
-steps, no noise, no verdict). A page then shows any run of steps as one comparison of two
-built states: what those steps did together, never a sum of steps it cannot see.
-
 `build` writes the whole file and checks it (`fileformat.errors`); `write` stores it.
 """
 
 from __future__ import annotations
 
 import json
-import warnings
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 
@@ -149,74 +142,6 @@ def explanation(text: str, by: dict, *, step: str | None = None, indicator: str 
     }
 
 
-#: Without a choice, a chain of at most this many steps has every range, and a longer one none:
-#: the ranges of n steps are n(n-1)/2 - 1, each a comparison of every item in every indicator.
-AUTO_RANGES = 8
-
-
-def ranges_within(steps: list[dict], first: str, last: str) -> list[tuple[str, str]]:
-    """Every run of at least two consecutive steps from `first` to `last`, as `(first, last)`
-    pairs: what `ranges` takes for the steps of one kind, such as the fixes of a build.
-
-    >>> ranges_within([{"id": i} for i in "abcd"], "b", "d")
-    [('b', 'c'), ('b', 'd'), ('c', 'd')]
-    """
-    ids = [s["id"] for s in steps]
-    for one in (first, last):
-        if one not in ids:
-            raise ValueError(f"ranges within {first!r} and {last!r}: no step {one!r}")
-    i, j = ids.index(first), ids.index(last)
-    if j <= i:
-        raise ValueError(f"ranges within {first!r} and {last!r}: the first step comes after the last")
-    return [(ids[a], ids[b]) for a in range(i, j + 1) for b in range(a + 1, j + 1)]
-
-
-def _ranges(said, out_steps: list[dict]) -> list[dict]:
-    """The ranges of a chain, as the file holds them, from what the producer asked for:
-    "auto", "all", None, or `(first step id, last step id)` pairs."""
-    ids = [s["id"] for s in out_steps]
-    n = len(ids)
-    if said == "auto":
-        said = "all" if n <= AUTO_RANGES else None
-        if said is None:
-            # a chain that grows past the limit loses its ranges: never without a word
-            warnings.warn(
-                f"a chain of {n} steps has no ranges unless asked (more than {AUTO_RANGES} steps): "
-                "pass ranges=\"all\", chain.ranges_within(steps, first, last) or (first, last) pairs, "
-                "or ranges=None to say that none is wanted",
-                stacklevel=4,
-            )
-    if said is None:
-        return []
-    if said == "all":
-        pairs = [(a, b) for a in range(n) for b in range(a + 1, n) if (a, b) != (0, n - 1)]
-    elif isinstance(said, str):
-        raise ValueError(f"`ranges` is \"auto\", \"all\", None or a list of (first, last) step ids, not {said!r}")
-    else:
-        pairs = []
-        for one in said:
-            if not (isinstance(one, (list, tuple)) and len(one) == 2 and all(x in ids for x in one)):
-                raise ValueError(f"a range is (first step id, last step id) of this chain, not {one!r}")
-            a, b = ids.index(one[0]), ids.index(one[1])
-            if b <= a:
-                raise ValueError(f"range {one[0]}..{one[1]}: a range runs over at least two steps, the first first")
-            if (a, b) == (0, n - 1):
-                raise ValueError(f"range {one[0]}..{one[1]}: every step is the whole way, counted as the total")
-            if (a, b) in pairs:
-                raise ValueError(f"range {one[0]}..{one[1]} is asked for twice")
-            pairs.append((a, b))
-    return [
-        {
-            "id": f"{ids[a]}..{ids[b]}",
-            "steps": ids[a : b + 1],
-            "from": out_steps[a]["from"],
-            "to": out_steps[b]["to"],
-            "tolerance": max(s["tolerance"]["value"] for s in out_steps[a : b + 1]),
-        }
-        for a, b in pairs
-    ]
-
-
 def _indicator(entry) -> dict:
     if isinstance(entry, Mapping):
         found = {k: entry.get(k) for k in ("id", "name", "short", "unit")}
@@ -287,7 +212,6 @@ def _build(
     notes: Iterable[str] = (),
     breakdowns: Mapping[str, Mapping[str, str]] | None = None,
     matrix_file: str | None = None,
-    ranges="auto",
 ) -> tuple[dict, dict | None]:
     """A whole chain, counted, judged, attributed and checked, and its matrix where
     `matrix_file` names one.
@@ -309,10 +233,6 @@ def _build(
       says it may be published). The tool checks only that it is one of the two.
     - `breakdowns`: `{item id: {step id or "total": file name}}`.
     - `matrix_file`: the name of the full matrix, for a local file of items; None for none.
-    - `ranges`: the runs of consecutive steps compared as one: "all" (every run of at least
-      two steps but the whole way), a list of `(first step id, last step id)` pairs
-      (`ranges_within` gives every run between two steps), None for none, or "auto" (the
-      default): every run where the chain has at most `AUTO_RANGES` steps, else none.
     """
     if matrix_file is not None and (tier != "items" or audience != "local"):
         raise ValueError("only a local file of items has a matrix: a public file keeps the listed items only")
@@ -370,53 +290,47 @@ def _build(
             "noise": one.get("noise") or noise(),
         })  # fmt: skip
     total_tolerance = max(s["tolerance"]["value"] for s in out_steps)
+    total_noise = fileformat.noise_together(out_steps)
     published_first = states[0].get("kind") == "published"
-    out_ranges = _ranges(ranges, out_steps)
-    nsteps = len(out_steps)
 
-    # every comparison, in the order an item lists them: each step, the whole way, each range;
-    # as (first state, last state, tolerance, noise by indicator or None, claim or None)
-    compared = []
-    for k, one in enumerate(out_steps):
-        said = one["noise"]
-        by = (said["by"] or {}) if said["measured"] else None
-        compared.append((order[k], order[k + 1], one["tolerance"]["value"], by, steps[k].get("claim")))
-    compared.append((order[0], order[-1], total_tolerance, None, None))
-    compared += [(r["from"], r["to"], r["tolerance"], None, None) for r in out_ranges]
-    seen = {}  # a judgment is one of a few dozen: every pair refers to one of them
-
-    def judged(c, indicator, item):
-        """Class, direction, band and verdict of one item in one comparison."""
-        first, last, tol, by, said_claim = compared[c]
+    def judged(k, indicator, item):
+        """Class, direction, band and verdict of one item in one step (k) or the total (None)."""
+        first, last = (order[0], order[-1]) if k is None else (order[k], order[k + 1])
         before, after = table[first][indicator].get(item), table[last][indicator].get(item)
-        level = by.get(indicator) if by is not None else None
+        if k is None:
+            level, tol = total_noise.get(indicator), total_tolerance
+        else:
+            said = out_steps[k]["noise"]
+            level = (said["by"] or {}).get(indicator) if said["measured"] else None
+            tol = out_steps[k]["tolerance"]["value"]
         floor = floor_table[(indicator, units[item])]
         kind, way, where = rule.judge(before, after, floor=floor, tolerance=tol, noise=level)
         said_verdict = None
-        if said_claim:
-            covering = [e for e in claims.entries_for(said_claim, indicator) if claims.covers(e, item, indicator)]
+        if k is not None and steps[k].get("claim"):
+            entries = claims.entries_for(steps[k]["claim"], indicator)
+            covering = [e for e in entries if claims.covers(e, item, indicator)]
             said_verdict = claims.verdict(kind, before, after, way, covering)
-        key = (kind, way, where, said_verdict)
-        return seen.setdefault(key, key)
+        return before, after, kind, way, where, said_verdict
 
-    # every pair, once: `found[(comparison, indicator)][n]` is the judgment of `items[n]`
-    found = {(c, i): [judged(c, i, item) for item in items] for c in range(len(compared)) for i in ids}
+    # every pair, once
+    found = {
+        (k, indicator, item): judged(k, indicator, item)
+        for k in [*range(len(out_steps)), None]
+        for indicator in ids
+        for item in items
+    }
 
-    def ends(c, indicator, item):
-        return table[compared[c][0]][indicator].get(item), table[compared[c][1]][indicator].get(item)
-
-    def block(c, indicator):
+    def block(k, indicator):
         classes = dict.fromkeys(rule.CLASSES, 0)
         missing = dict.fromkeys(fileformat.MISSING_SIDES, 0)
         bands = dict.fromkeys(rule.BANDS, 0)
         ways = dict.fromkeys(rule.DIRECTIONS, 0)
-        verdicts = dict.fromkeys(claims.VERDICTS, 0) if compared[c][4] else None
+        verdicts = dict.fromkeys(claims.VERDICTS, 0) if k is not None and steps[k].get("claim") else None
         closer = further = None
-        if published_first and 0 < c < nsteps:
+        if published_first and k not in (None, 0):
             closer = further = 0
-        for n, item in enumerate(items):
-            kind, way, where, said = found[(c, indicator)][n]
-            before, after = ends(c, indicator, item)
+        for item in items:
+            before, after, kind, way, where, said = found[(k, indicator, item)]
             classes[kind] += 1
             if kind == rule.MISSING:
                 missing["both" if before is None and after is None else "before" if before is None else "after"] += 1
@@ -437,20 +351,19 @@ def _build(
 
     counts = {
         "steps": {s["id"]: {i: block(k, i) for i in ids} for k, s in enumerate(out_steps)},
-        "total": {i: block(nsteps, i) for i in ids},
+        "total": {i: block(None, i) for i in ids},
     }
-    counts["ranges"] = {r["id"]: {i: block(nsteps + 1 + j, i) for i in ids} for j, r in enumerate(out_ranges)}
 
     # attribution: which step carries the largest share of each item's whole difference
     attribution = {}
     for indicator in ids:
         dominant = {s["id"]: 0 for s in out_steps}
         not_attributable = spread = unexplained_moved = 0
-        for n, item in enumerate(items):
-            kinds = [found[(k, indicator)][n][0] for k in range(nsteps)]
+        for item in items:
+            kinds = [found[(k, indicator, item)][2] for k in range(len(out_steps))]
             if any(not s["explained"] and kinds[k] in rule.MOVES for k, s in enumerate(out_steps)):
                 unexplained_moved += 1
-            if found[(nsteps, indicator)][n][0] not in rule.MOVES:
+            if found[(None, indicator, item)][2] not in rule.MOVES:
                 continue
             series = [table[s][indicator].get(item) for s in order]
             if any(v is None for v in series):
@@ -464,27 +377,22 @@ def _build(
         attribution[indicator] = {"dominant": dominant, "not_attributable": not_attributable,
                                   "spread": spread, "unexplained_moved": unexplained_moved}  # fmt: skip
 
-    # the items worth a look, the worst first; a range counts as a step does
-    at = {item: n for n, item in enumerate(items)}
-
+    # the items worth a look, the worst first
     def worth(item):
-        n = at[item]
-        return any(
-            found[(c, i)][n][0] not in rule.QUIET or found[(c, i)][n][3] == claims.NOT_MOVED
-            for i in ids
-            for c in range(len(compared))
-        )
-
-    ranks = {}
+        for indicator in ids:
+            for k in [*range(len(out_steps)), None]:
+                _, _, kind, _, _, said = found[(k, indicator, item)]
+                if kind not in rule.QUIET or said == claims.NOT_MOVED:
+                    return True
+        return False
 
     def worst(item):
-        if item not in ranks:
-            n = at[item]
-            ranks[item] = (
-                min(rule.severity(*ends(c, i, item), found[(c, i)][n][0]) for i in ids for c in range(len(compared))),
-                item,
-            )
-        return ranks[item]
+        keys = []
+        for indicator in ids:
+            for k in [*range(len(out_steps)), None]:
+                before, after, kind, *_ = found[(k, indicator, item)]
+                keys.append(rule.severity(before, after, kind))
+        return (min(keys), item)
 
     qualifying = sorted((item for item in items if worth(item)), key=worst)
     shown = qualifying[: max(0, listed)] if tier == "items" else []
@@ -492,7 +400,6 @@ def _build(
     any_claim = any(s.get("claim") for s in steps)
 
     def record_of(item):
-        n = at[item]
         about_item = names.get(item) or {}
         record = {
             "id": item,
@@ -508,12 +415,12 @@ def _build(
             "breakdowns": dict(breakdowns[item]) if item in breakdowns else None,
         }
         for indicator in ids:
-            row = [found[(c, indicator)][n] for c in range(len(compared))]
-            record["classes"][indicator] = [r[0] for r in row]
-            record["directions"][indicator] = [r[1] for r in row]
-            record["bands"][indicator] = [r[2] for r in row]
+            row = [found[(k, indicator, item)] for k in [*range(len(out_steps)), None]]
+            record["classes"][indicator] = [r[2] for r in row]
+            record["directions"][indicator] = [r[3] for r in row]
+            record["bands"][indicator] = [r[4] for r in row]
             if any_claim:
-                record["verdicts"][indicator] = [r[3] for r in row[:nsteps]]
+                record["verdicts"][indicator] = [r[5] for r in row[:-1]]
         return record
 
     out_items = [record_of(item) for item in shown]
@@ -532,6 +439,7 @@ def _build(
             "floors_from": order[0],
             "beyond": rule.BEYOND_FACTOR,
             "total_tolerance": total_tolerance,
+            "total_noise": total_noise,
             "floors": floor_rows,
         },
         "states": [
@@ -541,8 +449,6 @@ def _build(
             for s in states
         ],  # fmt: skip
         "steps": out_steps,
-        # [] where none was asked for: only a file made before ranges leaves the key out
-        "ranges": out_ranges,
         "counts": counts,
         "attribution": attribution,
         "items": out_items,

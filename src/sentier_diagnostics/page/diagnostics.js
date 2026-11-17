@@ -250,6 +250,74 @@
     return dir + ', factor ' + SIZE_STEPS[SIZE_STEPS.length - 1][1];
   }
 
+  // ------------------------------------------------------------------ steps together
+
+  // the counting rule, as rule.judge: the class, direction and band of one pair. The page
+  // judges with it only what no file holds, several steps chosen together, and only after it
+  // has judged each chosen step again and found the file's own class on every item.
+  var BEYOND_FACTOR = 10; // rule.BEYOND_FACTOR; the validator holds every file to it
+  function classify(before, after, floor, tolerance, noise) {
+    if (before === null || after === null) return 'missing';
+    var smallBefore = Math.abs(before) <= floor, smallAfter = Math.abs(after) <= floor;
+    if (smallBefore && smallAfter) return 'near zero';
+    var sameSign = (before > 0 && after > 0) || (before < 0 && after < 0);
+    var size = Math.max(Math.abs(before), Math.abs(after));
+    var gap = size ? Math.abs(after - before) / size : 0;
+    if (sameSign && gap <= tolerance) return 'agrees';
+    if (sameSign && noise && gap <= noise) return 'within noise';
+    if (smallBefore) return 'zero reference';
+    if (smallAfter) return 'zero result';
+    if (!sameSign) return 'sign change';
+    if (size > BEYOND_FACTOR * Math.min(Math.abs(before), Math.abs(after))) return 'beyond 10x';
+    return 'differs';
+  }
+  function judge(before, after, floor, tolerance, noise) {
+    var cls = classify(before, after, floor, tolerance, noise);
+    var dir = MOVES.indexOf(cls) >= 0 ? (after > before ? 'up' : 'down') : null;
+    return [cls, dir, bandOf(before, after, cls, dir)];
+  }
+
+  // the runs of a set of steps (their places, in order), each [first, last]
+  function runsOf(set) {
+    var out = [];
+    set.forEach(function (k) {
+      var last = out[out.length - 1];
+      if (last && last[1] === k - 1) last[1] = k;
+      else out.push([k, k]);
+    });
+    return out;
+  }
+
+  // the pair of a set of steps in one indicator, from its results over the states: the result
+  // before the first chosen step, and that result with each run's difference added. One run
+  // is its own pair, exactly: the result after its last step. Runs apart add what each did in
+  // this chain, built on the steps before it. A side that needs a missing result is missing.
+  function composePair(values, runs) {
+    var before = values[runs[0][0]];
+    if (runs.length === 1) return [before, values[runs[0][1] + 1]];
+    if (before === null) return [null, null];
+    var sum = 0;
+    for (var i = 0; i < runs.length; i++) {
+      var a = values[runs[i][0]], b = values[runs[i][1] + 1];
+      if (a === null || b === null) return [before, null];
+      sum += b - a;
+    }
+    return [before, before + sum];
+  }
+
+  // the noise of several steps together, per indicator: the largest measured in any of them
+  // (fileformat.noise_together); an indicator none measured is left out, not measured
+  function noiseTogether(steps) {
+    var out = {};
+    steps.forEach(function (s) {
+      if (!s.noise || !s.noise.measured) return;
+      Object.keys(s.noise.by || {}).forEach(function (key) {
+        out[key] = Object.prototype.hasOwnProperty.call(out, key) ? Math.max(out[key], s.noise.by[key]) : s.noise.by[key];
+      });
+    });
+    return out;
+  }
+
   // the reader's own size filter: it hides values, it changes no class and no count.
   // A value without a ratio (a zero or a sign change) and a missing one always pass.
   function sizeAtLeast(cls, band, threshold) {
@@ -364,14 +432,10 @@
         typeof d.indicator.many === 'string')) return 'the indicator word of the file is not {one, many}';
     if (d.steps.length !== d.states.length - 1) return 'the file has not one step fewer than states';
     if (!d.counts.steps || !d.counts.total) return 'the counts of the file are not {steps, total}';
-    if (d.ranges !== undefined) {
-      if (!Array.isArray(d.ranges)) return 'the ranges of the file are not a list';
-      if (!d.counts.ranges || typeof d.counts.ranges !== 'object') return 'the file has ranges and no counts of them';
-      for (var r = 0; r < d.ranges.length; r++) {
-        var one = d.ranges[r];
-        if (!one || typeof one.id !== 'string' || !Array.isArray(one.steps) || one.steps.length < 2 || !d.counts.ranges[one.id]) return 'a range of the file is not {id, steps, from, to, tolerance} with its counts';
-      }
-    }
+    if (!Array.isArray(d.rule.floors)) return 'the floors of the file are not a list';
+    var noise = d.rule.total_noise;
+    if (noise !== undefined && (!noise || typeof noise !== 'object' || Array.isArray(noise) ||
+        Object.keys(noise).some(function (key) { return typeof noise[key] !== 'number'; }))) return 'the noise of the whole way is not a number per indicator';
     return null;
   }
 
@@ -405,10 +469,8 @@
     var of = m.of || {};
     var ids = d.indicators.map(function (i) { return i.id; });
     if (of.title !== d.title || !sameList(of.states, d.states.map(function (s) { return s.id; })) ||
-        !sameList(of.indicators, ids) || !sameList(of.steps, d.steps.map(function (s) { return s.id; })) ||
-        ('ranges' in of) !== ('ranges' in d) ||
-        ('ranges' in d && !sameList(of.ranges, d.ranges.map(function (r) { return r.id; })))) {
-      return 'it is the matrix of another file: its title, states, indicators, steps or ranges differ';
+        !sameList(of.indicators, ids) || !sameList(of.steps, d.steps.map(function (s) { return s.id; }))) {
+      return 'it is the matrix of another file: its title, states, indicators or steps differ';
     }
     if (!Array.isArray(m.items) || m.items.length > MATRIX_MAX_ITEMS) return 'its items are not a list of at most ' + groupThousands(MATRIX_MAX_ITEMS);
     var n = m.items.length;
@@ -416,7 +478,7 @@
     var claimed = d.steps.some(function (s) { return !!s.claim; });
     if (!Array.isArray(m.values) || m.values.length !== n || !Array.isArray(m.classes) || m.classes.length !== n) return 'its values or classes are not one row per item';
     if (claimed ? !Array.isArray(m.verdicts) || m.verdicts.length !== n : m.verdicts !== null) return 'its verdicts are not one row per item, or null where no step has a claim';
-    var ns = d.states.length, nk = d.steps.length, ni = ids.length, nc = nk + 1 + (d.ranges || []).length;
+    var ns = d.states.length, nk = d.steps.length, ni = ids.length, nc = nk + 1;
     for (var at = 0; at < n; at++) {
       var row = m.items[at];
       if (!Array.isArray(row) || row.length !== 5 || typeof row[0] !== 'string' || typeof row[1] !== 'string') return 'item ' + at + ' is not [id, name, place, group, unit]';
@@ -425,7 +487,7 @@
       for (var v = 0; v < values.length; v++) if (values[v] !== null && values[v] !== SAME && (typeof values[v] !== 'number' || !isFinite(values[v]))) return 'item ' + row[0] + ': a result that is not a number';
       if (!expandValues(values, ns)) return 'item ' + row[0] + ': "=" first in ' + 'an indicator, or after a missing result';
       var codes = m.classes[at];
-      if (typeof codes !== 'string' || codes.length !== ni * nc) return 'item ' + row[0] + ': not one class code per indicator and comparison';
+      if (typeof codes !== 'string' || codes.length !== ni * nc) return 'item ' + row[0] + ': not one class code per indicator, step and the whole way';
       for (var c = 0; c < codes.length; c++) if (!CODES.hasOwnProperty(codes[c])) return 'item ' + row[0] + ': an unknown class code';
       if (claimed) {
         var said = m.verdicts[at];
@@ -440,7 +502,7 @@
   // and verdicts per indicator. A listed item keeps its own record beside the row.
   function matrixRows(m, d) {
     var ids = d.indicators.map(function (i) { return i.id; });
-    var ns = d.states.length, nk = d.steps.length, nc = nk + 1 + (d.ranges || []).length;
+    var ns = d.states.length, nk = d.steps.length, nc = nk + 1;
     var listed = {};
     d.items.forEach(function (item) { listed[item.id] = item; });
     return m.items.map(function (row, at) {
@@ -479,7 +541,7 @@
 
     var D = null, B = {}, LISTED = [], M = null;
     var matrix = { state: 'none', said: '' };
-    var view = { comp: null, picked: [], anchor: null, several: false, notice: '', worstN: 20, worstIndicator: '', find: '', cls: '', verdict: '', group: '', limit: PAGE, size: 0, sort: 'worst', open: null, distScale: 'card' };
+    var view = { set: [], anchor: null, notice: '', pickOpen: false, pickFind: '', pickMoved: false, worstN: 20, worstIndicator: '', find: '', cls: '', verdict: '', group: '', limit: PAGE, size: 0, sort: 'worst', open: null, distScale: 'card' };
     var lastFocus = null;
 
     function q(name) { return root.querySelector('[data-sd="' + name + '"]'); }
@@ -514,78 +576,43 @@
       return id;
     }
     function indicatorIds() { return D.indicators.map(function (i) { return i.id; }); }
-    // the comparisons of a file, in the order an item lists them: each step, the whole way,
-    // then each range (a run of steps compared as one: the state before its first step
-    // against the state after its last)
-    function ranges() { return D.ranges || []; }
-    function rangeAt(id) {
-      var all = ranges();
-      for (var j = 0; j < all.length; j++) if (all[j].id === id) return j;
+    // ---------------------------------------------------------------- the steps chosen
+
+    // What is compared is a set of steps, by their places in the chain: one step, every step
+    // (the whole way), or any other set. The file holds the first two, an item's lists one
+    // entry per step and then the whole way; any other set this page composes from every
+    // item's results (`compose`), and it stands at SET, which no list of the file holds.
+    var SET = -1;
+    function isSet(k) { return k === SET; }
+    function allSteps() { var out = []; for (var k = 0; k < D.steps.length; k++) out.push(k); return out; }
+    function posOf(set) { return set.length === D.steps.length ? D.steps.length : set.length === 1 ? set[0] : SET; }
+    function kNow() { return posOf(view.set); }
+    // the comparison chosen as the file names its own: 'total', the id of a step, or 'set'
+    function compNow() {
+      var k = kNow();
+      return isSet(k) ? 'set' : k === D.steps.length ? 'total' : D.steps[k].id;
+    }
+    function stepAt(id) {
+      for (var i = 0; i < D.steps.length; i++) if (D.steps[i].id === id) return i;
       return -1;
     }
-    function stepIndex(comp) { // the position of a comparison in an item's lists of classes
-      if (comp === 'total') return D.steps.length;
-      for (var i = 0; i < D.steps.length; i++) if (D.steps[i].id === comp) return i;
-      var j = rangeAt(comp);
-      return j >= 0 ? D.steps.length + 1 + j : D.steps.length;
-    }
-    function isComp(comp) {
-      if (comp === 'total' || rangeAt(comp) >= 0) return true;
-      return D.steps.some(function (s) { return s.id === comp; });
-    }
-    // the states (their positions) a comparison at position k of an item's lists compares
-    function stateEnds(k) {
-      var nk = D.steps.length;
-      if (k < nk) return [k, k + 1];
-      if (k === nk) return [0, D.states.length - 1];
-      var run = runOf(ranges()[k - nk - 1].id);
-      return [run[0], run[1] + 1];
-    }
-    // the steps (their positions, first and last) a comparison takes in
-    function runOf(comp) {
-      if (comp === 'total') return [0, D.steps.length - 1];
-      var j = rangeAt(comp);
-      if (j < 0) { var k = stepIndex(comp); return [k, k]; }
-      var first = stepIndex(ranges()[j].steps[0]);
-      return [first, first + ranges()[j].steps.length - 1];
-    }
-    // the comparison of the steps a to b: one step, the whole way, or a range the file has;
-    // null where its producer did not compare those steps together
-    function compOfRun(a, b) {
-      if (a === b) return D.steps[a].id;
-      if (a === 0 && b === D.steps.length - 1) return 'total';
-      var id = D.steps[a].id + '..' + D.steps[b].id;
-      var j = rangeAt(id);
-      return j >= 0 && sameList(ranges()[j].steps, D.steps.slice(a, b + 1).map(function (s) { return s.id; })) ? id : null;
+    // the place of a step, or of the whole way ('total'), in an item's lists
+    function stepIndex(comp) {
+      var k = comp === 'total' ? -1 : stepAt(comp);
+      return k < 0 ? D.steps.length : k;
     }
     function blocksOf(comp) {
-      if (comp === 'total') return D.counts.total;
-      return rangeAt(comp) >= 0 ? D.counts.ranges[comp] : D.counts.steps[comp];
+      if (comp === 'set') return C.blocks;
+      return comp === 'total' ? D.counts.total : D.counts.steps[comp];
     }
-    // which runs the file compares, in words, for a page that is asked for one it has not
-    function rangesSaid() {
-      var all = ranges();
-      // a file made before ranges, and one whose writer asked for none, are said apart
-      if (!('ranges' in D)) return 'This file was made before runs of steps could be compared: choose one step, or the whole way.';
-      if (!all.length) return 'This file compares no run of steps: none was asked for when it was made. Choose one step, or the whole way.';
-      var lo = D.steps.length, hi = -1, counted = {};
-      all.forEach(function (r) { var run = runOf(r.id); lo = Math.min(lo, run[0]); hi = Math.max(hi, run[1]); counted[run[0] + ':' + run[1]] = true; });
-      var every = true;
-      for (var a = lo; a <= hi; a++) for (var b = a + 1; b <= hi; b++) if (!(a === 0 && b === D.steps.length - 1) && !counted[a + ':' + b]) every = false;
-      return every
-        ? 'It compares every run of steps within steps ' + stepNo(lo) + ' to ' + stepNo(hi) + '.'
-        : 'It compares ' + groupThousands(all.length) + ' runs of steps, chosen by its writer, within steps ' + stepNo(lo) + ' to ' + stepNo(hi) + '.';
-    }
+    function blocksNow() { return blocksOf(compNow()); }
     function stateIndex(stateId) {
       for (var i = 0; i < D.states.length; i++) if (D.states[i].id === stateId) return i;
       return 0;
     }
+    // a comparison the file holds: the whole way or one step
     function compLabel(comp) {
       if (comp === 'total') return 'The whole way: ' + D.states[0].label + ' → ' + D.states[D.states.length - 1].label;
-      if (rangeAt(comp) >= 0) {
-        var run = runOf(comp);
-        return 'Steps ' + stepNo(run[0]) + ' to ' + stepNo(run[1]) + ' together: ' + D.states[run[0]].label + ' → ' + D.states[run[1] + 1].label;
-      }
       var k = stepIndex(comp);
       return 'Step ' + stepNo(k) + ': ' + D.steps[k].label;
     }
@@ -597,15 +624,46 @@
       var word = D.indicator || { one: 'indicator', many: 'indicators' };
       return many ? word.many : word.one;
     }
+    function listWords(parts) {
+      return parts.length === 1 ? parts[0] : parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1];
+    }
+    // runs in words: "2, 3, 5 to 9 and 12" (a run of two is its two steps)
+    function runWords(runs) {
+      var parts = [];
+      runs.forEach(function (r) {
+        if (r[1] - r[0] === 1) parts.push(String(stepNo(r[0])), String(stepNo(r[1])));
+        else parts.push(r[0] === r[1] ? String(stepNo(r[0])) : stepNo(r[0]) + ' to ' + stepNo(r[1]));
+      });
+      return listWords(parts);
+    }
+    function stepList(ks) { return runWords(ks.map(function (k) { return [k, k]; })); }
+    // what a set of steps is called, in the fewer words: "Step 4", "Steps 2, 5 and 7
+    // together", "Steps 3 to 9 together", or "Every step but 6"
+    function setWords(set) {
+      if (set.length === D.steps.length) return 'The whole way';
+      if (set.length === 1) return 'Step ' + stepNo(set[0]);
+      var runs = runsOf(set);
+      var left = allSteps().filter(function (k) { return set.indexOf(k) < 0; });
+      if (runsOf(left).length < runs.length) return 'Every step but ' + (left.length === 1 ? 'step ' : 'steps ') + runWords(runsOf(left));
+      return 'Steps ' + runWords(runs) + ' together';
+    }
+    // the comparison chosen, in words for a heading or a sentence
+    function nowLabel() {
+      return isSet(kNow()) ? setWords(view.set) + ' (' + view.set.length + ' of ' + D.steps.length + ' steps)' : compLabel(compNow());
+    }
+    function clsAt(row, indicator, k) { return isSet(k) ? row.together.cls[indicator] : row.classes[indicator][k]; }
+    function dirAt(row, indicator, k) { return isSet(k) ? row.together.dir[indicator] : row.directions[indicator][k]; }
     function pairOf(row, indicator, k) {
-      var values = row.values[indicator], ends = stateEnds(k);
-      return [values[ends[0]], values[ends[1]]];
+      if (isSet(k)) return row.together.pair[indicator];
+      var values = row.values[indicator];
+      return k === D.steps.length ? [values[0], values[values.length - 1]] : [values[k], values[k + 1]];
     }
     function verdictOf(row, indicator, k) {
-      if (!row.verdicts || k >= D.steps.length) return null;
+      if (!row.verdicts || isSet(k) || k >= D.steps.length) return null;
       return row.verdicts[indicator][k];
     }
     function bandAt(row, indicator, k) {
+      if (isSet(k)) return row.together.band[indicator];
       if (row.bands) return row.bands[indicator][k];
       var pair = pairOf(row, indicator, k);
       return bandOf(pair[0], pair[1], row.classes[indicator][k], row.directions[indicator][k]);
@@ -628,8 +686,8 @@
 
     function valueCell(row, indicator, k, ratio) {
       var pair = pairOf(row, indicator, k);
-      var cls = row.classes[indicator][k];
-      var v = (ratio ? ratioView : cellView)(pair[0], pair[1], cls, row.directions[indicator][k], bandAt(row, indicator, k));
+      var cls = clsAt(row, indicator, k);
+      var v = (ratio ? ratioView : cellView)(pair[0], pair[1], cls, dirAt(row, indicator, k), bandAt(row, indicator, k));
       var verdict = verdictOf(row, indicator, k);
       var title = v.title + (verdict ? ' Verdict: ' + verdict + '.' : '');
       var classes = 'cell tone-' + v.tone + (v.noRatio ? ' no-ratio' : '');
@@ -688,59 +746,262 @@
       // only a chain that starts from the published results has a step 0 that reproduces them
       q('steps-zero').hidden = D.states[0].kind !== 'published';
       q('made-by').textContent = 'Written by ' + D.made_by + '. ' + FORMAT + '.';
-      renderChips();
+      renderPicker();
       renderStepSaid();
     }
 
-    // the comparison is chosen from a row of chips: the whole way, then each step with its
-    // number, the values that moved in it and a mark for each verdict worth a look. Several
-    // steps chosen together are a run, its chips pressed; a step taken in only because it lies
-    // between two chosen ones is marked so (`markChips`)
-    function renderChips() {
-      var row = clear(q('comparison'));
-      var chip = function (value, parts, title) {
-        row.appendChild(el('button', { type: 'button', cls: 'sd-chip', 'data-comp': value, title: title,
-          'aria-pressed': view.comp === value ? 'true' : 'false' }, parts));
-      };
-      var count = function (comp) {
-        var m = sumOver(comp, moved);
-        return el('span', { cls: 'sd-chip-count', text: n(m) + ' moved' });
-      };
-      chip('total', [el('span', { cls: 'sd-chip-label', text: 'The whole way' }), count('total')], compLabel('total'));
-      D.steps.forEach(function (s, k) {
-        var parts = [el('span', { cls: 'sd-chip-no', text: String(stepNo(k)) }), el('span', { cls: 'sd-chip-label', text: s.label }), count(s.id)];
-        var said = [compLabel(s.id), n(sumOver(s.id, moved)) + ' values moved'];
-        if (!s.explained) {
-          parts.push(el('span', { cls: 'sd-chip-flag', text: '!' }));
-          said.push('nothing explains it');
-        }
-        if (s.claim) LOOK.forEach(function (name) {
-          var found = sumOver(s.id, function (b) { return b.verdicts[name]; });
-          if (!found) return;
-          parts.push(el('span', { cls: 'sd-chip-mark', text: LOOK_MARK[name] }));
-          said.push(n(found) + ' ' + name);
-        });
-        chip(s.id, parts, said.join('. ') + '.');
-      });
-      var pick = q('pick');
-      if (pick) {
-        pick.hidden = !ranges().length;
-        q('pick-several').checked = view.several;
-        pickSaid();
-      }
-      markChips();
+    // ---------------------------------------------------------------- steps composed
+
+    // the floor of an indicator and a reference unit, as the file holds it; null where it
+    // holds none, and the page then composes nothing with that indicator
+    var FLOORS = {};
+    function floorKey(indicator, unit) { return JSON.stringify([indicator, unit === undefined ? null : unit]); }
+    function floorOf(indicator, unit) {
+      var key = floorKey(indicator, unit);
+      return Object.prototype.hasOwnProperty.call(FLOORS, key) ? FLOORS[key] : null;
     }
-    function pickSaid() {
-      var node = q('pick-said');
-      if (node) node.textContent = view.several
-        ? 'A click adds a step to those chosen, or takes one off at an end; the steps between are taken in.'
-        : 'Shift-click a second step to see the steps from one to the other together; ⌘- or Ctrl-click adds a step or takes one off.';
+    function stepNoise(s, indicator) {
+      var by = s.noise && s.noise.measured ? s.noise.by || {} : {};
+      return typeof by[indicator] === 'number' ? by[indicator] : null;
+    }
+    // every item's results, which a set of steps is composed from: the matrix, or the file
+    // where it lists every item; null where the page holds only some
+    function heldAll() {
+      if (M) return M;
+      return D.tier !== 'counts' && D.items_count.listed === D.items_count.all ? LISTED : null;
+    }
+    // why no set of steps can be composed now; null where one can
+    function composeSaid() {
+      if (D.tier === 'counts') return 'This file holds counts only: several steps together are composed from every ' + D.item.one + '\'s results, which it does not hold.';
+      if (heldAll()) return null;
+      var c = D.items_count;
+      var need = 'Several steps together are composed from every ' + D.item.one + '\'s results';
+      if (matrix.state === 'loading') return need + ': the matrix that holds them is loading.';
+      if (matrix.state === 'refused') return need + ', and the matrix that holds them was not loaded (' + matrix.said + ').';
+      return need + ': this file lists ' + groupThousands(c.listed) + ' of its ' + groupThousands(c.all) + ' and names no matrix of them. One step and the whole way are the file\'s own.';
+    }
+
+    // The page holds its rule to the file's before it composes with it: each chosen step is
+    // judged again on every item, and must give the file's own class and direction every time.
+    // Once per step; a step where it does not refuses every set that takes it in.
+    var CHECKED = {}, C = null;
+    function checkStep(k) {
+      if (Object.prototype.hasOwnProperty.call(CHECKED, k)) return CHECKED[k];
+      var s = D.steps[k], ids = indicatorIds(), held = heldAll(), said = null;
+      for (var r = 0; r < held.length && said === null; r++) {
+        var row = held[r];
+        for (var x = 0; x < ids.length; x++) {
+          var id = ids[x], values = row.values[id], floor = floorOf(id, row.unit);
+          if (floor === null) { said = row.id + ', ' + indicatorName(id) + ': the file holds no floor for its unit'; break; }
+          var got = judge(values[k], values[k + 1], floor, s.tolerance.value, stepNoise(s, id));
+          if (got[0] !== row.classes[id][k] || got[1] !== row.directions[id][k]) {
+            said = row.id + ', ' + indicatorName(id) + ': the file says ' + row.classes[id][k] + (row.directions[id][k] ? ', ' + row.directions[id][k] : '') +
+              ', this page\'s rule ' + got[0] + (got[1] ? ', ' + got[1] : '');
+            break;
+          }
+        }
+      }
+      CHECKED[k] = said;
+      return said;
+    }
+
+    // a block of counts, as the file holds one per step, for a set of steps: no verdicts (each
+    // claim is judged in its own step), and no closer or further, which the page shows for no
+    // comparison (together.counts has them, for a reader of the file's blocks)
+    function emptyBlock(indicator) {
+      var like = D.counts.total[indicator];
+      var zeros = function (table) { var out = {}; Object.keys(table).forEach(function (key) { out[key] = 0; }); return out; };
+      return { pairs: 0, classes: zeros(like.classes), missing: zeros(like.missing), directions: zeros(like.directions), bands: zeros(like.bands),
+        verdicts: null, closer: null, further: null };
+    }
+
+    // the set of steps composed over every item, with the rule of the file: its pair (the
+    // result before its first step, and that result with each run's difference added), its
+    // class with the largest tolerance of its steps and the largest noise measured in them,
+    // and its counts. Kept until another set is chosen. Returns why it cannot be, or null.
+    function compose(set) {
+      var key = set.join(',');
+      if (C && C.key === key) return null;
+      var why = composeSaid();
+      if (why) return why;
+      for (var i = 0; i < set.length; i++) {
+        var problem = checkStep(set[i]);
+        if (problem) return 'This page\'s rule does not give the file\'s classes in step ' + stepNo(set[i]) + ' (' + problem + '), so it composes no set of steps that takes it in. Run sentier-diagnostics check on the file.';
+      }
+      var steps = set.map(function (k) { return D.steps[k]; });
+      var tolerance = Math.max.apply(null, steps.map(function (s) { return s.tolerance.value; }));
+      var noise = noiseTogether(steps);
+      var runs = runsOf(set), ids = indicatorIds();
+      var blocks = {};
+      ids.forEach(function (id) { blocks[id] = emptyBlock(id); });
+      heldAll().forEach(function (row) {
+        var t = { key: key, cls: {}, dir: {}, band: {}, pair: {} };
+        ids.forEach(function (id) {
+          var values = row.values[id], pair = composePair(values, runs);
+          var got = judge(pair[0], pair[1], floorOf(id, row.unit), tolerance, Object.prototype.hasOwnProperty.call(noise, id) ? noise[id] : null);
+          t.pair[id] = pair; t.cls[id] = got[0]; t.dir[id] = got[1]; t.band[id] = got[2];
+          var b = blocks[id];
+          b.pairs += 1;
+          b.classes[got[0]] += 1;
+          if (got[0] === 'missing') b.missing[pair[0] === null && pair[1] === null ? 'both' : pair[0] === null ? 'before' : 'after'] += 1;
+          if (got[2]) b.bands[got[2]] += 1;
+          if (got[1]) b.directions[got[1]] += 1;
+        });
+        row.together = t;
+      });
+      C = { key: key, set: set, runs: runs, tolerance: tolerance, noise: noise, blocks: blocks };
+      return null;
+    }
+
+    // ---------------------------------------------------------------- choosing steps
+
+    // The steps are chosen in two places that show one choice. The strip has one cell per
+    // step in the order of the chain, its bar as high as what moved in that step, so that a
+    // chain of hundreds of steps fits in one line and shows where things moved. The list
+    // finds steps by number, name or kind, or those where something moved, and ticks any set.
+    function stepMoved(k) { return sumOver(D.steps[k].id, moved); }
+    function looksOf(s) {
+      if (!s.claim) return [];
+      return LOOK.map(function (name) { return [name, sumOver(s.id, function (b) { return b.verdicts[name]; })]; }).filter(function (p) { return p[1]; });
+    }
+    function stepTitle(k) {
+      var s = D.steps[k], m = stepMoved(k);
+      var said = ['Step ' + stepNo(k) + ': ' + s.label, (m === 1 ? '1 value' : n(m) + ' values') + ' moved'];
+      if (!s.explained) said.push('nothing explains it');
+      looksOf(s).forEach(function (p) { said.push(n(p[1]) + ' ' + p[0]); });
+      return said.join('. ') + '.';
+    }
+    // consecutive steps of one kind are one group of the list
+    function groupsOf() {
+      var out = [];
+      D.steps.forEach(function (s, k) {
+        var last = out[out.length - 1];
+        if (last && last.kind === s.kind) last.steps.push(k);
+        else out.push({ kind: s.kind, steps: [k] });
+      });
+      return out;
+    }
+    function shownInList(k) {
+      var s = D.steps[k];
+      if (view.pickMoved && !stepMoved(k)) return false;
+      var find = view.pickFind.trim().toLowerCase();
+      if (!find) return true;
+      return [String(stepNo(k)), s.id, s.label, s.kind, s.about || ''].join(' ').toLowerCase().indexOf(find) >= 0;
+    }
+
+    function renderPicker() {
+      var strip = clear(q('comparison'));
+      var top = 0;
+      D.steps.forEach(function (s, k) { top = Math.max(top, stepMoved(k)); });
+      // a number under each cell where they fit; a long chain draws its cells thinner, and
+      // scrolls within the strip where even those do not fit
+      var numbered = D.steps.length <= 40;
+      strip.className = 'sd-strip' + (numbered ? ' sd-numbered' : '') + (D.steps.length > 60 ? ' sd-dense' : '');
+      strip.appendChild(el('button', { type: 'button', cls: 'sd-whole', 'data-comp': 'total', 'aria-pressed': 'false',
+        title: compLabel('total') + '. ' + n(sumOver('total', moved)) + ' values moved.' }, [el('span', { text: 'The whole way' })]));
+      var cells = el('span', { cls: 'sd-cells' });
+      D.steps.forEach(function (s, k) {
+        var m = stepMoved(k);
+        var height = m ? 18 + 82 * Math.log(1 + m) / Math.log(1 + top) : 0;
+        cells.appendChild(el('button', { type: 'button', cls: 'sd-cell' + (s.explained ? '' : ' sd-unexplained') + (looksOf(s).length ? ' sd-look' : ''),
+          'data-comp': s.id, 'aria-pressed': 'false', title: stepTitle(k), 'aria-label': stepTitle(k) }, [
+          el('span', { cls: 'sd-cell-bar' + (m ? '' : ' sd-none'), style: 'height:' + height.toFixed(1) + '%' }),
+          numbered ? el('span', { cls: 'sd-cell-no', text: String(stepNo(k)) }) : null
+        ]));
+      });
+      strip.appendChild(cells);
+      var open = q('pick-open');
+      if (open) open.setAttribute('aria-expanded', view.pickOpen ? 'true' : 'false');
+      if (q('pick-panel')) q('pick-panel').hidden = !view.pickOpen;
+      if (q('pick-moved')) q('pick-moved').checked = view.pickMoved;
+      renderPickList();
+    }
+
+    function renderPickList() {
+      var list = q('pick-list');
+      if (!list) { markPicker(); return; }
+      clear(list);
+      var shown = 0;
+      groupsOf().forEach(function (g) {
+        var ks = g.steps.filter(shownInList);
+        if (!ks.length) return;
+        shown += ks.length;
+        var first = g.steps[0], last = g.steps[g.steps.length - 1];
+        // a group of one step is a row with its kind; a group of several has a head that
+        // ticks every one of them
+        var head = first === last ? null : el('div', { cls: 'sd-pick-group' }, [
+          el('label', null, [el('input', { type: 'checkbox', 'data-group': String(first), 'aria-label': 'Every step of ' + g.kind }),
+            el('strong', { text: capital(g.kind) }),
+            el('span', { cls: 'sd-quiet', text: ' steps ' + stepNo(first) + ' to ' + stepNo(last) })]),
+          el('span', { cls: 'sd-quiet sd-pick-count', 'data-group-count': String(first) })
+        ]);
+        if (head) list.appendChild(head);
+        ks.forEach(function (k) {
+          var s = D.steps[k], m = stepMoved(k);
+          list.appendChild(el('div', { cls: 'sd-pick-row', 'data-row': String(k) }, [
+            el('label', { title: s.about || s.label }, [
+              el('input', { type: 'checkbox', 'data-k': String(k) }),
+              el('span', { cls: 'sd-pick-no', text: String(stepNo(k)) }),
+              el('span', { cls: 'sd-pick-label', text: s.label }),
+              head ? null : el('span', { cls: 'sd-pick-kind', text: s.kind }),
+              s.explained ? null : el('span', { cls: 'sd-pick-flag', text: '!', title: 'nothing explains it' })
+            ]),
+            el('span', { cls: 'sd-pick-moved' + (m ? '' : ' sd-quiet'), text: m ? n(m) + ' moved' : 'nothing moved' }),
+            el('span', { cls: 'sd-pick-marks', text: looksOf(s).map(function (p) { return LOOK_MARK[p[0]]; }).join(' '),
+              title: looksOf(s).map(function (p) { return n(p[1]) + ' ' + p[0]; }).join(', ') || null }),
+            el('button', { type: 'button', cls: 'sd-only', 'data-only': String(k), title: 'Step ' + stepNo(k) + ' alone', text: 'only' })
+          ]));
+        });
+      });
+      if (!shown) list.appendChild(el('p', { cls: 'sd-quiet', text: 'No step ' + (view.pickMoved ? 'where something moved ' : '') + (view.pickFind.trim() ? 'matches "' + view.pickFind.trim() + '"' : '') + '.' }));
+      if (q('pick-shown')) q('pick-shown').textContent = shown === D.steps.length ? '' : 'Showing ' + shown + ' of ' + D.steps.length + ' steps.';
+      markPicker();
+    }
+
+    // the strip, the list and the line beside them show the steps chosen
+    function markPicker() {
+      var whole = view.set.length === D.steps.length;
+      var cells = q('comparison').querySelectorAll('button[data-comp]');
+      for (var i = 0; i < cells.length; i++) {
+        var comp = cells[i].getAttribute('data-comp');
+        var on = comp === 'total' ? whole : view.set.indexOf(stepIndex(comp)) >= 0;
+        cells[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+      }
+      var locked = composeSaid();
+      var list = q('pick-list');
+      if (list) {
+        var boxes = list.querySelectorAll('input[data-k]');
+        for (var j = 0; j < boxes.length; j++) {
+          var k = +boxes[j].getAttribute('data-k');
+          boxes[j].checked = view.set.indexOf(k) >= 0;
+          // the last step chosen stays chosen: a comparison of no step is none
+          boxes[j].disabled = !!locked || (view.set.length === 1 && view.set[0] === k);
+        }
+        var groups = list.querySelectorAll('input[data-group]');
+        var byFirst = {};
+        groupsOf().forEach(function (g) { byFirst[g.steps[0]] = g.steps; });
+        for (var gi = 0; gi < groups.length; gi++) {
+          var ks = byFirst[groups[gi].getAttribute('data-group')] || [];
+          var chosen = ks.filter(function (x) { return view.set.indexOf(x) >= 0; }).length;
+          groups[gi].checked = chosen === ks.length;
+          groups[gi].indeterminate = chosen > 0 && chosen < ks.length;
+          groups[gi].disabled = !!locked || chosen === view.set.length && chosen === ks.length;
+        }
+        var counts = list.querySelectorAll('span[data-group-count]');
+        for (var ci = 0; ci < counts.length; ci++) {
+          var gs = byFirst[counts[ci].getAttribute('data-group-count')] || [];
+          counts[ci].textContent = gs.filter(function (x) { return view.set.indexOf(x) >= 0; }).length + ' of ' + gs.length + ' chosen';
+        }
+      }
+      if (q('pick-active')) q('pick-active').disabled = !!locked;
+      if (q('pick-locked')) { q('pick-locked').textContent = locked || ''; q('pick-locked').hidden = !locked; }
+      if (q('pick-summary')) q('pick-summary').textContent = whole ? 'Every step: ' + D.steps.length
+        : view.set.length + ' of ' + D.steps.length + ' steps';
     }
 
     // what a step claims, who claimed it, and what the claim found in that step: every verdict
     // on a move, "as claimed" first, each with its count; the ones worth a look carry their
-    // mark, as on the chips. No colour: a verdict is not an approval (ADR 0010).
-    // each verdict on a step's moves with its count, the ones with none left out
+    // mark. No colour: a verdict is not an approval (ADR 0010).
     function verdictsOf(s) {
       return ['as claimed'].concat(LOOK).map(function (name) { return [name, sumOver(s.id, function (b) { return b.verdicts[name]; })]; })
         .filter(function (p) { return p[1]; });
@@ -759,28 +1020,38 @@
       return claim;
     }
 
-    function stepList(ks) {
-      var nos = ks.map(function (k) { return String(stepNo(k)); });
-      return nos.length === 1 ? nos[0] : nos.slice(0, -1).join(', ') + ' and ' + nos[nos.length - 1];
+    // the noise a set of steps is judged with, per indicator, in words: the largest measured
+    // in any of them; "not measured" where none measured it, never "identical"
+    function noiseOfSet(by, where) {
+      var keys = Object.keys(by);
+      if (!keys.length) return 'not measured in ' + where;
+      var all = indicatorIds().length;
+      var largest = Math.max.apply(null, keys.map(function (k) { return by[k]; }));
+      return 'the largest measured in ' + where + ', per ' + indWord(false) +
+        (keys.length < all ? ', for ' + keys.length + ' of ' + all + ' ' + indWord(true) + ' (not measured for the others)' : '') +
+        (largest === 0 ? ': identical builds' : largest > LARGE_NOISE ? '; large: up to ' + formatNumber(largest * 100) + ' %' : '');
+    }
+    function totalNoiseSaid() {
+      if (!('total_noise' in D.rule)) return 'none: this file was made before the whole way took the noise of its steps';
+      return noiseOfSet(D.rule.total_noise, 'any step');
     }
 
-    // under the chips: what the chosen comparison is, the claim of its step and who made it,
-    // and its rule, so that a reviewer reads what a step said beside what it did. For a run of
+    // under the strip: what the chosen comparison is, the claim of its step and who made it,
+    // and its rule, so that a reviewer reads what a step said beside what it did. For several
     // steps: what they did together, each step's claim with what it found in that step alone
     function renderStepSaid() {
       var node = q('step-said');
       if (!node) return;
       clear(node);
       if (view.notice) node.appendChild(el('p', { cls: 'sd-notice', text: view.notice }));
-      if (view.comp === 'total') {
+      var k = kNow();
+      if (k === D.steps.length) {
         node.appendChild(el('p', null, [el('strong', { text: 'The whole way: ' }), D.states[0].label + ' → ' + D.states[D.states.length - 1].label + '. ',
-          el('span', { cls: 'sd-quiet', text: 'Each cell holds the last result divided by the first. Choose a step to see what one change did' +
-            (ranges().length ? ', or several to see what they did together' : '') + '; "Steps and the whole way" below splits the whole difference between them.' })]));
+          el('span', { cls: 'sd-quiet', text: 'Each cell holds the last result divided by the first. Choose one step to see what one change did, or any steps to see what they did together; "Steps and the whole way" below splits the whole difference between them.' })]));
+        node.appendChild(el('p', { cls: 'sd-quiet', text: 'Tolerance ' + D.rule.total_tolerance + ', the largest of the steps. Noise ' + totalNoiseSaid() + '.' }));
         return;
       }
-      var j = rangeAt(view.comp);
-      if (j >= 0) { renderRunSaid(node, ranges()[j]); return; }
-      var k = stepIndex(view.comp);
+      if (isSet(k)) { renderSetSaid(node); return; }
       var s = D.steps[k];
       var line = [el('strong', { text: 'Step ' + stepNo(k) + ': ' + s.label + '. ' }), el('span', { cls: 'sd-quiet', text: D.states[k].label + ' → ' + D.states[k + 1].label + '. ' })];
       if (s.about) line.push(el('span', { cls: 'sd-quiet', text: s.about }));
@@ -793,52 +1064,41 @@
       node.appendChild(el('p', { cls: 'sd-quiet', text: 'Tolerance ' + s.tolerance.value + ' (' + s.tolerance.basis + '). Noise ' + noiseText(s.noise, indicatorIds(), indWord(true)) + '.' }));
     }
 
-    function renderRunSaid(node, r) {
-      var run = runOf(r.id);
-      var between = [];
-      for (var k = run[0] + 1; k < run[1]; k++) if (view.picked.indexOf(k) < 0) between.push(k);
-      node.appendChild(el('p', null, [el('strong', { text: 'Steps ' + stepNo(run[0]) + ' to ' + stepNo(run[1]) + ' together. ' }),
-        el('span', { cls: 'sd-quiet', text: D.states[run[0]].label + ' → ' + D.states[run[1] + 1].label + '. Each cell holds the result after the last of these steps divided by the result before the first: what they did together.' })]));
-      if (between.length) {
-        node.appendChild(el('p', { cls: 'sd-quiet', text: (between.length === 1 ? 'Step ' : 'Steps ') + stepList(between) + (between.length === 1 ? ' lies' : ' lie') +
-          ' between the steps chosen and ' + (between.length === 1 ? 'is' : 'are') + ' taken in: each state is built on the one before it, so steps are compared together only as a run.' }));
+    function renderSetSaid(node) {
+      var set = view.set, runs = runsOf(set), first = set[0], last = set[set.length - 1];
+      node.appendChild(el('p', null, [el('strong', { text: setWords(set) + '. ' }), el('span', { cls: 'sd-quiet', text: runs.length === 1
+        ? D.states[first].label + ' → ' + D.states[last + 1].label + '. Each cell holds the result after the last of these steps divided by the result before the first: what they did together.'
+        : 'From the state before step ' + stepNo(first) + ' (' + D.states[first].label + '): each cell holds that result with the difference each of these steps made added, divided by it.' })]));
+      if (runs.length > 1) {
+        var left = [];
+        for (var j = first; j <= last; j++) if (set.indexOf(j) < 0) left.push(j);
+        node.appendChild(el('p', { cls: 'sd-quiet', text: (left.length === 1 ? 'Step ' : 'Steps ') + runWords(runsOf(left)) + (left.length === 1 ? ' is' : ' are') +
+          ' left out. Each chosen step adds the difference it made in this chain, built on every step before it, the ones left out too. Where steps change the same results, what one does depends on the others, and the sum is not what the chosen steps would do alone.' }));
       }
-      // the steps where something moved or was judged come first; the quiet ones (a claim,
-      // nothing moved, no verdict) fold into one line, each still there to open
+      // the steps where something moved or was judged come first; the quiet ones (explained,
+      // nothing moved, no verdict, with a claim or without) fold into one line, each still
+      // there to open: a set of hundreds of steps is mostly these
       var list = el('ul', { cls: 'sd-claims' });
       var quiet = [], folded = el('ul', { cls: 'sd-claims' });
-      for (k = run[0]; k <= run[1]; k++) {
+      set.forEach(function (k) {
         var s = D.steps[k];
-        var alone = sumOver(s.id, moved);
+        var alone = stepMoved(k);
         var row = el('li', null, [el('strong', { text: 'Step ' + stepNo(k) + ': ' + s.label + '. ' }),
           s.explained ? null : el('span', { cls: 'sd-error', text: 'Nothing explains it. ' }),
           el('span', { cls: 'sd-claim-label', text: 'Claim' })].concat(claimParts(s),
           [el('span', { cls: 'sd-quiet', text: ' In this step alone: ' + (alone === 1 ? '1 value' : n(alone) + ' values') + ' moved.' })]));
-        if (s.claim && s.explained && !alone && !verdictsOf(s).length) { quiet.push(k); folded.appendChild(row); }
+        if (s.explained && !alone && !(s.claim && verdictsOf(s).length)) { quiet.push(k); folded.appendChild(row); }
         else list.appendChild(row);
-      }
+      });
       if (quiet.length < 2) { while (folded.childNodes.length) list.appendChild(folded.childNodes[0]); quiet = []; }
       if (list.childNodes.length) node.appendChild(list);
       if (quiet.length) {
-        node.appendChild(el('details', { cls: 'sd-quiet-steps' }, [el('summary', { text: 'Steps ' + stepList(quiet) +
-          ': nothing moved in any of them, as each claims.' }), folded]));
+        var claimed = quiet.every(function (k) { return D.steps[k].claim; });
+        node.appendChild(el('details', { cls: 'sd-quiet-steps' }, [el('summary', { text: 'Steps ' + runWords(runsOf(quiet)) +
+          ': nothing moved in any of them' + (claimed ? ', as each claims.' : '.') }), folded]));
       }
-      node.appendChild(el('p', { cls: 'sd-quiet', text: 'Tolerance ' + r.tolerance + ', the largest of these steps; no noise, and no verdict: a run is judged as the whole way is, and each claim is judged in its own step.' }));
-    }
-
-    function markChips() {
-      var run = view.comp === 'total' ? null : runOf(view.comp);
-      var chips = q('comparison').querySelectorAll('button[data-comp]');
-      for (var i = 0; i < chips.length; i++) {
-        var comp = chips[i].getAttribute('data-comp');
-        var k = comp === 'total' ? -1 : stepIndex(comp);
-        var on = comp === 'total' ? view.comp === 'total' : !!run && k >= run[0] && k <= run[1];
-        var between = !!run && on && k > run[0] && k < run[1] && view.picked.indexOf(k) < 0;
-        chips[i].setAttribute('aria-pressed', on ? 'true' : 'false');
-        chips[i].className = 'sd-chip' + (between ? ' sd-between' : '');
-        if (between) chips[i].setAttribute('data-between', '');
-        else if (chips[i].removeAttribute) chips[i].removeAttribute('data-between');
-      }
+      node.appendChild(el('p', { cls: 'sd-quiet', text: 'Tolerance ' + C.tolerance + ', the largest of these steps. Noise ' + noiseOfSet(C.noise, 'these steps') +
+        '. No verdict: each claim is judged in its own step. This page works out the classes with the rule of the file, after holding it to the file\'s own class of each of these steps for every ' + D.item.one + '.' }));
     }
 
     // what the page holds of the items: the listed ones, or every one once the matrix is here
@@ -966,11 +1226,11 @@
     // every item: the listed ones are the furthest apart, and would make a median of them
     // say more than the whole holds.
     function quantiles(indicator, k) {
-      var held = M || (D.items_count.listed === D.items_count.all && D.tier !== 'counts' ? LISTED : null);
+      var held = heldAll();
       if (!held) return null;
       var found = [];
       held.forEach(function (row) {
-        var cls = row.classes[indicator][k];
+        var cls = clsAt(row, indicator, k);
         if (RATIO_CLASSES.indexOf(cls) < 0) return;
         var pair = pairOf(row, indicator, k);
         if (pair[0] === null || pair[1] === null || pair[0] === 0 || pair[1] === 0 || (pair[0] > 0) !== (pair[1] > 0)) return;
@@ -1001,10 +1261,9 @@
     // one card per indicator, in the order of the matrix's columns: a histogram of the classes
     // and bands of the comparison chosen above, each card on the scale of its own tallest bar
     function renderDistributions() {
-      var comp = view.comp;
-      var k = stepIndex(comp);
-      var blocks = blocksOf(comp);
-      var held = M || (D.items_count.listed === D.items_count.all && D.tier !== 'counts');
+      var k = kNow();
+      var blocks = blocksNow();
+      var held = !!heldAll();
       q('dist-said').textContent = 'How many ' + D.item.many + ' fall in each band of after ÷ before, in the comparison chosen above, one card per ' + indWord(false) +
         ' in the order of the matrix: from across zero, through down by more than ten times, the band around 1 (dark), to up by more than ten times; then the values with no ratio. ' +
         (view.distScale === 'one' ? 'Every card is drawn on one scale, the share of all values, so that a bar of one height means as many in each; ' :
@@ -1022,7 +1281,7 @@
         var block = blocks[ind.id];
         if (block.pairs) topShare = Math.max(topShare, Math.max.apply(null, countsOf(block)) / block.pairs);
       });
-      columns(comp).forEach(function (c) {
+      columns().forEach(function (c) {
         var ind = c.ind, block = blocks[ind.id];
         var bins = distBins(block);
         var counts = countsOf(block);
@@ -1068,12 +1327,12 @@
     }
 
     function renderWorst() {
-      var k = stepIndex(view.comp);
+      var k = kNow();
       var found = [];
       rows().forEach(function (row) {
         D.indicators.forEach(function (ind) {
           if (view.worstIndicator && ind.id !== view.worstIndicator) return;
-          var cls = row.classes[ind.id][k];
+          var cls = clsAt(row, ind.id, k);
           if (QUIET.indexOf(cls) >= 0) return;
           if (!sizeAtLeast(cls, bandAt(row, ind.id, k), view.size)) return;
           var pair = pairOf(row, ind.id, k);
@@ -1084,7 +1343,7 @@
       var shown = found.slice(0, view.worstN);
       q('worst-said').textContent = D.tier === 'counts'
         ? 'This file holds counts only: it names no ' + D.item.one + '.'
-        : 'Showing ' + shown.length + ' of the ' + groupThousands(found.length) + ' values that moved or are missing in ' + compLabel(view.comp) +
+        : 'Showing ' + shown.length + ' of the ' + groupThousands(found.length) + ' values that moved or are missing in ' + nowLabel() +
           ', among ' + heldSaid() + '. Ordered by class (sign change, zero reference, zero result, beyond 10x, differs, missing), then by how far the two sizes lie apart.' + sizeSaid();
       var table = clear(q('worst-table'));
       var head = ['#', capital(D.item.one), capital(indWord(false)), 'Class', 'Before', 'After', 'Change', 'Verdict'];
@@ -1096,7 +1355,7 @@
           el('td', { cls: 'num', text: String(i + 1) }),
           el('td', { text: one.row.name + (one.row.place ? ' (' + one.row.place + ')' : '') }),
           el('td', { text: indicatorName(one.ind) }),
-          el('td', { text: one.row.classes[one.ind][k] }),
+          el('td', { text: clsAt(one.row, one.ind, k) }),
           el('td', { cls: 'num', text: formatNumber(pair[0]), title: String(pair[0]) }),
           el('td', { cls: 'num', text: formatNumber(pair[1]), title: String(pair[1]) }),
           valueCell(one.row, one.ind, k, false),
@@ -1107,22 +1366,22 @@
     }
 
     function gridRows() {
-      var k = stepIndex(view.comp);
+      var k = kNow();
       var find = view.find.toLowerCase();
       var ids = indicatorIds();
       var found = rows().filter(function (row) {
         if (find && (row.name + ' ' + (row.place || '') + ' ' + row.id).toLowerCase().indexOf(find) < 0) return false;
         if (view.group && row.group !== view.group) return false;
-        if (view.cls && !ids.some(function (id) { return row.classes[id][k] === view.cls; })) return false;
+        if (view.cls && !ids.some(function (id) { return clsAt(row, id, k) === view.cls; })) return false;
         if (view.verdict && !ids.some(function (id) { return verdictOf(row, id, k) === view.verdict; })) return false;
-        if (view.size && !ids.some(function (id) { return QUIET.indexOf(row.classes[id][k]) < 0 && sizeAtLeast(row.classes[id][k], bandAt(row, id, k), view.size); })) return false;
+        if (view.size && !ids.some(function (id) { var cls = clsAt(row, id, k); return QUIET.indexOf(cls) < 0 && sizeAtLeast(cls, bandAt(row, id, k), view.size); })) return false;
         return true;
       });
       var keyed = found.map(function (row, at) {
         if (view.sort === 'name') return { row: row, key: [row.name.toLowerCase(), row.place || '', at] };
         if (view.sort === 'worst') return { row: row, key: worstKey(row, k, ids).concat([at]) };
         var pair = pairOf(row, view.sort, k);
-        return { row: row, key: severityKey(pair[0], pair[1], row.classes[view.sort][k]).concat([at]) };
+        return { row: row, key: severityKey(pair[0], pair[1], clsAt(row, view.sort, k)).concat([at]) };
       });
       keyed.sort(function (a, b) { return compareKeys(a.key, b.key); });
       return keyed.map(function (one) { return one.row; });
@@ -1134,16 +1393,17 @@
     // worst value as severityKey orders values; a row that did not move comes last. Kept on
     // the row per comparison.
     function worstKey(row, k, ids) {
-      if (row.worst && row.worst.k === k) return row.worst.key;
+      var tag = isSet(k) ? 'set:' + C.key : k;
+      if (row.worst && row.worst.k === tag) return row.worst.key;
       var furthest = 0, worst = null;
       ids.forEach(function (id) {
-        var pair = pairOf(row, id, k), cls = row.classes[id][k];
+        var pair = pairOf(row, id, k), cls = clsAt(row, id, k);
         if (cls === 'differs' || cls === 'beyond 10x') furthest = Math.max(furthest, distance(pair[0], pair[1]));
         var one = severityKey(pair[0], pair[1], cls);
         if (worst === null || compareKeys(one, worst) < 0) worst = one;
       });
       var key = [-furthest].concat(worst);
-      row.worst = { k: k, key: key };
+      row.worst = { k: tag, key: key };
       return key;
     }
 
@@ -1162,8 +1422,8 @@
     // the columns of the matrix: the indicators in which the comparison moved most first, so
     // that what a step did is in view without scrolling; the file's order among equals, and
     // an indicator in which nothing moved last, quietened
-    function columns(comp) {
-      var blocks = blocksOf(comp);
+    function columns() {
+      var blocks = blocksNow();
       // a missing value is a finding, not stillness: it counts with what moved
       return D.indicators.map(function (ind, at) {
         var block = blocks[ind.id];
@@ -1178,15 +1438,15 @@
     }
 
     function renderGrid() {
-      var k = stepIndex(view.comp);
-      var cols = columns(view.comp);
+      var k = kNow();
+      var cols = columns();
       var found = gridRows();
       var shown = found.slice(0, view.limit);
       q('grid-said').textContent = D.tier === 'counts'
         ? 'This file holds counts only: it names no ' + D.item.one + '.'
         : 'Showing ' + groupThousands(shown.length) + ' of ' + groupThousands(found.length) + ' ' + many(found.length) +
           (M ? '' : ', among ' + heldSaid()) + '.' + sizeSaid();
-      q('grid-region').setAttribute('aria-label', 'After divided by before, per ' + D.item.one + ' and ' + indWord(false) + ': ' + compLabel(view.comp) +
+      q('grid-region').setAttribute('aria-label', 'After divided by before, per ' + D.item.one + ' and ' + indWord(false) + ': ' + nowLabel() +
         (view.sort === 'worst' ? ', the furthest apart first' : ''));
       var table = clear(q('grid-table'));
       var sorted = function (key) { return view.sort === key ? (key === 'name' ? 'ascending' : 'descending') : null; };
@@ -1228,12 +1488,12 @@
     }
 
     function renderFilters() {
-      var k = stepIndex(view.comp);
+      var k = kNow();
       var classes = {}, verdicts = {}, groups = {};
       var ids = indicatorIds();
       rows().forEach(function (row) {
         ids.forEach(function (id) {
-          classes[row.classes[id][k]] = 1;
+          classes[clsAt(row, id, k)] = 1;
           var v = verdictOf(row, id, k);
           if (v) verdicts[v] = 1;
         });
@@ -1286,8 +1546,8 @@
       var body = clear(q('rule-body'));
       body.appendChild(el('p', null, ['Every value is put into one class by one rule, in this order: missing, near zero, agrees, within noise (both only where the two share a sign), zero reference, zero result, sign change, beyond 10x, differs. ' +
         'Direction is up where the result after is larger as a signed number, down otherwise; colour follows the direction only. ' +
-        'Beyond 10x: one size more than ' + D.rule.beyond + ' times the other. The whole way is counted with a tolerance of ' + D.rule.total_tolerance + ', the largest of the steps, and no noise; ' +
-        'so is a run of steps chosen together, with the largest tolerance of its steps. ' + rangesSaid() + ' ' +
+        'Beyond 10x: one size more than ' + D.rule.beyond + ' times the other. The whole way is counted with a tolerance of ' + D.rule.total_tolerance + ', the largest of the steps, and noise ' + totalNoiseSaid() + '. ' +
+        'Several steps chosen together are counted by this page with the same rule, the largest tolerance of their steps and the largest noise measured in them, from the result before the first chosen step and the difference each made added to it; no verdict. ' +
         'The matrix shows the result after divided by the result before; the ratio and the strength of its colour are a display, and change no class.']));
       var stepsTable = el('table', null, [el('thead', null, [el('tr', null, ['Step', 'Tolerance', 'Basis', 'Note', 'Noise'].map(function (h) { return el('th', { scope: 'col', text: h }); }))])]);
       var tb = el('tbody');
@@ -1345,11 +1605,11 @@
       var table = el('table', { 'data-indicator': ind.id }, [el('thead', null, [el('tr', null, ['Step', 'Before', 'After', 'Change', 'Verdict', 'Share of the whole difference'].map(function (h) { return el('th', { scope: 'col', text: h }); }))])]);
       var tb = el('tbody');
       var split = splitOf(values, D.steps.map(function (s) { return s.explained; }), totalCls);
-      var run = view.comp === 'total' ? null : runOf(view.comp);
+      var chosen = view.set.length === D.steps.length ? [] : view.set;
       D.steps.forEach(function (s, k) {
         var b = values[k], a = values[k + 1];
         var share = split.state === 'split' ? shareText(split.shares[k]) : '—';
-        tb.appendChild(el('tr', { cls: run && k >= run[0] && k <= run[1] ? 'sd-in-run' : null }, [
+        tb.appendChild(el('tr', { cls: chosen.indexOf(k) >= 0 ? 'sd-in-run' : null }, [
           el('td', null, ['Step ' + stepNo(k) + ': ' + s.label, s.explained ? null : el('div', { cls: 'sd-error', text: 'nothing explains it' })]),
           el('td', { cls: 'num', text: formatNumber(b), title: String(b) }),
           el('td', { cls: 'num', text: formatNumber(a), title: String(a) }),
@@ -1366,14 +1626,13 @@
         el('td', { text: '—' }),
         el('td', { cls: 'num', text: splitText(split) })
       ]));
-      var j = rangeAt(view.comp);
-      if (j >= 0) {
-        var at = D.steps.length + 1 + j, pair = pairOf(row, ind.id, at);
+      if (isSet(kNow())) {
+        var pair = pairOf(row, ind.id, SET);
         tb.appendChild(el('tr', { cls: 'sd-in-run' }, [
-          el('th', { scope: 'row', text: 'Steps ' + stepNo(run[0]) + ' to ' + stepNo(run[1]) + ' together' }),
+          el('th', { scope: 'row', text: setWords(view.set) }),
           el('td', { cls: 'num', text: formatNumber(pair[0]), title: String(pair[0]) }),
           el('td', { cls: 'num', text: formatNumber(pair[1]), title: String(pair[1]) }),
-          valueCell(row, ind.id, at, false),
+          valueCell(row, ind.id, SET, false),
           el('td', { text: '—' }),
           el('td', { text: '' })
         ]));
@@ -1445,7 +1704,7 @@
       drawer.hidden = true;
       view.open = null;
       markOpen();
-      if (hashParts().item) setHash({ step: view.comp });
+      if (hashParts().item) setHash(null);
       if (lastFocus && lastFocus.focus && root.contains && root.contains(lastFocus)) lastFocus.focus();
       lastFocus = null;
     }
@@ -1506,19 +1765,23 @@
     function takeMatrix(m) {
       if (!D) return;
       var problem = checkMatrix(m, D);
-      if (problem) { matrix.state = 'refused'; matrix.said = problem; matrixSaid(); return; }
+      if (problem) { refuseMatrix(problem); return; }
       M = matrixRows(m, D);
       matrix.state = 'loaded';
       matrix.said = '';
+      // a set composed from the listed items is composed again from every item, and the
+      // address, which may ask for a set the page could not compose before, is read again
+      C = null; CHECKED = {};
       view.limit = PAGE;
       tierSaid();
-      renderComparison();
       matrixSaid();
-      if (view.open) renderItem(view.open);
-      else route();
+      var set = view.set;
+      view.set = [];
+      if (choose(set)) choose(allSteps());
+      route();
     }
 
-    function refuseMatrix(said) { matrix.state = 'refused'; matrix.said = said; matrixSaid(); }
+    function refuseMatrix(said) { matrix.state = 'refused'; matrix.said = said; matrixSaid(); if (D) markPicker(); }
 
     // the matrix comes after the page is drawn: from a global, or from the file the root or
     // the diagnostics file names, as a script beside the page (which opens from disk too) or
@@ -1532,6 +1795,7 @@
       matrix.state = 'loading';
       matrix.said = name;
       matrixSaid();
+      markPicker();
       if (/\.js$/.test(name)) {
         var script = doc.createElement('script');
         script.setAttribute('src', base + name);
@@ -1592,7 +1856,13 @@
       M = null;
       LISTED = D.items.map(listedRow);
       matrix = { state: 'none', said: '' };
-      view.comp = 'total';
+      C = null; CHECKED = {}; FLOORS = {};
+      (D.rule.floors || []).forEach(function (f) { FLOORS[floorKey(f.indicator, f.unit)] = f.value; });
+      view.set = allSteps();
+      view.anchor = null;
+      view.notice = '';
+      // a short chain shows its list of steps open; a long one opens it on a click
+      view.pickOpen = D.steps.length <= 16;
       view.limit = PAGE;
       q('load').hidden = true;
       q('content').hidden = false;
@@ -1619,20 +1889,45 @@
       if (checked) loadMatrix();
     }
 
-    // the address holds the chosen step and the open item, `#step=<id>&item=<id>`, each
-    // optional, so that a reviewer can send someone to exactly what they look at
+    // The address holds the steps chosen and the open item, each optional, so that a reviewer
+    // can send someone to exactly what they look at: `#step=<id>` for one step, nothing for
+    // the whole way, `#steps=<id>:<id>,<id>` for any other set (a run as its first and last
+    // step), and `&item=<id>`. The parts are kept as written, each id decoded on its own, so
+    // that an id holding a comma or a colon is still one id.
     function hashParts() {
       var out = {};
       (win.location.hash || '').slice(1).split('&').forEach(function (part) {
         var at = part.indexOf('=');
-        if (at > 0) out[part.slice(0, at)] = decodeURIComponent(part.slice(at + 1));
+        if (at > 0) out[part.slice(0, at)] = part.slice(at + 1);
       });
       return out;
     }
-    function setHash(parts) {
-      var said = [];
-      if (parts.step && parts.step !== 'total') said.push('step=' + encodeURIComponent(parts.step));
-      if (parts.item) said.push('item=' + encodeURIComponent(parts.item));
+    function decoded(text) {
+      try { return decodeURIComponent(text); } catch (error) { return null; }
+    }
+    function setText(set) {
+      return runsOf(set).map(function (r) {
+        var a = encodeURIComponent(D.steps[r[0]].id);
+        return r[0] === r[1] ? a : a + ':' + encodeURIComponent(D.steps[r[1]].id);
+      }).join(',');
+    }
+    // the steps an address names, and the ids it names that this file does not have
+    function setFrom(text) {
+      var set = [], unknown = [];
+      text.split(',').forEach(function (part) {
+        var ends = part.split(':').map(decoded);
+        var ks = ends.map(function (id) { return id === null ? -1 : stepAt(id); });
+        ends.forEach(function (id, i) { if (ks[i] < 0) unknown.push(id === null ? part : id); });
+        if (ends.length > 2 || ks.some(function (k) { return k < 0; })) return;
+        for (var k = Math.min(ks[0], ks[ks.length - 1]); k <= Math.max(ks[0], ks[ks.length - 1]); k++) if (set.indexOf(k) < 0) set.push(k);
+      });
+      return { set: set.sort(function (a, b) { return a - b; }), unknown: unknown };
+    }
+    function setHash(item) {
+      var said = [], k = kNow();
+      if (isSet(k)) said.push('steps=' + setText(view.set));
+      else if (k < D.steps.length) said.push('step=' + encodeURIComponent(D.steps[k].id));
+      if (item) said.push('item=' + encodeURIComponent(item));
       var wanted = said.join('&');
       if ((win.location.hash || '').replace(/^#/, '') === wanted) return false;
       if (wanted) win.location.hash = wanted;
@@ -1640,88 +1935,103 @@
       return true;
     }
 
-    // every step of the steps a to b
+    // the steps a to b, both taken in
     function stepsFrom(a, b) {
       var out = [];
-      for (var k = a; k <= b; k++) out.push(k);
+      for (var k = Math.min(a, b); k <= Math.max(a, b); k++) out.push(k);
       return out;
     }
+    function withStep(set, k, on) {
+      var out = set.filter(function (x) { return x !== k; });
+      if (on) out.push(k);
+      return out.sort(function (a, b) { return a - b; });
+    }
 
-    // `picked`: the steps chosen by hand, of a run; the others of it lie between. Without
-    // it, a new comparison has every step of it picked and the same one keeps what it had
-    function choose(comp, picked) {
-      var same = comp === view.comp;
-      if (picked) view.picked = picked;
-      else if (!same) view.picked = comp === 'total' ? [] : stepsFrom(runOf(comp)[0], runOf(comp)[1]);
-      view.comp = comp;
-      markChips();
+    // Choose a set of steps and draw what they did. A set the page cannot compose is said and
+    // changes nothing; returns why, or null.
+    function choose(set) {
+      set = set.filter(function (k, i) { return set.indexOf(k) === i; }).sort(function (a, b) { return a - b; });
+      if (!set.length) return 'At least one step stays chosen: "The whole way" chooses every step.';
+      if (isSet(posOf(set))) {
+        var why = compose(set);
+        if (why) return why;
+      }
+      var same = sameList(set, view.set);
+      view.set = set;
+      markPicker();
       renderStepSaid();
-      if (same) return;
+      if (same) return null;
       view.cls = ''; view.verdict = ''; view.limit = PAGE; view.sort = 'worst';
       renderComparison();
       if (view.open) renderItem(view.open, true);
+      return null;
     }
 
-    // a click on a step's chip ("one"): that step alone. "to" (Shift): every step from the one
-    // chosen before to this one. "toggle" (⌘ or Ctrl, or a plain click with "Several steps"
-    // on): the chosen steps grown to this one or, where it is an end of them, shrunk by it;
-    // what lies between steps chosen apart is taken in, and the step line says so. A run the
-    // file does not compare is said, and nothing changes.
-    function pick(k, how) {
-      var run = view.comp === 'total' ? null : runOf(view.comp);
-      var a = k, b = k, picked = [k];
-      if (how === 'to' && view.anchor !== null) {
-        a = Math.min(view.anchor, k); b = Math.max(view.anchor, k); picked = stepsFrom(a, b);
-      } else if (how === 'toggle' && run) {
-        if (k < run[0] || k > run[1]) {
-          a = Math.min(run[0], k); b = Math.max(run[1], k); picked = view.picked.concat([k]);
-        } else if (run[0] === run[1]) {
-          view.notice = ''; view.anchor = null;
-          choose('total');
-          setHash({ step: view.comp, item: view.open });
-          return;
-        } else if (k === run[0] || k === run[1]) {
-          a = k === run[0] ? k + 1 : run[0]; b = k === run[1] ? k - 1 : run[1];
-          picked = view.picked.filter(function (x) { return x !== k; });
-        } else {
-          view.notice = 'Step ' + stepNo(k) + ' lies inside the steps ' + stepNo(run[0]) + ' to ' + stepNo(run[1]) + ', which are compared as a whole: take off a step at one of their ends, or click a step alone.';
-          renderStepSaid();
-          return;
-        }
-      }
-      var comp = compOfRun(a, b);
-      if (comp === null) {
-        view.notice = 'Steps ' + stepNo(a) + ' to ' + stepNo(b) + ' together are not compared in this file. ' + rangesSaid();
+    // a choice made on the page: drawn, or said and left as it was; the address follows it
+    function pickSet(set) {
+      view.notice = '';
+      var why = choose(set);
+      if (why) {
+        view.notice = why;
+        markPicker();
         renderStepSaid();
         return;
       }
-      view.notice = '';
-      if (how === 'one' || view.anchor === null) view.anchor = k;
-      choose(comp, picked.filter(function (x) { return x >= a && x <= b; }).concat([a, b]));
-      setHash({ step: view.comp, item: view.open });
+      setHash(view.open);
     }
 
-    // what the page says of an address that names no comparison of this file
-    function unknownSaid(said) {
-      for (var a = 0; a < D.steps.length; a++) {
-        for (var b = a + 1; b < D.steps.length; b++) {
-          if (D.steps[a].id + '..' + D.steps[b].id === said) {
-            return 'The address asks for steps ' + stepNo(a) + ' to ' + stepNo(b) + ' together, which this file does not compare. ' + rangesSaid() + ' The whole way is shown.';
-          }
-        }
-      }
-      return 'The address asks for "' + said + '", which is no step and no run of steps of this file. The whole way is shown.';
+    // one step by hand. "one": that step alone. "to" (Shift on the strip): every step from the
+    // one chosen before to this one. "toggle" (⌘ or Ctrl on the strip, a tick in the list):
+    // this step added or taken off. "ticks" (Shift in the list): every step the list shows
+    // from the one ticked before to this one, added or taken off as this one is.
+    function pickStep(k, how) {
+      var set = view.set, anchor = view.anchor === null ? k : view.anchor;
+      if (how === 'one') { set = [k]; view.anchor = k; }
+      else if (how === 'to') { set = stepsFrom(anchor, k); view.anchor = anchor; }
+      else if (how === 'ticks') {
+        var on = set.indexOf(k) < 0;
+        stepsFrom(anchor, k).filter(shownInList).forEach(function (j) { set = withStep(set, j, on); });
+        view.anchor = k;
+      } else { set = withStep(set, k, set.indexOf(k) < 0); view.anchor = k; }
+      pickSet(set);
     }
 
+    // every step of a group of the list added, or taken off where all of it is chosen
+    function pickGroup(first) {
+      var group = null;
+      groupsOf().forEach(function (g) { if (g.steps[0] === first) group = g.steps; });
+      if (!group) return;
+      var all = group.every(function (k) { return view.set.indexOf(k) >= 0; });
+      var set = view.set;
+      group.forEach(function (k) { set = withStep(set, k, !all); });
+      pickSet(set);
+    }
+
+    // the address, read: what it names is chosen; what it names that the file does not have,
+    // or that cannot be composed now, is said, and the whole way shown
     function route() {
       if (!D) return;
       var parts = hashParts();
-      var said = parts.step || 'total';
-      var step = isComp(said) ? said : 'total';
-      view.notice = step === said ? '' : unknownSaid(said);
-      if (step !== view.comp) view.anchor = step === 'total' ? null : runOf(step)[0];
-      choose(step);
-      if (parts.item) renderItem(parts.item);
+      var wanted = allSteps(), said = '';
+      if (parts.steps !== undefined) {
+        var found = setFrom(parts.steps);
+        if (found.unknown.length) said = 'The address names ' + (found.unknown.length === 1 ? 'a step' : 'steps') + ' this file does not have (' + found.unknown.join(', ') + '). The whole way is shown.';
+        else if (found.set.length) wanted = found.set;
+      } else if (parts.step !== undefined) {
+        var id = decoded(parts.step), k = id === null ? -1 : stepAt(id);
+        if (k < 0) said = 'The address asks for "' + (id === null ? parts.step : id) + '", which is no step of this file. The whole way is shown.';
+        else wanted = [k];
+      }
+      var why = choose(wanted);
+      if (why) {
+        said = 'The address asks for ' + setWords(wanted).toLowerCase() + '. ' + why + ' The whole way is shown.';
+        choose(allSteps());
+      }
+      view.notice = said;
+      if (view.set.length !== D.steps.length) view.anchor = view.set[0];
+      renderStepSaid();
+      var item = parts.item !== undefined ? decoded(parts.item) : null;
+      if (item) renderItem(item, view.open === item);
       else closeItem();
     }
 
@@ -1729,7 +2039,7 @@
       var row = event.target.closest ? event.target.closest('tr[data-item]') : null;
       if (!row) return;
       var id = row.getAttribute('data-item');
-      if (!setHash({ step: view.comp, item: id })) renderItem(id);
+      if (!setHash(id)) renderItem(id);
     }
 
     function readScript(name) {
@@ -1740,43 +2050,65 @@
 
     function start() {
       q('comparison').addEventListener('click', function (e) {
-        var chip = e.target.closest ? e.target.closest('button[data-comp]') : null;
-        if (!chip || !D) return;
-        var comp = chip.getAttribute('data-comp');
-        if (comp === 'total') {
-          view.notice = ''; view.anchor = null;
-          choose('total');
-          setHash({ step: view.comp, item: view.open });
-          return;
-        }
-        pick(stepIndex(comp), e.shiftKey ? 'to' : e.metaKey || e.ctrlKey || view.several ? 'toggle' : 'one');
+        var cell = e.target.closest ? e.target.closest('button[data-comp]') : null;
+        if (!cell || !D) return;
+        var comp = cell.getAttribute('data-comp');
+        if (comp === 'total') { view.anchor = null; pickSet(allSteps()); return; }
+        pickStep(stepIndex(comp), e.shiftKey ? 'to' : e.metaKey || e.ctrlKey ? 'toggle' : 'one');
       });
-      // the arrow keys move between the chips; with Shift they grow or shrink the run at the
-      // end away from where it started
+      // the arrow keys move along the strip, a step alone at a time; with Shift they grow or
+      // shrink the steps chosen at the end away from where they started
       q('comparison').addEventListener('keydown', function (e) {
         if (!D || (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft')) return;
         var step = e.key === 'ArrowRight' ? 1 : -1;
-        var comps = ['total'].concat(D.steps.map(function (s) { return s.id; }));
+        var whole = view.set.length === D.steps.length;
+        var lo = view.set[0], hi = view.set[view.set.length - 1];
         var to;
-        if (e.shiftKey && view.comp !== 'total') {
-          var run = runOf(view.comp);
-          var k = (view.anchor === run[0] ? run[1] : run[0]) + step;
+        if (e.shiftKey && !whole) {
+          var k = (view.anchor === lo ? hi : lo) + step;
           if (k < 0 || k >= D.steps.length) return;
-          pick(k, 'to');
+          if (view.anchor === null) view.anchor = lo;
+          pickStep(k, 'to');
           to = D.steps[k].id;
         } else {
-          var at = (view.comp === 'total' ? 0 : 1 + runOf(view.comp)[step > 0 ? 1 : 0]) + step;
-          if (at < 0 || at >= comps.length) return;
-          to = comps[at];
-          if (to === 'total') { view.anchor = null; view.notice = ''; choose('total'); setHash({ step: view.comp, item: view.open }); }
-          else pick(stepIndex(to), 'one');
+          var at = (whole ? 0 : 1 + (step > 0 ? hi : lo)) + step;
+          if (at < 0 || at > D.steps.length) return;
+          if (at === 0) { to = 'total'; view.anchor = null; pickSet(allSteps()); }
+          else { to = D.steps[at - 1].id; pickStep(at - 1, 'one'); }
         }
         if (e.preventDefault) e.preventDefault();
         var next = q('comparison').querySelector('button[data-comp="' + to + '"]');
         if (next && next.focus) next.focus();
       });
-      if (q('pick-several')) {
-        q('pick-several').addEventListener('change', function (e) { view.several = !!e.target.checked; pickSaid(); });
+      if (q('pick-list')) {
+        q('pick-list').addEventListener('click', function (e) {
+          if (!D) return;
+          var only = e.target.closest ? e.target.closest('button[data-only]') : null;
+          if (only) { pickStep(+only.getAttribute('data-only'), 'one'); return; }
+          var box = e.target.closest ? e.target.closest('input[data-k]') : null;
+          if (box) { pickStep(+box.getAttribute('data-k'), e.shiftKey ? 'ticks' : 'toggle'); return; }
+          var group = e.target.closest ? e.target.closest('input[data-group]') : null;
+          if (group) pickGroup(+group.getAttribute('data-group'));
+        });
+      }
+      if (q('pick-open')) {
+        q('pick-open').addEventListener('click', function () {
+          view.pickOpen = !view.pickOpen;
+          q('pick-open').setAttribute('aria-expanded', view.pickOpen ? 'true' : 'false');
+          q('pick-panel').hidden = !view.pickOpen;
+        });
+      }
+      if (q('pick-find')) q('pick-find').addEventListener('input', function (e) { view.pickFind = e.target.value; renderPickList(); });
+      if (q('pick-moved')) q('pick-moved').addEventListener('change', function (e) { view.pickMoved = !!e.target.checked; renderPickList(); });
+      if (q('pick-all')) q('pick-all').addEventListener('click', function () { if (D) { view.anchor = null; pickSet(allSteps()); } });
+      if (q('pick-active')) {
+        q('pick-active').addEventListener('click', function () {
+          if (!D) return;
+          var active = allSteps().filter(function (k) { return stepMoved(k) > 0; });
+          if (!active.length) { view.notice = 'Nothing moved in any step.'; renderStepSaid(); return; }
+          view.anchor = active[0];
+          pickSet(active);
+        });
       }
       q('size').addEventListener('change', function (e) { view.size = +e.target.value; view.limit = PAGE; renderWorst(); renderGrid(); });
       q('worst-n').addEventListener('change', function (e) { view.worstN = +e.target.value; renderWorst(); });
@@ -1849,6 +2181,7 @@
     sizeAtLeast: sizeAtLeast, cellView: cellView, ratioView: ratioView, severityKey: severityKey, compareKeys: compareKeys,
     bandStep: bandStep, bandOf: bandOf, checkShape: checkShape, checkMatrix: checkMatrix, matrixRows: matrixRows,
     safeLink: safeLink, safeName: safeName, splitOf: splitOf, splitText: splitText, distance: distance, quantileTexts: quantileTexts, RANK: RANK,
+    judge: judge, runsOf: runsOf, composePair: composePair, noiseTogether: noiseTogether,
     mount: mount, mountAll: mountAll };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else if (typeof global.document !== 'undefined') {

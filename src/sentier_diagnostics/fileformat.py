@@ -40,7 +40,7 @@ FLOOR_BASES = ("median", "declared", "none")
 ORIGIN_KINDS = ("person", "code", "model")
 TOTAL = "total"
 #: Keys a file may leave out; each is null where it says nothing.
-OPTIONAL_KEYS = {"matrix", "indicator", "ranges"}
+OPTIONAL_KEYS = {"matrix", "indicator"}
 
 #: The largest file a page reads: it holds the whole file.
 MAX_BYTES = 12 * 1024 * 1024
@@ -48,8 +48,6 @@ MAX_INDICATORS, MAX_STATES, MAX_ITEMS, MAX_SCOPE = 100, 30, 5000, 50
 #: An entry of a claim may list as many items as a file may.
 MAX_SCOPE_ITEMS = MAX_ITEMS
 MAX_EXPLANATIONS, MAX_NOTES, MAX_IDENTITY = 500, 20, 12
-#: Every run of at least two of the 29 steps a file may have, but the whole way.
-MAX_RANGES = 29 * 28 // 2 - 1
 MAX_ID, MAX_LABEL, MAX_WORD, MAX_TEXT, MAX_LONG = 100, 80, 40, 600, 2000
 FILE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.json")
 
@@ -59,11 +57,12 @@ KEYS = {
 }  # fmt: skip
 INDICATOR_KEYS = {"id", "name", "short", "unit"}
 RULE_KEYS = {"floor_factor", "floors_from", "beyond", "total_tolerance", "floors"}
+#: Left out only by a file made before the whole way took the noise of its steps.
+RULE_OPTIONAL = {"total_noise"}
 FLOOR_KEYS = {"indicator", "unit", "value", "basis", "n"}
 STATE_KEYS = {"id", "label", "about", "kind", "identity", "join"}
 STEP_KEYS = {"id", "from", "to", "label", "about", "kind", "explained", "link", "claim",
              "tolerance", "noise"}  # fmt: skip
-RANGE_KEYS = {"id", "steps", "from", "to", "tolerance"}
 CLAIM_KEYS = {"text", "by", "reach", "scope"}
 SCOPE_KEYS = {"indicators", "items", "direction", "largest", "expect"}
 ORIGIN_KEYS = {"kind", "name", "model", "run_by"}
@@ -381,57 +380,35 @@ def _steps(data, found, states, indicators, tier) -> list[dict]:
     return steps
 
 
-def _ranges(data, found, steps) -> list[dict] | None:
-    """The ranges of a file: runs of consecutive steps, each compared as the whole way is
-    (SPEC section 5.5). None where they cannot be read; nothing where the file has none:
-    `[]` where none was asked for, the key left out in a file made before ranges."""
-    if "ranges" not in data:
-        return []
-    said = data["ranges"]
-    if not isinstance(said, list) or len(said) > MAX_RANGES:
-        found.append(f"`ranges` is a list of at most {MAX_RANGES} ranges ([] where none was asked for), "
-                     "or left out in a file made before ranges")
-        return None
-    ids = [s["id"] for s in steps]
-    seen = set()
-    for one in said:
-        if not (
-            isinstance(one, dict)
-            and set(one) == RANGE_KEYS
-            and is_text(one["id"], 2 * MAX_ID + 2)
-            and isinstance(one["steps"], list)
-            and one["steps"]
-            and all(isinstance(x, str) for x in one["steps"])
-            and is_share(one["tolerance"])
-        ):
-            found.append(f"a range is not {{{', '.join(sorted(RANGE_KEYS))}}}")
-            return None
-        where, run = f"range {one['id']!r}", one["steps"]
-        first = ids.index(run[0]) if run[0] in ids else None
-        if first is None or run != ids[first : first + len(run)]:
-            found.append(f"{where}: its steps are not consecutive steps of this chain")
-            return None
-        last = first + len(run) - 1
-        if len(run) < 2:
-            found.append(f"{where}: a range runs over at least two steps; one step is that step")
-        if len(run) == len(ids):
-            found.append(f"{where}: every step is the whole way, counted as the total")
-        if one["id"] != f"{run[0]}..{run[-1]}":
-            found.append(f"{where}: the id of a range is its first and last step, {run[0]}..{run[-1]}")
-        if one["id"] in seen or one["id"] in ids or one["id"] == TOTAL:
-            found.append(f"{where}: its id is the id of another range, of a step, or of the total")
-        seen.add(one["id"])
-        if (one["from"], one["to"]) != (steps[first]["from"], steps[last]["to"]):
-            found.append(f"{where}: it does not lead from the state before its first step to the state after its last")
-        if one["tolerance"] != max(s["tolerance"]["value"] for s in steps[first : last + 1]):
-            found.append(f"{where}: its tolerance is not the largest tolerance of its steps")
-    return said
+def noise_together(steps) -> dict[str, float]:
+    """The noise of several steps taken together, per indicator: the largest noise measured in
+    any of them (SPEC section 5.3). An indicator that none of them measured is left out: its
+    noise was not measured, which is not the same as two identical builds.
+
+    >>> noise_together([{"noise": {"measured": True, "by": {"a": 1e-9}}},
+    ...                 {"noise": {"measured": False, "by": None}},
+    ...                 {"noise": {"measured": True, "by": {"a": 3e-9, "b": 2e-9}}}])
+    {'a': 3e-09, 'b': 2e-09}
+    """
+    found: dict[str, float] = {}
+    for one in steps:
+        said = one["noise"]
+        if said["measured"]:
+            for indicator, value in (said["by"] or {}).items():
+                found[indicator] = max(found.get(indicator, 0.0), value)
+    return found
+
+
+def total_noise_level(data: Mapping, indicator: str) -> float | None:
+    """The noise the whole way is judged with in one indicator; None where it was not measured,
+    or the file was made before the whole way took the noise of its steps."""
+    return (data["rule"].get("total_noise") or {}).get(indicator)
 
 
 def _rule(data, found, indicators, states, steps) -> dict | None:
     said = data.get("rule")
-    if not isinstance(said, dict) or set(said) != RULE_KEYS:
-        found.append(f"`rule` is not {{{', '.join(sorted(RULE_KEYS))}}}")
+    if not isinstance(said, dict) or not RULE_KEYS <= set(said) <= RULE_KEYS | RULE_OPTIONAL:
+        found.append(f"`rule` is not {{{', '.join(sorted(RULE_KEYS))}}}, with `total_noise`")
         return None
     if not is_share(said["floor_factor"]):
         found.append("`rule`: the floor factor is not a share")
@@ -444,6 +421,14 @@ def _rule(data, found, indicators, states, steps) -> dict | None:
         return None
     if steps and said["total_tolerance"] != max(s["tolerance"]["value"] for s in steps):
         found.append("`rule.total_tolerance` is not the largest tolerance of the steps")
+    if "total_noise" in said:
+        given = said["total_noise"]
+        if not (isinstance(given, dict) and set(given) <= set(indicators)
+                and all(is_share(v) for v in given.values())):  # fmt: skip
+            found.append("`rule.total_noise` is not a share per indicator")
+            return None
+        if steps and given != noise_together(steps):
+            found.append("`rule.total_noise` is not the largest measured noise of the steps, per indicator")
     floors = said["floors"]
     if not isinstance(floors, list):
         found.append("`rule.floors` is not a list")
@@ -527,25 +512,20 @@ def _block(block, where, step) -> list[str]:
     return found
 
 
-def _counts(data, found, indicators, steps, ranges, total_pairs):
+def _counts(data, found, indicators, steps, total_pairs):
     counts = data.get("counts")
-    keys = {"steps", TOTAL} | ({"ranges"} if "ranges" in data else set())
-    if not isinstance(counts, dict) or set(counts) != keys:
-        found.append(f"`counts` is not {{{', '.join(sorted(keys))}}}: ranges are counted where, and only where, the file has its key")
+    if not isinstance(counts, dict) or set(counts) != {"steps", TOTAL}:
+        found.append("`counts` is not {steps, total}")
         return {}
     by_step = counts["steps"]
     if not isinstance(by_step, dict) or set(by_step) != {s["id"] for s in steps}:
         found.append("`counts.steps` does not hold every step")
         return {}
-    by_range = counts.get("ranges", {})
-    if not isinstance(by_range, dict) or set(by_range) != {r["id"] for r in ranges}:
-        found.append("`counts.ranges` does not hold every range")
-        return {}
     published_first = data["states"][0]["kind"] == "published"
     blocks = {}
-    compared = [(one["id"], by_step[one["id"]], one) for one in steps] + [(TOTAL, counts[TOTAL], None)]
-    compared += [(r["id"], by_range[r["id"]], None) for r in ranges]
-    for k, (key, table, one) in enumerate(compared):
+    for k, one in enumerate([*steps, None]):
+        key = one["id"] if one else TOTAL
+        table = by_step[key] if one else counts[TOTAL]
         if not isinstance(table, dict) or set(table) != set(indicators):
             found.append(f"counts of {key!r} do not hold every indicator")
             return {}
@@ -595,7 +575,7 @@ def _attribution(data, found, indicators, steps, blocks):
                 found.append(f"{where}: does not account for every item whose total moved")
 
 
-def _items(data, found, indicators, states, steps, ranges, floors, tier, blocks):
+def _items(data, found, indicators, states, steps, floors, tier, blocks):
     listed = data.get("items")
     said = data.get("items_count")
     if not (isinstance(said, dict) and set(said) == COUNT_KEYS and all(map(is_count, said.values()))):
@@ -611,10 +591,6 @@ def _items(data, found, indicators, states, steps, ranges, floors, tier, blocks)
         found.append("a file of counts holds no item")
         return []
     nsteps = len(steps)
-    ncompared = nsteps + 1 + len(ranges)
-    # a range compares the state before its first step with the state after its last
-    first_of = {s["id"]: k for k, s in enumerate(steps)}
-    ends = [(first_of[r["steps"][0]], first_of[r["steps"][0]] + len(r["steps"])) for r in ranges]
     claims_by_step = [s["claim"] for s in steps]
     any_claim = any(claims_by_step)
     published_first = data["states"][0]["kind"] == "published"
@@ -665,10 +641,8 @@ def _items(data, found, indicators, states, steps, ranges, floors, tier, blocks)
                     and all(v is None or rule.is_value(v) for v in values)):  # fmt: skip
                 found.append(f"{where}, {indicator}: the results are not one finite number or null per state")
                 return []
-            if not all(isinstance(x, list) and len(x) == ncompared for x in (kinds, ways, bands)):
-                found.append(
-                    f"{where}, {indicator}: classes, directions and bands are one per step, the total and each range"
-                )
+            if not all(isinstance(x, list) and len(x) == nsteps + 1 for x in (kinds, ways, bands)):
+                found.append(f"{where}, {indicator}: classes, directions and bands are one per step and the total")
                 return []
             floor = floors.get((indicator, item["unit"]))
             if floor is None:
@@ -678,20 +652,13 @@ def _items(data, found, indicators, states, steps, ranges, floors, tier, blocks)
             if any_claim and not (isinstance(verdicts, list) and len(verdicts) == nsteps):
                 found.append(f"{where}, {indicator}: verdicts are one per step")
                 return []
-            for at in range(ncompared):
-                k = at if at < nsteps else None  # the step, or None for the total and a range
-                if at > nsteps:
-                    one_range = ranges[at - nsteps - 1]
-                    name = one_range["id"]
-                    before, after = values[ends[at - nsteps - 1][0]], values[ends[at - nsteps - 1][1]]
-                    tol, level = one_range["tolerance"], None
-                elif k is None:
-                    name = TOTAL
-                    before, after = values[0], values[-1]
-                    tol, level = data["rule"]["total_tolerance"], None
+            for k in [*range(nsteps), None]:
+                at = nsteps if k is None else k
+                name = TOTAL if k is None else steps[k]["id"]
+                before, after = (values[0], values[-1]) if k is None else (values[k], values[k + 1])
+                if k is None:
+                    tol, level = data["rule"]["total_tolerance"], total_noise_level(data, indicator)
                 else:
-                    name = steps[k]["id"]
-                    before, after = values[k], values[k + 1]
                     tol = steps[k]["tolerance"]["value"]
                     noise = steps[k]["noise"]
                     level = (noise["by"] or {}).get(indicator) if noise["measured"] else None
@@ -917,17 +884,14 @@ def _errors(data, found: list[str]) -> list[str]:
     steps = _steps(data, found, states, indicators, tier)
     if not steps:
         return found
-    ranges = _ranges(data, found, steps)
-    if ranges is None:
-        return found
     floors = _rule(data, found, indicators, states, steps)
     count = data["items_count"]
     total_pairs = count.get("all") if isinstance(count, dict) else None
-    blocks = _counts(data, found, indicators, steps, ranges, total_pairs)
+    blocks = _counts(data, found, indicators, steps, total_pairs)
     if floors is None or not blocks:
         return found
     _attribution(data, found, indicators, steps, blocks)
-    items = _items(data, found, indicators, states, steps, ranges, floors, tier, blocks)
+    items = _items(data, found, indicators, states, steps, floors, tier, blocks)
     _explanations(data, found, indicators, steps, set(items), tier)
     _matrix(data, found)
     return found

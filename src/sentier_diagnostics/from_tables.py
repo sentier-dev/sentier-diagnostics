@@ -20,11 +20,6 @@
       "tier": "items"
     }
 
-`ranges` says which runs of consecutive steps are compared as one: `"all"`, `"none"`, a
-list of `[first step, last step]`, or `{"within": [first step, last step]}` for every run
-between those two (a chain's fixes, say). Without it, a chain of at most 8 steps has every
-run and a longer one none (`chain.AUTO_RANGES`).
-
 A local file of items may also name its matrix of every item (`"matrix": "matrix.json"`,
 with `"audience": "local"`): `build_with_matrix` then gives it, and `sentier-diagnostics
 build` writes it beside the file.
@@ -43,7 +38,7 @@ from pathlib import Path
 from . import chain, claims, fileformat, tables
 
 KEYS = {"title", "about", "item", "indicator", "indicators", "items", "states", "steps", "listed", "tier", "audience",
-        "claim_lists", "explanations", "notes", "floor_factor", "matrix", "ranges"}  # fmt: skip
+        "claim_lists", "explanations", "notes", "floor_factor", "matrix"}  # fmt: skip
 
 
 def _origin(said):
@@ -146,33 +141,10 @@ def description_errors(spec) -> list[str]:
                 found.append(
                     f"{where}: a noise is {{states: [a, b]}} or {{tables: [{{label, results}}, {{label, results}}]}}"
                 )
-    said = spec.get("ranges")
-    step_ids = [one["id"] for one in steps]
-
-    def run(v):
-        return isinstance(v, list) and len(v) == 2 and all(isinstance(x, str) and x in step_ids for x in v)
-
-    if said is not None and not (
-        said in ("all", "none")
-        or (isinstance(said, list) and all(map(run, said)))
-        or (isinstance(said, dict) and set(said) == {"within"} and run(said["within"]))
-    ):
-        found.append('`ranges` is "all", "none", a list of [first step, last step] or {"within": [first step, last step]}')
     explanations = spec.get("explanations", [])
     if not (isinstance(explanations, list) and all(_table(e, ("text",)) for e in explanations)):
         found.append("`explanations` is a list of {text, by, ...}")
     return found
-
-
-def _ranges(said, steps):
-    """What `chain.build` takes for the description's `ranges`."""
-    if said is None:
-        return "auto"
-    if said == "none":
-        return None
-    if isinstance(said, dict):
-        return chain.ranges_within(steps, *said["within"])
-    return said if said == "all" else [tuple(one) for one in said]
 
 
 def build(path: Path) -> dict:
@@ -317,7 +289,6 @@ def build_with_matrix(path: Path) -> tuple[dict, dict | None]:
         floor_factor=floor_factor,
         explanations=explanations,
         notes=spec.get("notes", []),
-        ranges=_ranges(spec.get("ranges"), steps),
     )
     if named is None:
         return chain.build(spec["title"], **given), None

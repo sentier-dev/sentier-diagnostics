@@ -1,4 +1,4 @@
-{"format": "sentier-diagnostics-matrix/1", "of": {"title": "A made-up chain: published results to the current build", "states": ["published", "repro", "fix-1", "rebuilt", "mapping-2"], "indicators": ["x:climate", "x:water", "x:tox"], "steps": ["step-0", "fix-1", "rebuilt", "mapping-2"], "ranges": ["step-0..fix-1", "step-0..rebuilt", "fix-1..rebuilt", "fix-1..mapping-2", "rebuilt..mapping-2"]},
+{"format": "sentier-diagnostics-matrix/1", "of": {"title": "A made-up chain: published results to the current build", "states": ["published", "repro", "fix-1", "rebuilt", "mapping-2"], "indicators": ["x:climate", "x:water", "x:tox"], "steps": ["step-0", "fix-1", "rebuilt", "mapping-2"]},
  "items": [
   ["p08","Compost, used as fertiliser","CH","waste","kg"],
   ["p09","Machine hour, harvesting","CH","services","h"],
@@ -24,16 +24,16 @@
   [0.41,"=","=","=","=",2.5,2.500025,"=","=","=",1.8e-07,"=","=","=","="]
  ],
  "classes": [
-  "===SS===SS=============dd===dd",
-  "====================000RR000RR",
-  "===tt===tt====================",
-  "=============BB===BBD===DDD===",
-  "=d==ddddd===========0000000000",
-  "=D==DDDDD===--D=--DD==========",
-  "=d==ddddd=====================",
-  "============D~D=DDDD==========",
-  "===--===---===---=============",
-  "=============================="
+  "===SS========dd",
+  "==========000RR",
+  "===tt==========",
+  "========BBD===D",
+  "=d==d=====00000",
+  "=D==D==--D=====",
+  "=d==d==========",
+  "=======D~D=====",
+  "===---===-=====",
+  "==============="
  ],
  "verdicts": [
   "==.n==.===.n",
