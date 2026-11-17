@@ -24,11 +24,13 @@ A local file of items may also name its matrix of every item (`"matrix": "matrix
 with `"audience": "local"`): `build_with_matrix` then gives it, and `sentier-diagnostics
 build` writes it beside the file.
 
-Paths are relative to the description. A step's `noise` is
-`{"states": ["a", "b"]}` (two states of this chain that are builds of one state) or
+Paths are relative to the description. A built state's `noise` is what two builds of it
+differ by: `{"states": ["a", "b"]}` (two states of this chain that are builds of it) or
 `{"tables": [{"label": "...", "results": "a.csv"}, {"label": "...", "results": "b.csv"}]}`.
-It is taken over the results beyond the floors of the chain's first state. A scope entry
-without `expect` says what may move (`"may"`), as SPEC section 6 says.
+It is taken over the results beyond the floors of the chain's first state. A step takes no
+noise of its own: it is compared with the sum of the noise of its two states, and the
+published results are exact (SPEC section 5.3). A scope entry without `expect` says what
+may move (`"may"`), as SPEC section 6 says.
 """
 
 from __future__ import annotations
@@ -106,6 +108,14 @@ def description_errors(spec) -> list[str]:
         found.append("`states` is a list of at least two {id, label, results}, `results` naming a table")
         states = []
     known = {s["id"] for s in states if isinstance(s.get("id"), str)}
+    for one in states:
+        said = one.get("noise")
+        if said is not None:
+            where = f"state {one['id']!r}"
+            if one.get("kind") == "published":
+                found.append(f"{where}: the published results have no builds and take no noise: they are exact")
+            else:
+                found += _noise_errors(said, where, known)
     steps = spec.get("steps")
     if not (isinstance(steps, list) and all(_table(s, ("id", "label", "kind")) for s in steps)):
         return [*found, "`steps` is a list of {id, label, kind}"]
@@ -125,26 +135,25 @@ def description_errors(spec) -> list[str]:
         said = one.get("tolerance")
         if said is not None and not (_table(said, ("value",)) and _number(said["value"])):
             found.append(f"{where}: a tolerance is {{value, basis, note}} with a number as its value")
-        said = one.get("noise")
-        if said is not None:
-            pair = said.get("states") if isinstance(said, dict) else None
-            tables_ = said.get("tables") if isinstance(said, dict) else None
-            if pair is not None:
-                if not (
-                    isinstance(pair, list)
-                    and len(pair) == 2
-                    and all(isinstance(s, str) and s in known for s in pair)
-                ):
-                    found.append(f"{where}: a noise's `states` names two states of this chain")
-            elif not (isinstance(tables_, list) and len(tables_) == 2
-                      and all(_table(t, ("label", "results")) and _text(t["results"]) for t in tables_)):  # fmt: skip
-                found.append(
-                    f"{where}: a noise is {{states: [a, b]}} or {{tables: [{{label, results}}, {{label, results}}]}}"
-                )
+        if one.get("noise") is not None:
+            found.append(f"{where}: noise belongs to the state that was built twice: move it to that state "
+                         "(a step is compared with the sum of the noise of its two states)")  # fmt: skip
     explanations = spec.get("explanations", [])
     if not (isinstance(explanations, list) and all(_table(e, ("text",)) for e in explanations)):
         found.append("`explanations` is a list of {text, by, ...}")
     return found
+
+
+def _noise_errors(said, where: str, known: set) -> list[str]:
+    pair = said.get("states") if isinstance(said, dict) else None
+    tables_ = said.get("tables") if isinstance(said, dict) else None
+    if pair is not None:
+        if not (isinstance(pair, list) and len(pair) == 2 and all(isinstance(s, str) and s in known for s in pair)):
+            return [f"{where}: a noise's `states` names two states of this chain"]
+    elif not (isinstance(tables_, list) and len(tables_) == 2
+              and all(_table(t, ("label", "results")) and _text(t["results"]) for t in tables_)):  # fmt: skip
+        return [f"{where}: a noise is {{states: [a, b]}} or {{tables: [{{label, results}}, {{label, results}}]}}"]
+    return []
 
 
 def build(path: Path) -> dict:
@@ -188,6 +197,24 @@ def build_with_matrix(path: Path) -> tuple[dict, dict | None]:
     def floor_by_item(indicator):
         return {item: floors.get((indicator, unit), (0.0, 0))[0] for item, unit in units.items()}
 
+    def noise_of_state(said):
+        """What two builds of a state differ by, from two states of this chain or two tables."""
+        if not said:
+            return None
+        if "states" in said:
+            a, b = said["states"]
+            pair, labels = (values[a], values[b]), (a, b)
+        else:
+            first, second = said["tables"]
+            pair = (tables.read_results(here / first["results"], ids),
+                    tables.read_results(here / second["results"], ids))  # fmt: skip
+            labels = (first["label"], second["label"])
+        return chain.noise(
+            labels,
+            {i: chain.noise_of(pair[0][i], pair[1][i], floor=floor_by_item(i)) for i in ids},
+            said.get("note"),
+        )
+
     steps = []
     for one in spec["steps"]:
         said_claim = one.get("claim")
@@ -208,22 +235,6 @@ def build_with_matrix(path: Path) -> tuple[dict, dict | None]:
                 by=_origin(said_claim.get("by")),
                 reach=said_claim.get("reach"),
             )
-        said_noise = one.get("noise")
-        found_noise = None
-        if said_noise:
-            if "states" in said_noise:
-                a, b = said_noise["states"]
-                pair, labels = (values[a], values[b]), (a, b)
-            else:
-                first, second = said_noise["tables"]
-                pair = (tables.read_results(here / first["results"], ids),
-                        tables.read_results(here / second["results"], ids))  # fmt: skip
-                labels = (first["label"], second["label"])
-            found_noise = chain.noise(
-                labels,
-                {i: chain.noise_of(pair[0][i], pair[1][i], floor=floor_by_item(i)) for i in ids},
-                said_noise.get("note"),
-            )
         said_tol = one.get("tolerance")
         steps.append(
             chain.step(
@@ -237,7 +248,6 @@ def build_with_matrix(path: Path) -> tuple[dict, dict | None]:
                 tolerance=chain.tolerance(said_tol["value"], said_tol.get("basis"), said_tol.get("note"))
                 if said_tol
                 else None,
-                noise=found_noise,
             )  # fmt: skip
         )
     explanations = [
@@ -273,6 +283,7 @@ def build_with_matrix(path: Path) -> tuple[dict, dict | None]:
                 about=s.get("about"),
                 identity=s.get("identity"),
                 join=s.get("join"),
+                noise=noise_of_state(s.get("noise")),
             )  # fmt: skip
             for s in spec["states"]
         ],

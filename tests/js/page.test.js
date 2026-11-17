@@ -265,30 +265,6 @@ test('a host page never offers to open a file; a page of its own does', () => {
   assert.equal(own.byId['load-error'].textContent, '');
 });
 
-test('chips choose the comparison: the whole way first, then each step with what moved in it', () => {
-  const data = example();
-  const drawn = dom.page(data);
-  const chips = () => drawn.byId.comparison.querySelectorAll('button[data-comp]');
-  assert.deepEqual(chips().map((c) => c.getAttribute('data-comp')), ['total'].concat(data.steps.map((s) => s.id)));
-  assert.deepEqual(chips().map((c) => c.getAttribute('aria-pressed')), ['true'].concat(data.steps.map(() => 'false')));
-  const moved = (comp) => Object.values(comp === 'total' ? data.counts.total : data.counts.steps[comp])
-    .reduce((sum, b) => sum + ['differs', 'beyond 10x', 'zero reference', 'zero result', 'sign change'].reduce((a, k) => a + b.classes[k], 0), 0);
-  chips().forEach((chip) => assert.ok(chip.textContent.includes(moved(chip.getAttribute('data-comp')) + ' moved'), chip.textContent));
-  // the unexplained step is flagged, the verdicts worth a look are marked
-  const rebuilt = data.steps.findIndex((s) => !s.explained);
-  assert.ok(rebuilt >= 0);
-  assert.ok(chips()[rebuilt + 1].textContent.includes('!'));
-  assert.match(chips()[rebuilt + 1].getAttribute('title'), /nothing explains it/);
-  const claimed = data.steps.findIndex((s) => s.claim && Object.values(data.counts.steps[s.id]).some((b) => b.verdicts['not claimed']));
-  assert.ok(chips()[claimed + 1].textContent.includes('■'), chips()[claimed + 1].textContent);
-  // a click on a step's label chooses it, and the grid follows
-  const label = chips()[2].childNodes[1]; // the label inside the chip: the click reaches the chip
-  label.dispatch('click', {});
-  assert.deepEqual(chips().map((c) => c.getAttribute('aria-pressed')), ['false', 'false', 'true'].concat(data.steps.slice(2).map(() => 'false')));
-  assert.ok(drawn.byId['grid-region'].getAttribute('aria-label').endsWith(': Step 1: ' + data.steps[1].label + ', the furthest apart first'),
-    drawn.byId['grid-region'].getAttribute('aria-label'));
-});
-
 // ------------------------------------------------------------------ the matrix and the drawer
 
 const local = () => JSON.parse(fs.readFileSync(path.join(EXAMPLE, 'local', 'diagnostics.json'), 'utf8'));
@@ -599,6 +575,7 @@ test('steps count from 1 where the chain does not start from the published resul
   assert.equal(first.byId['steps-zero'].hidden, false);
   const data = example();
   data.states[0].kind = 'build';
+  data.states[0].noise = { measured: false, between: null, by: null, note: null }; // a build says its noise
   const drawn = dom.page(data);
   assert.equal(drawn.byId.content.hidden, false);
   assert.equal(drawn.byId['steps-zero'].hidden, true);
@@ -841,4 +818,371 @@ test('a card says over how many ratios its median is, how many have none, and wh
     else assert.doesNotMatch(text, /without a ratio/);
     assert.match(card.childNodes[1].textContent, /^tallest bar: \d/);
   }
+});
+
+// ------------------------------------------------------------------ a run of steps
+
+const pressed = (drawn) => chips(drawn).filter((c) => c.getAttribute('aria-pressed') === 'true').map((c) => c.getAttribute('data-comp'));
+const chipOf = (drawn, id) => chips(drawn).find((c) => c.getAttribute('data-comp') === id);
+const pickRows = (drawn) => drawn.byId['pick-list'].querySelectorAll('button[data-pick]');
+const rowOf = (drawn, k) => pickRows(drawn).find((b) => b.getAttribute('data-pick') === String(k));
+const chosenRows = (drawn) => pickRows(drawn).filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => +b.getAttribute('data-pick'));
+const together = () => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'together.json'), 'utf8')).runs;
+const boundaries = () => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'boundaries.json'), 'utf8')).cases;
+const withMatrix = () => dom.page(local(), undefined, { globals: { SENTIER_DIAGNOSTICS_MATRIX: full() } });
+const tagged = (node, tag) => (node.tagName === tag ? [node] : []).concat(...(node.childNodes || []).map((c) => tagged(c, tag)));
+const ids = (data, first, last) => data.steps.slice(first, last + 1).map((s) => s.id);
+// the address of a run of steps of a file, as the page writes it: its first and last step
+const runAddress = (data, first, last) => 'steps=' + encodeURIComponent(data.steps[first].id) + ':' + encodeURIComponent(data.steps[last].id);
+// what a grid shows: per row, the class of each indicator
+const gridClasses = (drawn, data) => {
+  const heads = drawn.byId['grid-table'].querySelectorAll('th[scope="col"]').slice(2)
+    .map((th) => data.indicators.find((i) => th.getAttribute('title').indexOf(i.name) === 0).id);
+  const out = {};
+  for (const row of gridRows(drawn)) {
+    const cells = row.childNodes.filter((n) => n.tagName === 'TD').slice(1);
+    out[row.getAttribute('data-item')] = Object.fromEntries(heads.map((ind, k) => [ind, cells[k].getAttribute('data-class')]));
+  }
+  return out;
+};
+
+test('the page judges with the rule of the Python on every acceptance case', () => {
+  for (const c of cases) {
+    assert.deepEqual(page.judge(c.before, c.after, c.floor, c.tolerance, c.noise), [c.class, c.direction, c.band], c.id);
+  }
+});
+
+test('the page judges as the Python on every edge of the rule, down to the last bit', () => {
+  const all = boundaries();
+  assert.ok(all.length > 700, String(all.length));
+  for (const c of all) {
+    assert.deepEqual(page.judge(c.before, c.after, c.floor, c.tolerance, c.noise), [c.class, c.direction, c.band], c.why + ': ' + c.before + ' to ' + c.after);
+  }
+});
+
+test('a run of steps is the two built states it lies between, never a sum', () => {
+  assert.deepEqual(page.runPair([1, 2, 2.5, 4], 1, 2), [2, 4]);
+  assert.deepEqual(page.runPair([1, null, 2.5, 4], 2, 2), [2.5, 4]);
+  assert.deepEqual(page.runPair([1, 2, null, 4], 0, 1), [1, null]);
+});
+
+test('two states are compared with the sum of their noise; the published results are exact', () => {
+  const built = (by) => ({ kind: 'build', noise: { measured: by !== null, between: by && ['x', 'y'], by: by, note: null } });
+  const published = { kind: 'published' };
+  assert.deepEqual(page.noiseOfStates(built({ a: 1e-9 }), built({ a: 3e-9, b: 2e-9 })), { a: 1e-9 + 3e-9, b: 2e-9 });
+  assert.deepEqual(page.noiseOfStates(published, built({ a: 0 })), { a: 0 });
+  assert.equal(page.noiseOfStates(published, built(null)), null);
+  assert.equal(page.endsKnown(published, built({ a: 0.1 }), 'a'), 2);
+  assert.equal(page.endsKnown(built(null), built({ a: 0.1 }), 'a'), 1);
+  assert.equal(page.endsKnown(built({ b: 0.1 }), built(null), 'a'), 0);
+  assert.equal(page.statesCarryNoise({ states: [published, built(null)] }), true);
+  assert.equal(page.statesCarryNoise({ states: [published, { kind: 'build' }] }), false);
+});
+
+test('a run judged by the page has the classes and counts of the Python reference, item by item', () => {
+  const data = local();
+  assert.equal(together().length, 5);
+  for (const one of together()) {
+    const drawn = withMatrix();
+    drawn.open(runAddress(data, one.first, one.last));
+    const at = one.first + ' to ' + one.last;
+    assert.equal(drawn.byId['step-said'].textContent.indexOf('The address'), -1, drawn.byId['step-said'].textContent);
+    assert.deepEqual(pressed(drawn), ids(data, one.first, one.last), at);
+    assert.deepEqual(gridClasses(drawn, data), one.classes, at);
+    // every bar of every card is the reference's count, by its own words
+    for (const card of cards(drawn)) {
+      const block = one.blocks[card.getAttribute('data-indicator')];
+      for (const bar of card.childNodes[2].childNodes) {
+        const said = /^(.*?)(?: \(.*\))?: ([\d\s]+) of ([\d\s]+)$/.exec(bar.getAttribute('title'));
+        const count = (said[1] in block.bands ? block.bands : block.classes)[said[1]];
+        assert.equal(+said[2].replace(/\s/g, ''), count, at + ' ' + said[1]);
+        assert.equal(+said[3].replace(/\s/g, ''), block.pairs);
+      }
+    }
+  }
+});
+
+test('a run is judged with the largest tolerance of its steps, never the smallest', () => {
+  // steps of 1e-5 and 1e-2: an item that moves by 5e-3 in the first differs there and
+  // agrees in the run of the two (tests/test_together.py, `mixed_tolerances`)
+  const mixed = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'together.json'), 'utf8')).tolerances;
+  const opened = (address) => {
+    const drawn = dom.page(mixed.data, undefined, { globals: { SENTIER_DIAGNOSTICS_MATRIX: mixed.matrix } });
+    drawn.open(address);
+    return gridClasses(drawn, mixed.data);
+  };
+  assert.deepEqual(opened('step=' + mixed.data.steps[0].id).t, { 'x:a': 'differs', 'x:b': 'differs' });
+  const run = opened(runAddress(mixed.data, mixed.first, mixed.last));
+  assert.deepEqual(run.t, mixed.classes.t);
+  assert.deepEqual(mixed.classes.t, { 'x:a': 'agrees', 'x:b': 'agrees' });
+});
+
+test('a run is judged with the sum of the noise of its two ends, as the Python reference', () => {
+  // States 1 and 3 measured 3 % and 1 %: q moved by 3.4 % between them (tests/test_together.py)
+  const sum = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'together.json'), 'utf8')).noise;
+  const drawn = dom.page(sum.data, undefined, { globals: { SENTIER_DIAGNOSTICS_MATRIX: sum.matrix } });
+  drawn.open(runAddress(sum.data, sum.first, sum.last));
+  const run = gridClasses(drawn, sum.data);
+  assert.ok('q' in run && 'n' in run, Object.keys(run).join(','));
+  for (const id of Object.keys(run)) assert.deepEqual(run[id], sum.classes[id], id);
+  assert.equal(sum.classes.q['x:a'], 'within noise');
+  assert.match(drawn.byId['step-said'].textContent, /Noise the sum of its two ends' \(State 1 measured, State 3 measured\)/);
+});
+
+test('the strip: the whole way first, then a cell per step, its bar as high as what moved in it', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  assert.deepEqual(chips(drawn).map((c) => c.getAttribute('data-comp')), ['total'].concat(data.steps.map((s) => s.id)));
+  // the whole way is every step
+  assert.deepEqual(pressed(drawn), ['total'].concat(data.steps.map((s) => s.id)));
+  const moved = (comp) => Object.values(data.counts.steps[comp])
+    .reduce((sum, b) => sum + ['differs', 'beyond 10x', 'zero reference', 'zero result', 'sign change'].reduce((a, k) => a + b.classes[k], 0), 0);
+  data.steps.forEach((s) => assert.match(chipOf(drawn, s.id).getAttribute('title'), new RegExp(moved(s.id) + ' values? moved')));
+  const rebuilt = data.steps.find((s) => !s.explained);
+  assert.match(chipOf(drawn, rebuilt.id).className, /sd-unexplained/);
+  assert.match(chipOf(drawn, rebuilt.id).getAttribute('title'), /nothing explains it/);
+  const claimed = data.steps.find((s) => s.claim && Object.values(data.counts.steps[s.id]).some((b) => b.verdicts['not claimed']));
+  assert.match(chipOf(drawn, claimed.id).getAttribute('title'), /not claimed/);
+  // a click on a cell chooses that step alone, and the grid follows
+  chipOf(drawn, data.steps[1].id).childNodes[0].dispatch('click', {}); // on its bar: the click reaches the cell
+  assert.deepEqual(pressed(drawn), [data.steps[1].id]);
+  assert.ok(drawn.byId['grid-region'].getAttribute('aria-label').endsWith(': Step 1: ' + data.steps[1].label + ', the furthest apart first'),
+    drawn.byId['grid-region'].getAttribute('aria-label'));
+  // a long chain has no number under each cell, a short one has
+  assert.match(drawn.byId.comparison.className, /sd-numbered/);
+});
+
+test('Shift-click chooses every step from one to another; steps apart are refused and said; the address keeps a run', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  chipOf(drawn, data.steps[1].id).dispatch('click', {});
+  chipOf(drawn, data.steps[2].id).dispatch('click', { shiftKey: true });
+  assert.deepEqual(pressed(drawn), ids(data, 1, 2));
+  assert.equal(drawn.context.location.hash, runAddress(data, 1, 2));
+  const said = drawn.byId['step-said'].textContent;
+  assert.match(said, /^Steps 1 and 2 together\. /);
+  assert.match(said, /two built states/);
+  assert.match(said, /No verdict: each claim is judged in its own step/);
+  for (const k of [1, 2]) assert.ok(said.includes('Step ' + k + ': ' + data.steps[k].label), k);
+  // ⌘ or Ctrl does as Shift: a run from the step chosen before, never steps apart
+  chipOf(drawn, data.steps[0].id).dispatch('click', {});
+  chipOf(drawn, data.steps[2].id).dispatch('click', { metaKey: true });
+  assert.deepEqual(pressed(drawn), ids(data, 0, 2));
+  assert.match(drawn.byId['step-said'].textContent, /^Steps 0 to 2 together\. /);
+  // the drawer holds the run's own row
+  drawn.open(runAddress(data, 0, 2) + '&item=' + encodeURIComponent(data.items[0].id));
+  assert.ok(drawn.byId['item-body'].textContent.includes('Steps 0 to 2 together'));
+  // steps apart, asked for by an address: refused, said why, the whole way shown
+  drawn.open('steps=' + data.steps[0].id + ',' + data.steps[2].id);
+  assert.deepEqual(pressed(drawn), ['total'].concat(data.steps.map((s) => s.id)));
+  assert.match(drawn.byId['step-said'].textContent, /^The address asks for steps 0 and 2\. Steps apart are not compared on a chain: each step was measured with every step before it applied/);
+  // every step chosen is the whole way, its address none
+  chipOf(drawn, data.steps[0].id).dispatch('click', {});
+  chipOf(drawn, data.steps[3].id).dispatch('click', { shiftKey: true });
+  assert.deepEqual(pressed(drawn), ['total'].concat(data.steps.map((s) => s.id)));
+  assert.match(drawn.byId['step-said'].textContent, /^The whole way: /);
+});
+
+test('the list chooses one step, or with Shift a run; it offers nothing that would choose steps apart', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  assert.equal(drawn.byId['pick-panel'].hidden, false); // a short chain opens its list
+  assert.deepEqual(chosenRows(drawn), []); // the whole way is no row's
+  rowOf(drawn, 1).dispatch('click', {});
+  assert.deepEqual(chosenRows(drawn), [1]);
+  assert.deepEqual(pressed(drawn), [data.steps[1].id]);
+  rowOf(drawn, 3).dispatch('click', { shiftKey: true });
+  assert.deepEqual(chosenRows(drawn), [1, 2, 3]);
+  rowOf(drawn, 0).dispatch('click', {});
+  assert.deepEqual(chosenRows(drawn), [0]);
+  // the example's kinds are one step each: no group has a heading, each row says its kind
+  assert.equal(drawn.byId['pick-list'].querySelectorAll('button[data-group]').length, 0);
+  assert.ok(drawn.byId['pick-list'].textContent.includes(data.steps[2].kind));
+  assert.equal(tagged(drawn.byId['pick-list'], 'INPUT').length, 0);
+  assert.equal(drawn.byId['pick-active'], undefined);
+  drawn.byId['pick-all'].dispatch('click', {});
+  assert.deepEqual(pressed(drawn), ['total'].concat(data.steps.map((s) => s.id)));
+});
+
+test('consecutive steps of one kind are one group, whose heading chooses their run', () => {
+  const data = example();
+  data.steps.slice(1).forEach((s) => { s.kind = 'fix'; });
+  const drawn = dom.page(data);
+  const group = drawn.byId['pick-list'].querySelectorAll('button[data-group]');
+  assert.equal(group.length, 1);
+  assert.equal(group[0].getAttribute('aria-pressed'), 'false');
+  const count = () => drawn.byId['pick-list'].querySelectorAll('span[data-group-count]')[0].textContent;
+  assert.equal(count(), '3 steps');
+  rowOf(drawn, 2).dispatch('click', {});
+  assert.equal(count(), '1 of 3 chosen');
+  group[0].dispatch('click', {});
+  assert.deepEqual(chosenRows(drawn), [1, 2, 3]);
+  assert.equal(group[0].getAttribute('aria-pressed'), 'true');
+  assert.match(drawn.byId['step-said'].textContent, /^Steps 1 to 3 together\. /);
+});
+
+test('the list finds steps by number, name or kind, and shows those where something moved', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  const shown = () => drawn.byId['pick-list'].querySelectorAll('button[data-row]').map((row) => +row.getAttribute('data-row'));
+  drawn.byId['pick-find'].value = data.steps[2].label.slice(0, 6).toUpperCase();
+  drawn.byId['pick-find'].dispatch('input', {});
+  assert.ok(shown().includes(2) && shown().length < data.steps.length, String(shown()));
+  assert.match(drawn.byId['pick-shown'].textContent, /^Showing \d of 4 steps\./);
+  drawn.byId['pick-find'].value = 'nothing like it';
+  drawn.byId['pick-find'].dispatch('input', {});
+  assert.deepEqual(shown(), []);
+  assert.match(drawn.byId['pick-list'].textContent, /No step matches "nothing like it"/);
+  const still = example();
+  for (const block of Object.values(still.counts.steps[still.steps[1].id])) for (const c of Object.keys(block.classes)) block.classes[c] = 0;
+  const quiet = dom.page(still);
+  quiet.byId['pick-moved'].checked = true;
+  quiet.byId['pick-moved'].dispatch('change', {});
+  // Rebuilt's one move (oats' water use) is within the noise of its two builds: nothing moved
+  assert.deepEqual(quiet.byId['pick-list'].querySelectorAll('button[data-row]').map((row) => +row.getAttribute('data-row')), [0, 3]);
+});
+
+test('without every item no run is judged: said why, and one step and the whole way remain', () => {
+  const data = local(); // 6 of 10 listed; its matrix is not read over file:
+  const drawn = dom.page(data);
+  assert.match(drawn.byId['pick-locked'].textContent, /judged from every product's results, and the matrix that holds them was not loaded/);
+  assert.equal(drawn.byId['pick-locked'].hidden, false);
+  chipOf(drawn, data.steps[1].id).dispatch('click', {});
+  chipOf(drawn, data.steps[2].id).dispatch('click', { shiftKey: true });
+  assert.deepEqual(pressed(drawn), [data.steps[1].id]); // nothing changed
+  assert.match(drawn.byId['step-said'].textContent, /^A run of steps is judged from every product's results/);
+  // an address that asks for a run while the matrix is loading falls back, and is read again once it is here
+  const later = dom.page(local(), undefined, { attributes: { 'data-sd-matrix': 'matrix.js' } });
+  later.open(runAddress(data, 1, 3));
+  assert.match(later.byId['step-said'].textContent, /^The address asks for steps 1 to 3\. .*the matrix that holds them is loading\. The whole way is shown\./);
+  later.context.SENTIER_DIAGNOSTICS_MATRIX = full();
+  later.head.querySelector('script[src]').onload();
+  assert.deepEqual(pressed(later), ids(data, 1, 3));
+  assert.equal(later.byId['pick-locked'].hidden, true);
+});
+
+test('the page refuses a run whose steps its rule does not judge as the file does, and says where', () => {
+  const data = local();
+  const m = full();
+  // one item's class in step 1 rewritten: the page's rule no longer gives the file's. An item
+  // the file does not list: a listed one would be refused with the matrix, as not the file's
+  const at = m.items.findIndex((row, k) => k >= 3 && !data.items.some((item) => item.id === row[0]));
+  assert.ok(at >= 3, 'the local example has an item it does not list');
+  const codes = m.classes[at].split('');
+  codes[1] = codes[1] === '=' ? 'D' : '=';
+  m.classes[at] = codes.join('');
+  const drawn = dom.page(data, undefined, { globals: { SENTIER_DIAGNOSTICS_MATRIX: m } });
+  drawn.open(runAddress(data, 1, 2));
+  assert.match(drawn.byId['step-said'].textContent, new RegExp("This page's rule does not give the file's classes in step 1 \\(" + m.items[at][0] + ', '));
+  assert.deepEqual(pressed(drawn), ['total'].concat(data.steps.map((s) => s.id)));
+  // a run without that step is judged, and step 1 alone is still the file's
+  drawn.open(runAddress(data, 2, 3));
+  assert.deepEqual(pressed(drawn), ids(data, 2, 3));
+  drawn.open('step=' + encodeURIComponent(data.steps[1].id));
+  assert.deepEqual(pressed(drawn), [data.steps[1].id]);
+});
+
+test('an address names a run; one with a step the file does not have falls back to the whole way, said', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  drawn.open(runAddress(data, 1, 3));
+  assert.deepEqual(pressed(drawn), ids(data, 1, 3));
+  assert.equal(runAddress(data, 1, 3), 'steps=' + data.steps[1].id + ':' + data.steps[3].id);
+  drawn.open('steps=' + data.steps[0].id + ':nothing-of-the-kind');
+  assert.deepEqual(pressed(drawn), ['total'].concat(data.steps.map((s) => s.id)));
+  assert.match(drawn.byId['step-said'].textContent, /^The address names a step this file does not have \(nothing-of-the-kind\)\. The whole way is shown\./);
+  // an id holding a comma or a colon is still one id
+  // the step's id rewritten wherever the file names it: its counts, attribution, breakdowns
+  const odd = JSON.parse(JSON.stringify(example()).split(JSON.stringify(data.steps[1].id)).join(JSON.stringify('fix, part: one')));
+  assert.equal(odd.steps[1].id, 'fix, part: one');
+  const shown = dom.page(odd);
+  chipOf(shown, odd.steps[1].id).dispatch('click', {});
+  chipOf(shown, odd.steps[2].id).dispatch('click', { shiftKey: true });
+  const hash = shown.context.location.hash;
+  shown.open('');
+  shown.open(hash);
+  assert.deepEqual(pressed(shown), ids(odd, 1, 2));
+});
+
+test('in a run, the steps where nothing moved and nothing was judged fold into one line', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  drawn.open(runAddress(data, 0, 2));
+  // the example's steps move something: nothing folds, every step has its own line
+  assert.equal(tagged(drawn.byId['step-said'], 'DETAILS').length, 0);
+  for (const k of [0, 1, 2]) assert.ok(drawn.byId['step-said'].textContent.includes('Step ' + k + ': ' + data.steps[k].label), k);
+  // the first two steps made quiet in the file's counts: a claim, nothing moved, no verdict
+  const calm = example();
+  for (const k of [0, 1]) {
+    for (const block of Object.values(calm.counts.steps[calm.steps[k].id])) {
+      for (const name of Object.keys(block.classes)) block.classes[name] = 0;
+      for (const name of Object.keys(block.verdicts)) block.verdicts[name] = 0;
+    }
+  }
+  const shown = dom.page(calm);
+  shown.open(runAddress(calm, 0, 2));
+  const folded = tagged(shown.byId['step-said'], 'DETAILS');
+  assert.equal(folded.length, 1);
+  assert.match(folded[0].textContent, /^Steps 0 and 1: nothing moved in any of them, as each claims\./);
+  for (const k of [0, 1]) assert.ok(folded[0].textContent.includes('Step ' + k + ': ' + calm.steps[k].label), 'each is still there to open');
+  assert.ok(!folded[0].textContent.includes('Step 2: '), 'the step that moved stays outside');
+  assert.ok(shown.byId['step-said'].textContent.includes('Step 2: ' + calm.steps[2].label));
+  // a quiet step without a claim folds too, and the line no longer says each one claims it
+  const unclaimed = JSON.parse(JSON.stringify(calm));
+  unclaimed.steps[1].claim = null;
+  for (const block of Object.values(unclaimed.counts.steps[unclaimed.steps[1].id])) block.verdicts = null;
+  const plain = dom.page(unclaimed);
+  plain.open(runAddress(unclaimed, 0, 2));
+  const line = tagged(plain.byId['step-said'], 'DETAILS');
+  assert.equal(line.length, 1);
+  assert.match(line[0].textContent, /^Steps 0 and 1: nothing moved in any of them\.Step/);
+});
+
+test('Shift and an arrow key grow the steps chosen, and shrink them back', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  chipOf(drawn, data.steps[1].id).dispatch('click', {});
+  drawn.byId.comparison.dispatch('keydown', { key: 'ArrowRight', shiftKey: true });
+  assert.deepEqual(pressed(drawn), data.steps.slice(1, 3).map((s) => s.id));
+  drawn.byId.comparison.dispatch('keydown', { key: 'ArrowLeft', shiftKey: true });
+  assert.deepEqual(pressed(drawn), [data.steps[1].id]);
+});
+
+test('the whole way and a run take the noise of their two ends only; a file made before says it has none', () => {
+  // the example measured noise in With fix 1 and Rebuilt, two builds of one commit: the whole
+  // way runs from the published results (exact) to Mapping 2 (not measured), and takes none
+  const data = example();
+  const drawn = dom.page(data);
+  assert.match(drawn.byId['step-said'].textContent, /Noise the sum of its two ends' \(Published exact, With mapping 2 not measured\): not measured\./);
+  assert.match(drawn.byId['rule-body'].textContent, /With fix 1: measured between fix-1 and rebuilt/);
+  assert.match(drawn.byId['rule-body'].textContent, /Published: exact: the published results have no builds/);
+  // one step: Rebuilt is two builds, each measured, so its noise is their sum
+  drawn.open('step=' + data.steps[2].id);
+  assert.match(drawn.byId['step-said'].textContent, /Noise the sum of its two ends' \(With fix 1 measured, Rebuilt measured\); large: up to 4\.878 %\./);
+  // a run from Recomputed (not measured) to Rebuilt: measured at one end
+  drawn.open(runAddress(data, 1, 2));
+  assert.match(drawn.byId['step-said'].textContent, /Noise the sum of its two ends' \(Recomputed not measured, Rebuilt measured\), measured at 1 of 2 ends; large: up to 2\.439 %\./);
+  // a file made before noise belonged to a state: its whole way and its runs have none
+  const older = example();
+  delete older.rule.total_noise;
+  older.states.forEach((st) => delete st.noise);
+  const old = dom.page(older);
+  assert.match(old.byId['step-said'].textContent, /Noise none: this file was made before noise belonged to a state\./);
+  // one that took the whole way's noise from its steps is refused
+  const guessed = example();
+  guessed.states.forEach((st) => delete st.noise);
+  assert.equal(dom.page(guessed).byId.content.hidden, true);
+});
+
+test('a matrix result written "=" is the result before it, and a "=" that stands first is refused', () => {
+  assert.deepEqual(page.expandValues([1.5, '=', null, 2, '=', '='], 3), [1.5, 1.5, null, 2, 2, 2]);
+  assert.equal(page.expandValues(['=', 1], 2), null);
+  assert.equal(page.expandValues([1, null, '='], 3), null);
+  assert.equal(page.expandValues([1, 2, '=', 4], 2), null); // first of the second indicator
+  const m = full();
+  assert.ok(m.values.some((row) => row.includes('=')), 'the local example has repeated results');
+  const broken = full();
+  const at = broken.values.findIndex((row) => row.includes('='));
+  broken.values[at][0] = '=';
+  assert.match(page.checkMatrix(broken, local()), /"=" first in an indicator/);
 });

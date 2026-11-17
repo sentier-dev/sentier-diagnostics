@@ -33,6 +33,7 @@
   "floors_from": "published",
   "beyond": 10.0,
   "total_tolerance": 0.0005,
+  "total_noise": {},
   "floors": [
    {
     "indicator": "x:climate",
@@ -123,7 +124,13 @@
    "identity": {
     "commit": "0000001"
    },
-   "join": null
+   "join": null,
+   "noise": {
+    "measured": false,
+    "between": null,
+    "by": null,
+    "note": null
+   }
   },
   {
    "id": "fix-1",
@@ -133,7 +140,20 @@
    "identity": {
     "commit": "0000002"
    },
-   "join": null
+   "join": null,
+   "noise": {
+    "measured": true,
+    "between": [
+     "fix-1",
+     "rebuilt"
+    ],
+    "by": {
+     "x:climate": 0.0,
+     "x:water": 0.02439024390243894,
+     "x:tox": 0.0
+    },
+    "note": "Two builds of commit 0000002, on two machines."
+   }
   },
   {
    "id": "rebuilt",
@@ -144,7 +164,20 @@
     "commit": "0000002",
     "machine": "second"
    },
-   "join": null
+   "join": null,
+   "noise": {
+    "measured": true,
+    "between": [
+     "fix-1",
+     "rebuilt"
+    ],
+    "by": {
+     "x:climate": 0.0,
+     "x:water": 0.02439024390243894,
+     "x:tox": 0.0
+    },
+    "note": "Two builds of commit 0000002, on two machines."
+   }
   },
   {
    "id": "mapping-2",
@@ -154,7 +187,13 @@
    "identity": {
     "commit": "0000003"
    },
-   "join": null
+   "join": null,
+   "noise": {
+    "measured": false,
+    "between": null,
+    "by": null,
+    "note": null
+   }
   }
  ],
  "steps": [
@@ -229,9 +268,13 @@
     "note": "one order of magnitude above the solver noise of two builds"
    },
    "noise": {
-    "measured": false,
+    "measured": true,
     "between": null,
-    "by": null,
+    "by": {
+     "x:climate": 0.0,
+     "x:water": 0.02439024390243894,
+     "x:tox": 0.0
+    },
     "note": null
    }
   },
@@ -251,9 +294,13 @@
     "note": "one order of magnitude above the solver noise of two builds"
    },
    "noise": {
-    "measured": false,
+    "measured": true,
     "between": null,
-    "by": null,
+    "by": {
+     "x:climate": 0.0,
+     "x:water": 0.04878048780487788,
+     "x:tox": 0.0
+    },
     "note": null
    }
   },
@@ -310,16 +357,13 @@
    },
    "noise": {
     "measured": true,
-    "between": [
-     "fix-1",
-     "rebuilt"
-    ],
+    "between": null,
     "by": {
      "x:climate": 0.0,
      "x:water": 0.02439024390243894,
      "x:tox": 0.0
     },
-    "note": "One pair of builds of one state."
+    "note": null
    }
   }
  ],
@@ -648,8 +692,8 @@
      "pairs": 10,
      "classes": {
       "agrees": 8,
-      "within noise": 0,
-      "differs": 1,
+      "within noise": 1,
+      "differs": 0,
       "beyond 10x": 0,
       "zero reference": 0,
       "zero result": 0,
@@ -663,7 +707,7 @@
       "both": 0
      },
      "directions": {
-      "up": 1,
+      "up": 0,
       "down": 0
      },
      "bands": {
@@ -672,7 +716,7 @@
       "down, factor 1.25-2": 0,
       "down, factor 1.1-1.25": 0,
       "down, factor 1-1.1": 0,
-      "up, factor 1-1.1": 1,
+      "up, factor 1-1.1": 0,
       "up, factor 1.1-1.25": 0,
       "up, factor 1.25-2": 0,
       "up, factor 2-10": 0,
@@ -680,7 +724,7 @@
      },
      "verdicts": null,
      "closer": 0,
-     "further": 1
+     "further": 0
     },
     "x:tox": {
      "pairs": 10,
@@ -995,12 +1039,12 @@
    "dominant": {
     "step-0": 0,
     "fix-1": 0,
-    "rebuilt": 1,
+    "rebuilt": 0,
     "mapping-2": 1
    },
    "not_attributable": 1,
-   "spread": 0,
-   "unexplained_moved": 1
+   "spread": 1,
+   "unexplained_moved": 0
   },
   "x:tox": {
    "dominant": {
@@ -1022,7 +1066,7 @@
   {"id": "p05", "name": "Rice", "place": "IT", "group": "crops", "unit": "kg", "values": {"x:climate": [1.9, 1.9, 0.95, 0.95, 0.95], "x:water": [3.4, 3.4, 3.4, 3.4, 3.4], "x:tox": [1e-12, 1e-12, 1e-12, 1e-12, 3e-12]}, "classes": {"x:climate": ["agrees", "differs", "agrees", "agrees", "differs"], "x:water": ["agrees", "agrees", "agrees", "agrees", "agrees"], "x:tox": ["near zero", "near zero", "near zero", "near zero", "near zero"]}, "directions": {"x:climate": [null, "down", null, null, "down"], "x:water": [null, null, null, null, null], "x:tox": [null, null, null, null, null]}, "bands": {"x:climate": [null, "down, factor 1.25-2", null, null, "down, factor 1.25-2"], "x:water": [null, null, null, null, null], "x:tox": [null, null, null, null, null]}, "verdicts": {"x:climate": ["unchanged", "off claim", null, "unchanged"], "x:water": ["unchanged", "unchanged", null, "unchanged"], "x:tox": ["not judged", "not judged", null, "not judged"]}, "breakdowns": null},
   {"id": "p03", "name": "Barley", "place": "DE", "group": "crops", "unit": "kg", "values": {"x:climate": [0.48, 0.47999, 0.575988, 0.575988, 0.575988], "x:water": [1.1, 1.1, 1.1, null, 1.3], "x:tox": [1.9e-07, 1.9e-07, 1.9e-07, 1.9e-07, 1.9e-07]}, "classes": {"x:climate": ["agrees", "differs", "agrees", "agrees", "differs"], "x:water": ["agrees", "agrees", "missing", "missing", "differs"], "x:tox": ["agrees", "agrees", "agrees", "agrees", "agrees"]}, "directions": {"x:climate": [null, "up", null, null, "up"], "x:water": [null, null, null, null, "up"], "x:tox": [null, null, null, null, null]}, "bands": {"x:climate": [null, "up, factor 1.1-1.25", null, null, "up, factor 1.1-1.25"], "x:water": [null, null, null, null, "up, factor 1.1-1.25"], "x:tox": [null, null, null, null, null]}, "verdicts": {"x:climate": ["unchanged", "not claimed", null, "unchanged"], "x:water": ["unchanged", "unchanged", null, "not judged"], "x:tox": ["unchanged", "unchanged", null, "unchanged"]}, "breakdowns": null},
   {"id": "p01", "name": "Wheat", "place": "FR", "group": "crops", "unit": "kg", "values": {"x:climate": [0.52, 0.520013, 0.468012, 0.468012, 0.468012], "x:water": [1.2, 1.2, 1.2, 1.2000001, 1.2000001], "x:tox": [2e-07, 2.0000002e-07, 2.0000002e-07, 2.0000002e-07, 2.0000002e-07]}, "classes": {"x:climate": ["agrees", "differs", "agrees", "agrees", "differs"], "x:water": ["agrees", "agrees", "agrees", "agrees", "agrees"], "x:tox": ["agrees", "agrees", "agrees", "agrees", "agrees"]}, "directions": {"x:climate": [null, "down", null, null, "down"], "x:water": [null, null, null, null, null], "x:tox": [null, null, null, null, null]}, "bands": {"x:climate": [null, "down, factor 1.1-1.25", null, null, "down, factor 1.1-1.25"], "x:water": [null, null, null, null, null], "x:tox": [null, null, null, null, null]}, "verdicts": {"x:climate": ["unchanged", "as claimed", null, "unchanged"], "x:water": ["unchanged", "unchanged", null, "unchanged"], "x:tox": ["unchanged", "unchanged", null, "unchanged"]}, "breakdowns": {"fix-1": "p01-fix-1.json"}},
-  {"id": "p04", "name": "Oats", "place": "DE", "group": "crops", "unit": "kg", "values": {"x:climate": [0.45, 0.45, 0.45, 0.45, 0.45], "x:water": [1.0, 1.0, 1.0, 1.025, 1.0455], "x:tox": [1.7e-07, 1.7e-07, 1.7e-07, 1.7e-07, 1.7e-07]}, "classes": {"x:climate": ["agrees", "agrees", "agrees", "agrees", "agrees"], "x:water": ["agrees", "agrees", "differs", "within noise", "differs"], "x:tox": ["agrees", "agrees", "agrees", "agrees", "agrees"]}, "directions": {"x:climate": [null, null, null, null, null], "x:water": [null, null, "up", null, "up"], "x:tox": [null, null, null, null, null]}, "bands": {"x:climate": [null, null, null, null, null], "x:water": [null, null, "up, factor 1-1.1", null, "up, factor 1-1.1"], "x:tox": [null, null, null, null, null]}, "verdicts": {"x:climate": ["unchanged", "unchanged", null, "unchanged"], "x:water": ["unchanged", "unchanged", null, "within noise"], "x:tox": ["unchanged", "unchanged", null, "unchanged"]}, "breakdowns": null},
+  {"id": "p04", "name": "Oats", "place": "DE", "group": "crops", "unit": "kg", "values": {"x:climate": [0.45, 0.45, 0.45, 0.45, 0.45], "x:water": [1.0, 1.0, 1.0, 1.025, 1.0455], "x:tox": [1.7e-07, 1.7e-07, 1.7e-07, 1.7e-07, 1.7e-07]}, "classes": {"x:climate": ["agrees", "agrees", "agrees", "agrees", "agrees"], "x:water": ["agrees", "agrees", "within noise", "within noise", "differs"], "x:tox": ["agrees", "agrees", "agrees", "agrees", "agrees"]}, "directions": {"x:climate": [null, null, null, null, null], "x:water": [null, null, null, null, "up"], "x:tox": [null, null, null, null, null]}, "bands": {"x:climate": [null, null, null, null, null], "x:water": [null, null, null, null, "up, factor 1-1.1"], "x:tox": [null, null, null, null, null]}, "verdicts": {"x:climate": ["unchanged", "unchanged", null, "unchanged"], "x:water": ["unchanged", "unchanged", null, "within noise"], "x:tox": ["unchanged", "unchanged", null, "unchanged"]}, "breakdowns": null},
   {"id": "p06", "name": "Rye", "place": "PL", "group": "crops", "unit": "kg", "values": {"x:climate": [0.43, 0.43, 0.43, 0.43, null], "x:water": [null, 1.15, 1.15, 1.15, 1.15], "x:tox": [2.1e-07, 2.1e-07, 2.1e-07, 2.1e-07, 2.1e-07]}, "classes": {"x:climate": ["agrees", "agrees", "agrees", "missing", "missing"], "x:water": ["missing", "agrees", "agrees", "agrees", "missing"], "x:tox": ["agrees", "agrees", "agrees", "agrees", "agrees"]}, "directions": {"x:climate": [null, null, null, null, null], "x:water": [null, null, null, null, null], "x:tox": [null, null, null, null, null]}, "bands": {"x:climate": [null, null, null, null, null], "x:water": [null, null, null, null, null], "x:tox": [null, null, null, null, null]}, "verdicts": {"x:climate": ["unchanged", "unchanged", null, "not judged"], "x:water": ["not judged", "unchanged", null, "unchanged"], "x:tox": ["unchanged", "unchanged", null, "unchanged"]}, "breakdowns": null},
   {"id": "p02", "name": "Maize", "place": "FR", "group": "crops", "unit": "kg", "values": {"x:climate": [0.41, 0.41, 0.41, 0.41, 0.41], "x:water": [2.5, 2.500025, 2.500025, 2.500025, 2.500025], "x:tox": [1.8e-07, 1.8e-07, 1.8e-07, 1.8e-07, 1.8e-07]}, "classes": {"x:climate": ["agrees", "agrees", "agrees", "agrees", "agrees"], "x:water": ["agrees", "agrees", "agrees", "agrees", "agrees"], "x:tox": ["agrees", "agrees", "agrees", "agrees", "agrees"]}, "directions": {"x:climate": [null, null, null, null, null], "x:water": [null, null, null, null, null], "x:tox": [null, null, null, null, null]}, "bands": {"x:climate": [null, null, null, null, null], "x:water": [null, null, null, null, null], "x:tox": [null, null, null, null, null]}, "verdicts": {"x:climate": ["unchanged", "unchanged", null, "unchanged"], "x:water": ["unchanged", "unchanged", null, "claimed, not moved"], "x:tox": ["unchanged", "unchanged", null, "unchanged"]}, "breakdowns": null}
  ],

@@ -57,8 +57,15 @@ KEYS = {
 }  # fmt: skip
 INDICATOR_KEYS = {"id", "name", "short", "unit"}
 RULE_KEYS = {"floor_factor", "floors_from", "beyond", "total_tolerance", "floors"}
+#: Left out only by a file made before noise belonged to a state: such a file judges the
+#: whole way without noise.
+RULE_OPTIONAL = {"total_noise"}
 FLOOR_KEYS = {"indicator", "unit", "value", "basis", "n"}
 STATE_KEYS = {"id", "label", "about", "kind", "identity", "join"}
+#: Carried by every built state of a file made since noise belongs to a state (SPEC section
+#: 5.3); never by the published results, which have no builds and are exact.
+STATE_OPTIONAL = {"noise"}
+NOISE_KEYS = {"measured", "between", "by", "note"}
 STEP_KEYS = {"id", "from", "to", "label", "about", "kind", "explained", "link", "claim",
              "tolerance", "noise"}  # fmt: skip
 CLAIM_KEYS = {"text", "by", "reach", "scope"}
@@ -219,15 +226,19 @@ def _indicators(data, found) -> list[str]:
     return ids
 
 
-def _states(data, found) -> list[str]:
+def _states(data, found, indicators) -> list[str]:
     states = data.get("states")
     if not isinstance(states, list) or not 2 <= len(states) <= MAX_STATES:
         found.append(f"`states` is not a list of 2 to {MAX_STATES}")
         return []
     ids = []
     for k, one in enumerate(states):
-        if not isinstance(one, dict) or set(one) != STATE_KEYS or not is_text(one["id"], MAX_ID):
-            found.append(f"a state is not {{{', '.join(sorted(STATE_KEYS))}}}")
+        if (
+            not isinstance(one, dict)
+            or not STATE_KEYS <= set(one) <= STATE_KEYS | STATE_OPTIONAL
+            or not is_text(one["id"], MAX_ID)
+        ):
+            found.append(f"a state is not {{{', '.join(sorted(STATE_KEYS))}}}, with `noise`")
             return []
         where = f"state {one['id']!r}"
         if not is_text(one["label"], MAX_LABEL) or not is_optional(one["about"]):
@@ -236,6 +247,14 @@ def _states(data, found) -> list[str]:
             found.append(f"{where}: `kind` is not one of {', '.join(STATE_KINDS)}")
         elif one["kind"] == "published" and k != 0:
             found.append(f"{where}: only the first state can be the published results")
+        if "noise" in one:
+            if one["kind"] == "published":
+                found.append(f"{where}: the published results have no builds and carry no noise: they are exact")
+                return []
+            shape = noise_errors(one["noise"], where, indicators)
+            if shape:
+                found += shape
+                return []
         identity = one["identity"]
         if not (
             isinstance(identity, dict)
@@ -256,6 +275,9 @@ def _states(data, found) -> list[str]:
         ids.append(one["id"])
     if len(set(ids)) != len(ids):
         found.append("two states have the same id")
+        return []
+    if len({"noise" in one for one in states if one["kind"] != "published"}) > 1:
+        found.append("some built states carry their noise and some do not: all do, or none (a file made before noise belonged to a state)")
         return []
     return ids
 
@@ -349,28 +371,16 @@ def _steps(data, found, states, indicators, tier) -> list[dict]:
         ):
             found.append(f"{where}: `tolerance` is not {{value, basis, note}}")
             return []
-        noise = one["noise"]
-        if not (
-            isinstance(noise, dict)
-            and set(noise) == {"measured", "between", "by", "note"}
-            and isinstance(noise["measured"], bool)
-            and is_optional(noise["note"])
-        ):
-            found.append(f"{where}: `noise` is not {{measured, between, by, note}}")
-            return []
-        if noise["measured"]:
-            if not (
-                isinstance(noise["between"], list)
-                and len(noise["between"]) == 2
-                and all(is_text(n, MAX_LABEL) for n in noise["between"])
-                and isinstance(noise["by"], dict)
-                and set(noise["by"]) <= set(indicators)
-                and all(is_share(v) for v in noise["by"].values())
-            ):
-                found.append(f"{where}: measured noise names the two builds and a size per indicator")
+        if states_carry_noise(data):
+            # the step's noise is its two states', the larger per indicator (SPEC section 5.3)
+            if one["noise"] != noise_of_states(data["states"][k], data["states"][k + 1]):
+                found.append(f"{where}: `noise` is not the sum of the noise of its two states, per indicator")
                 return []
-        elif noise["between"] is not None or noise["by"] is not None:
-            found.append(f"{where}: noise that was not measured has no builds and no sizes")
+        else:
+            shape = noise_errors(one["noise"], where, indicators)
+            if shape:
+                found += shape
+                return []
         ids.append(one["id"])
     if len(set(ids)) != len(ids):
         found.append("two steps have the same id")
@@ -378,10 +388,106 @@ def _steps(data, found, states, indicators, tier) -> list[dict]:
     return steps
 
 
+def noise_errors(noise, where: str, indicators) -> list[str]:
+    """What is wrong with a measured noise: of a state, or of a step in a file made before noise
+    belonged to a state. Measured noise names its two builds and a size per indicator; noise
+    that was not measured has neither."""
+    if not (
+        isinstance(noise, dict)
+        and set(noise) == NOISE_KEYS
+        and isinstance(noise["measured"], bool)
+        and is_optional(noise["note"])
+    ):
+        return [f"{where}: `noise` is not {{measured, between, by, note}}"]
+    if noise["measured"]:
+        if not (
+            isinstance(noise["between"], list)
+            and len(noise["between"]) == 2
+            and all(is_text(n, MAX_LABEL) for n in noise["between"])
+            and isinstance(noise["by"], dict)
+            and set(noise["by"]) <= set(indicators)
+            and all(is_share(v) for v in noise["by"].values())
+        ):
+            return [f"{where}: measured noise names the two builds and a size per indicator"]
+    elif noise["between"] is not None or noise["by"] is not None:
+        return [f"{where}: noise that was not measured has no builds and no sizes"]
+    return []
+
+
+def states_carry_noise(data: Mapping) -> bool:
+    """Whether the file says the noise of each built state (SPEC section 5.3). A file made before
+    noise belonged to a state says a noise per step only, and never which state it was measured
+    on. The published results carry none in either: they are exact.
+
+    >>> built = {"kind": "build", "noise": {}}
+    >>> states_carry_noise({"states": [{"kind": "published"}, built]}), states_carry_noise({"states": [{"kind": "build"}] * 2})
+    (True, False)
+    """
+    return all("noise" in one for one in data["states"] if one["kind"] != "published")
+
+
+def noise_of_states(first: Mapping, last: Mapping) -> dict:
+    """The noise two states are compared with: per indicator, the sum of the noise of the two
+    (SPEC section 5.3). Two builds of a state differ by its noise, so rebuilding both ends moves
+    their difference by up to the sum of theirs. The pair holds the results of those two states
+    only, so the noise of any state between them is not in it. The published results are exact
+    and add nothing; a built state that did not measure an indicator adds nothing to it, and the
+    page says at how many ends the noise was measured. An indicator measured at no end is left
+    out: not measured, which is not the same as two identical builds. The noise of a step, in a
+    file whose states carry their noise.
+
+    >>> built = lambda by: {"kind": "build", "noise": {"measured": by is not None, "between": by and ["x", "y"], "by": by, "note": None}}
+    >>> noise_of_states(built({"a": 1e-9}), built({"a": 3e-9, "b": 2e-9}))["by"]
+    {'a': 4e-09, 'b': 2e-09}
+    >>> noise_of_states({"kind": "published"}, built({"a": 0.0}))
+    {'measured': True, 'between': None, 'by': {'a': 0.0}, 'note': None}
+    >>> noise_of_states({"kind": "published"}, built(None))["measured"]
+    False
+    """
+    measured = [one["noise"] for one in (first, last) if one["kind"] != "published" and one["noise"]["measured"]]
+    if not measured:
+        return {"measured": False, "between": None, "by": None, "note": None}
+    by: dict[str, float] = {}
+    for said in measured:
+        for indicator, value in said["by"].items():
+            by[indicator] = by.get(indicator, 0.0) + value
+    return {"measured": True, "between": None, "by": by, "note": None}
+
+
+def ends_known(first: Mapping, last: Mapping, indicator: str) -> int:
+    """At how many of the two ends the noise of `indicator` is known: an end is known where it
+    is the published results (exact) or a build that measured it.
+
+    >>> built = lambda by: {"kind": "build", "noise": {"measured": by is not None, "between": None, "by": by, "note": None}}
+    >>> ends_known({"kind": "published"}, built({"a": 0.1}), "a"), ends_known(built(None), built({"a": 0.1}), "a")
+    (2, 1)
+    """
+    return sum(
+        1 for one in (first, last)
+        if one["kind"] == "published" or (one["noise"]["measured"] and indicator in one["noise"]["by"])
+    )  # fmt: skip
+
+
+def pair_noise(data: Mapping, first: int, last: int) -> dict[str, float]:
+    """The noise per indicator that the states at places `first` and `last` are compared with:
+    that of the two states (`noise_of_states`); nothing in a file whose states carry no noise,
+    which never says which state its noise belongs to."""
+    if not states_carry_noise(data):
+        return {}
+    return noise_of_states(data["states"][first], data["states"][last])["by"] or {}
+
+
+def total_noise_level(data: Mapping, indicator: str) -> float | None:
+    """The noise the whole way is judged with in one indicator: that of its first and last
+    state; None where neither measured it, or the file was made before noise belonged to a
+    state."""
+    return (data["rule"].get("total_noise") or {}).get(indicator)
+
+
 def _rule(data, found, indicators, states, steps) -> dict | None:
     said = data.get("rule")
-    if not isinstance(said, dict) or set(said) != RULE_KEYS:
-        found.append(f"`rule` is not {{{', '.join(sorted(RULE_KEYS))}}}")
+    if not isinstance(said, dict) or not RULE_KEYS <= set(said) <= RULE_KEYS | RULE_OPTIONAL:
+        found.append(f"`rule` is not {{{', '.join(sorted(RULE_KEYS))}}}, with `total_noise`")
         return None
     if not is_share(said["floor_factor"]):
         found.append("`rule`: the floor factor is not a share")
@@ -394,6 +500,18 @@ def _rule(data, found, indicators, states, steps) -> dict | None:
         return None
     if steps and said["total_tolerance"] != max(s["tolerance"]["value"] for s in steps):
         found.append("`rule.total_tolerance` is not the largest tolerance of the steps")
+    if "total_noise" in said:
+        given = said["total_noise"]
+        if not (isinstance(given, dict) and set(given) <= set(indicators)
+                and all(is_share(v) for v in given.values())):  # fmt: skip
+            found.append("`rule.total_noise` is not a share per indicator")
+            return None
+        if not states_carry_noise(data):
+            found.append("`rule.total_noise` is the noise of the first and last state, and this file's states carry none")
+        elif given != pair_noise(data, 0, len(data["states"]) - 1):
+            found.append("`rule.total_noise` is not the sum of the noise of the first and last state, per indicator")
+    elif states and states_carry_noise(data):
+        found.append("`rule.total_noise` is required where the states carry their noise")
     floors = said["floors"]
     if not isinstance(floors, list):
         found.append("`rule.floors` is not a list")
@@ -622,7 +740,7 @@ def _items(data, found, indicators, states, steps, floors, tier, blocks):
                 name = TOTAL if k is None else steps[k]["id"]
                 before, after = (values[0], values[-1]) if k is None else (values[k], values[k + 1])
                 if k is None:
-                    tol, level = data["rule"]["total_tolerance"], None
+                    tol, level = data["rule"]["total_tolerance"], total_noise_level(data, indicator)
                 else:
                     tol = steps[k]["tolerance"]["value"]
                     noise = steps[k]["noise"]
@@ -843,7 +961,7 @@ def _errors(data, found: list[str]) -> list[str]:
     if not isinstance(notes, list) or len(notes) > MAX_NOTES or not all(map(is_text, notes)):
         found.append(f"`notes` is not a list of at most {MAX_NOTES} texts")
     indicators = _indicators(data, found)
-    states = _states(data, found)
+    states = _states(data, found, indicators)
     if not indicators or not states:
         return found
     steps = _steps(data, found, states, indicators, tier)

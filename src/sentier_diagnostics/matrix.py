@@ -6,7 +6,9 @@ default), so that it stays small enough for a page to hold. A project looking at
 build wants every item: the matrix is that, in a second file the page loads after it has
 drawn. It is compact (one row per item, the indicators and states named once) and it holds
 only what the rule gives: the results, and one code per pair for its class and direction,
-and per step with a claim one code for its verdict.
+and per step with a claim one code for its verdict. A result equal to the one of the state
+before it, in the same indicator, is written `"="`: most steps of a chain of fixes leave most
+results as they were, and a chain of 16 states would otherwise hold every number 16 times.
 
 Only a local file may name a matrix (`"matrix": {"file": ..., "items": n}`); a public file
 keeps the listed items only. `errors(m)` checks the shape; `against(m, data)` works every
@@ -27,6 +29,9 @@ FORMAT = "sentier-diagnostics-matrix/1"
 FAMILY = "sentier-diagnostics-matrix/"
 KEYS = {"format", "of", "items", "values", "classes", "verdicts"}
 OF_KEYS = {"title", "states", "indicators", "steps"}
+
+#: A result written as the same number as the state before it, in the same indicator.
+SAME = "="
 
 #: A matrix is loaded after the page is drawn, not held inside it: it may be larger.
 MAX_BYTES = 64 * 1024 * 1024
@@ -75,6 +80,37 @@ def code_of(kind: str, way: str | None) -> str:
     return CODES[(kind, way)]
 
 
+def _same(a, b) -> bool:
+    """Two results that are the same number, bit for bit (0.0 and -0.0 are not)."""
+    return a is not None and b is not None and float(a).hex() == float(b).hex()
+
+
+def compact(values: list) -> list:
+    """One indicator's results over the states, each equal to the one before it as `SAME`.
+
+    >>> compact([1.5, 1.5, None, None, 2.0, 2.0, -0.0, 0.0])
+    [1.5, '=', None, None, 2.0, '=', -0.0, 0.0]
+    """
+    return [SAME if n and _same(v, values[n - 1]) else v for n, v in enumerate(values)]
+
+
+def expand(values: list, nstates: int) -> list:
+    """The results of one item, every `SAME` written out again; raises ValueError where one
+    stands first in its indicator or after a missing result.
+
+    >>> expand([1.5, "=", None, 2.0], 2)
+    [1.5, 1.5, None, 2.0]
+    """
+    out = []
+    for n, v in enumerate(values):
+        if v == SAME:
+            if n % nstates == 0 or out[-1] is None:
+                raise ValueError("`=` stands first in an indicator, or after a missing result")
+            v = out[-1]
+        out.append(v)
+    return out
+
+
 def make(data: Mapping, rows: list[dict]) -> dict:
     """A matrix of a diagnostics file from its rows, as `chain.build_with_matrix` gives them:
     `{id, name, place, group, unit, values: {indicator: [per state]}, classes, directions,
@@ -96,7 +132,7 @@ def make(data: Mapping, rows: list[dict]) -> dict:
     }
     for row in rows:
         out["items"].append([row["id"], row["name"], row["place"], row["group"], row["unit"]])
-        out["values"].append([v for i in ids for v in row["values"][i]])
+        out["values"].append([v for i in ids for v in compact(row["values"][i])])
         out["classes"].append(
             "".join(
                 code_of(kind, way) for i in ids for kind, way in zip(row["classes"][i], row["directions"][i])
@@ -223,8 +259,12 @@ def _errors(m) -> list[str]:
         seen.add(row[0])
         values = m["values"][at]
         if not (isinstance(values, list) and len(values) == nind * nstates
-                and all(v is None or rule.is_value(v) for v in values)):  # fmt: skip
-            return [f"item {row[0]!r}: not one finite number or null per indicator and state"]
+                and all(v is None or v == SAME or rule.is_value(v) for v in values)):  # fmt: skip
+            return [f"item {row[0]!r}: not one finite number, `=` or null per indicator and state"]
+        try:
+            expand(values, nstates)
+        except ValueError as error:
+            return [f"item {row[0]!r}: {error}"]
         codes = m["classes"][at]
         if not (
             isinstance(codes, str) and len(codes) == nind * (nsteps + 1) and all(c in DECODE for c in codes)
@@ -296,7 +336,7 @@ def _against(m: Mapping, data: Mapping) -> list[str]:
     qualifying = 0
     for at, (item_id, name, place, group, unit) in enumerate(m["items"]):
         where = f"item {item_id!r}"
-        flat, codes = m["values"][at], m["classes"][at]
+        flat, codes = expand(m["values"][at], nstates), m["classes"][at]
         said_verdicts = m["verdicts"][at] if m["verdicts"] is not None else None
         worth = False
         values_of = {}
@@ -311,7 +351,7 @@ def _against(m: Mapping, data: Mapping) -> list[str]:
                 at_k = nsteps if k is None else k
                 before, after = (values[0], values[-1]) if k is None else (values[k], values[k + 1])
                 if k is None:
-                    tol, level = data["rule"]["total_tolerance"], None
+                    tol, level = data["rule"]["total_tolerance"], fileformat.total_noise_level(data, indicator)
                 else:
                     tol = steps[k]["tolerance"]["value"]
                     noise = steps[k]["noise"]

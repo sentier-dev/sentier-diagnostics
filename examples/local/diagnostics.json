@@ -33,6 +33,7 @@
   "floors_from": "published",
   "beyond": 10.0,
   "total_tolerance": 0.0005,
+  "total_noise": {},
   "floors": [
    {
     "indicator": "x:climate",
@@ -123,7 +124,13 @@
    "identity": {
     "commit": "0000001"
    },
-   "join": null
+   "join": null,
+   "noise": {
+    "measured": false,
+    "between": null,
+    "by": null,
+    "note": null
+   }
   },
   {
    "id": "fix-1",
@@ -133,7 +140,20 @@
    "identity": {
     "commit": "0000002"
    },
-   "join": null
+   "join": null,
+   "noise": {
+    "measured": true,
+    "between": [
+     "fix-1",
+     "rebuilt"
+    ],
+    "by": {
+     "x:climate": 0.0,
+     "x:water": 0.02439024390243894,
+     "x:tox": 0.0
+    },
+    "note": "Two builds of commit 0000002, on two machines."
+   }
   },
   {
    "id": "rebuilt",
@@ -144,7 +164,20 @@
     "commit": "0000002",
     "machine": "second"
    },
-   "join": null
+   "join": null,
+   "noise": {
+    "measured": true,
+    "between": [
+     "fix-1",
+     "rebuilt"
+    ],
+    "by": {
+     "x:climate": 0.0,
+     "x:water": 0.02439024390243894,
+     "x:tox": 0.0
+    },
+    "note": "Two builds of commit 0000002, on two machines."
+   }
   },
   {
    "id": "mapping-2",
@@ -154,7 +187,13 @@
    "identity": {
     "commit": "0000003"
    },
-   "join": null
+   "join": null,
+   "noise": {
+    "measured": false,
+    "between": null,
+    "by": null,
+    "note": null
+   }
   }
  ],
  "steps": [
@@ -229,9 +268,13 @@
     "note": "one order of magnitude above the solver noise of two builds"
    },
    "noise": {
-    "measured": false,
+    "measured": true,
     "between": null,
-    "by": null,
+    "by": {
+     "x:climate": 0.0,
+     "x:water": 0.02439024390243894,
+     "x:tox": 0.0
+    },
     "note": null
    }
   },
@@ -251,9 +294,13 @@
     "note": "one order of magnitude above the solver noise of two builds"
    },
    "noise": {
-    "measured": false,
+    "measured": true,
     "between": null,
-    "by": null,
+    "by": {
+     "x:climate": 0.0,
+     "x:water": 0.04878048780487788,
+     "x:tox": 0.0
+    },
     "note": null
    }
   },
@@ -310,16 +357,13 @@
    },
    "noise": {
     "measured": true,
-    "between": [
-     "fix-1",
-     "rebuilt"
-    ],
+    "between": null,
     "by": {
      "x:climate": 0.0,
      "x:water": 0.02439024390243894,
      "x:tox": 0.0
     },
-    "note": "One pair of builds of one state."
+    "note": null
    }
   }
  ],
@@ -648,8 +692,8 @@
      "pairs": 10,
      "classes": {
       "agrees": 8,
-      "within noise": 0,
-      "differs": 1,
+      "within noise": 1,
+      "differs": 0,
       "beyond 10x": 0,
       "zero reference": 0,
       "zero result": 0,
@@ -663,7 +707,7 @@
       "both": 0
      },
      "directions": {
-      "up": 1,
+      "up": 0,
       "down": 0
      },
      "bands": {
@@ -672,7 +716,7 @@
       "down, factor 1.25-2": 0,
       "down, factor 1.1-1.25": 0,
       "down, factor 1-1.1": 0,
-      "up, factor 1-1.1": 1,
+      "up, factor 1-1.1": 0,
       "up, factor 1.1-1.25": 0,
       "up, factor 1.25-2": 0,
       "up, factor 2-10": 0,
@@ -680,7 +724,7 @@
      },
      "verdicts": null,
      "closer": 0,
-     "further": 1
+     "further": 0
     },
     "x:tox": {
      "pairs": 10,
@@ -995,12 +1039,12 @@
    "dominant": {
     "step-0": 0,
     "fix-1": 0,
-    "rebuilt": 1,
+    "rebuilt": 0,
     "mapping-2": 1
    },
    "not_attributable": 1,
-   "spread": 0,
-   "unexplained_moved": 1
+   "spread": 1,
+   "unexplained_moved": 0
   },
   "x:tox": {
    "dominant": {

@@ -20,7 +20,7 @@ from .helpers import A, B
 
 HERE = Path(__file__).parent
 FIXTURES = HERE / "fixtures" / "tables"
-MODULES = ["rule", "claims", "chain", "fileformat", "breakdown", "tables", "summary", "page", "from_tables", "matrix"]
+MODULES = ["rule", "claims", "chain", "fileformat", "breakdown", "tables", "summary", "page", "from_tables", "matrix", "together"]
 
 
 def load_tests(loader, tests, pattern):
@@ -316,21 +316,23 @@ class Attribution(unittest.TestCase):
     """Which step carries an item's whole difference (SPEC 7; issue 8)."""
 
     def chain_of(self, values, noise):
-        steps = [chain.step(f"s{k}", f"Step {k}", kind="fix",
-                            noise=chain.noise(("x", "y"), {A: n}) if n else None)
-                 for k, n in enumerate(noise)]  # fmt: skip
+        """`noise` is that of each built state, in order: a step is compared with the sum of
+        its two states' noise, the published results being exact."""
+        steps = [chain.step(f"s{k}", f"Step {k}", kind="fix") for k in range(len(noise))]
         return chain.build(
             "Attribution",
             indicators=helpers.INDICATORS,
             states=[chain.state("p", "Published", kind="published")]
-            + [chain.state(f"b{k}", f"Build {k}") for k in range(len(noise))],
+            + [chain.state(f"b{k}", f"Build {k}", noise=chain.noise(("x", "y"), {A: n}) if n else None)
+               for k, n in enumerate(noise)],  # fmt: skip
             steps=steps,
             values={"p": {A: {"i": values[0]}}} | {f"b{k}": {A: {"i": v}} for k, v in enumerate(values[1:])},
             units={"i": "kg"},
         )
 
     def test_a_step_that_did_not_move_carries_nothing(self):
-        data = self.chain_of([1.0, 1.045, 1.075], [0.05, None])
+        # Build 0's noise is in both its steps: the second moves by 9 %, beyond it
+        data = self.chain_of([1.0, 1.045, 1.15], [0.05, None])
         self.assertEqual([data["items"][0]["classes"][A][k] for k in range(3)],
                          [rule.WITHIN_NOISE, rule.DIFFERS, rule.DIFFERS])  # fmt: skip
         self.assertEqual(data["attribution"][A]["dominant"], {"s0": 0, "s1": 1})
@@ -427,9 +429,10 @@ class FromTables(unittest.TestCase):
         the noise 1.0 and hide a correction by a factor of 580 as "within noise"."""
         spec = {"title": "t", "item": {"one": "i", "many": "is"},
                 "indicators": [{"id": A, "name": "A", "short": "A", "unit": "kg"}], "items": "items.csv",
-                "states": [{"id": "s0", "label": "0", "results": "s0.csv"}, {"id": "s1", "label": "1", "results": "s1.csv"}],
+                "states": [{"id": "s0", "label": "0", "results": "s0.csv",
+                            "noise": {"tables": [{"label": "a", "results": "s0.csv"}, {"label": "b", "results": "again.csv"}]}},
+                           {"id": "s1", "label": "1", "results": "s1.csv"}],
                 "steps": [{"id": "fix", "label": "fix", "kind": "fix",
-                           "noise": {"tables": [{"label": "a", "results": "s0.csv"}, {"label": "b", "results": "again.csv"}]},
                            "claim": {"text": "Berries go down.", "by": {"kind": "person", "name": "A"},
                                      "scope": [{"indicators": [A], "items": ["berry"], "direction": "down", "expect": "must"}]}}]}  # fmt: skip
         with tempfile.TemporaryDirectory() as folder:
