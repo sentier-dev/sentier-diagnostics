@@ -152,6 +152,30 @@
 .sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-quiet-steps > summary { cursor: pointer; color: var(--sd-muted); font-size: var(--sd-t-sm); padding-left: 1.2rem; }
 .sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-drawer tr.sd-in-run > * { background: var(--sd-paper-deep); }
 
+/* the fixes view: chain or fixes, the list of fixes with a box each, the label of a set */
+.sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-mode { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.75rem; margin-bottom: var(--sd-s2); }
+.sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-mode[hidden] { display: none; }
+.sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-mode-button { padding: 0.25rem 0.75rem; border: 1px solid var(--sd-line-strong); border-radius: 999px; background: none; color: inherit; font: inherit; font-weight: 600; cursor: pointer; }
+.sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-mode-button[aria-pressed="true"] { border-color: var(--sd-accent); background: var(--sd-accent); color: var(--sd-surface); }
+.sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-mode-button:disabled { opacity: 0.5; cursor: default; }
+.sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-mode-button:focus-visible { outline: 2px solid var(--sd-accent); outline-offset: 2px; }
+.sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-mode-said { font-size: var(--sd-t-xs); }
+.sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-fix-row { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+.sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-fix-row input { margin: 0; accent-color: var(--sd-accent); }
+.sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-fix-row:focus-within { outline: 2px solid var(--sd-accent); outline-offset: -2px; }
+@media (max-width: 40rem) { .sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-fix-row { grid-template-columns: auto minmax(0, 1fr) auto; } }
+.sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-fix-needs { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 18rem; }
+.sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-fix-built { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin: 0.25rem 0 0.4rem; font-size: var(--sd-t-sm); }
+.sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-fix-set[aria-pressed="true"] { border-color: var(--sd-accent); box-shadow: inset 0 0 0 1px var(--sd-accent); }
+.sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-fixlabel { font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-fixlabel-built { border-color: var(--sd-accent); }
+.sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-fixlabel-exact { border-color: var(--sd-down); }
+.sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-fixlabel-estimated { border-color: var(--sd-up); border-style: dashed; }
+.sentier-diagnostics:not(#sd-none):not(#sd-none) .mark.sd-est { margin-left: 0.2em; font-weight: 700; color: var(--sd-up); }
+.sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-nosum { font-style: italic; }
+.sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-drawer-part { margin: var(--sd-s3) 0 0; padding-top: var(--sd-s2); border-top: 1px solid var(--sd-line); font-size: var(--sd-t-sm); text-transform: uppercase; letter-spacing: 0.04em; color: var(--sd-muted); }
+.sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-drawer tr.sd-fix-rest > * { font-style: italic; }
+
 /* the line of the chosen step: what it compares, its claim and what the claim found, its rule */
 .sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-step { margin: 0 0 var(--sd-s3); padding: var(--sd-s2) var(--sd-s4); border-left: 3px solid var(--sd-accent); border-radius: 0 var(--sd-radius) var(--sd-radius) 0; background: var(--sd-paper-deep); font-size: var(--sd-t-sm); }
 .sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-step > p { margin: 0; }

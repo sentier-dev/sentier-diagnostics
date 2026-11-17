@@ -259,7 +259,9 @@ claim's lists are in the file), and holds the file to it: with every item at han
 counts, attribution, `items_count.all` and `qualifying` must be what the matrix holds,
 exactly, and every listed item must be in the matrix with the same name and results.
 `sentier-diagnostics check` does both when the matrix lies beside its file. A matrix holds
-up to 200,000 items and 64 MB.
+up to 200,000 items and 64 MB. The page holds a matrix it reads over http to the same
+size in bytes, never to the length of its text, which counts UTF-16 units, and reads it
+as UTF-8, refusing a byte that is not.
 
 ## 5. The counting rule
 
@@ -748,7 +750,11 @@ indicator, among the values that moved and have a ratio; then the items whose mo
 none (from or to zero, a sign change), by their worst value in the order of 10.4; then
 those that did not move. A heading sorts by how far the two lie apart in that indicator,
 the furthest first (the order of 10.4), or by name, and a second click goes back;
-filters by text, group, class and verdict; 300 rows at a time with "show more". The
+filters by text, group, class and verdict, the class filter also offering **every class that
+moved at once** (and saying how many values moved among the items shown, the count beside
+the comparison; a missing value, or a value no sum can be formed for, did not move). That
+choice is offered only where something moved, and stays chosen when the comparison or the
+set of fixes changes while something still moves; 300 rows at a time with "show more". The
 reader's **size filter** ("size at least ×1.1 ... ×10") hides smaller changes here and in
 the worst list; zeros, sign changes and missing values always show, and the page says the
 filter changes no count.
@@ -968,7 +974,8 @@ a build, and a comparison takes the sum of the noise of the builds it stands on 
 sentier-bafu wrote a file from its own chain to review the format as its producer (12 fixes
 and the release, checked clean), and its review defined the size of a pair (16.6), the route
 an effect is measured on (16.4), and the premise of the list of pairs (16.3). The reader and
-validator are `fixes.py`; the producer and the page are not written yet (16.12).
+validator are `fixes.py`, and the page reads a file of fixes as 16.8 says; sentier-bafu
+writes the producer (16.12).
 
 ### 16.1 Why not a chain of fixes
 
@@ -1116,7 +1123,10 @@ is:
   taken;
 - otherwise the base plus each fix's difference against the result it was measured
   against. A fix measured on top of another adds only its own difference, so what both
-  build on is counted once.
+  build on is counted once. The differences are added left to right in the order of the
+  file, one at a time from 0 (`fixes.in_order`), and then to the base; so are the sizes of
+  a set's pair terms. Never a compensated sum: Python's `sum()` compensates from 3.12 on,
+  and a reader that rounds otherwise parts from the page in the last bit.
 
 Where one of those differences cannot be taken (a missing result with the fix or without
 it), the set has no result there, and the page says the sum cannot be formed, apart from a
@@ -1160,7 +1170,7 @@ Each set carries one of three labels, and the page shows it wherever the set is 
 |---|---|---|
 | built | the set is one fix with what it requires, or one of `built` | the built results |
 | exact | `interactions.checked` is true, and no two of its fixes are a listed pair | the sum, as a result |
-| estimated | otherwise | the sum, marked on every cell, in the line above the matrix and in every count ("estimated: 153 would differ"), with the listed pairs it holds, their kinds, and their pair terms where measured ("pair terms up to 0.003 %") |
+| estimated | otherwise | the sum, marked "≈" on every value that may lie off the set's build (16.8), in the line above the matrix and in every count ("estimated: 153 would differ"), with the listed pairs it holds, their kinds, and their pair terms where measured ("pair terms up to 0.003 %") |
 
 An estimated set is never drawn as a built one: the mark is on the cell, not only in a
 heading a reader may have scrolled past. Its **pair terms** are the sum of the measured
@@ -1273,7 +1283,9 @@ construction; the check of independence above is the one that can fail it.
   and says so; unticking a fix another chosen fix requires unticks that one too.
 - The address names the set: `#set=a,b,c`, in the order of the file. An address that names
   a fix the file does not hold opens on the base and says which.
-- One fix reads as a step does today: its claim, its verdicts, its own counts from the file.
+- One fix reads as a step does today: its claim and its own counts from the file, with the
+  verdicts the file counts for it in its line and in the list. The file counts verdicts per
+  fix and holds none per item, so in a set the verdict filter is off and no cell carries one.
 - Any set drives the matrix, the distributions, the worst values and the drawer. Its line
   says its label, its fixes with their claims, its tolerance and its noise.
 - The page works out the classes of a set, as it does those of a run of steps (section
@@ -1286,6 +1298,37 @@ construction; the check of independence above is the one that can fail it.
 - In the drawer, an item's difference in a set splits into its fixes' effects, exactly
   where the set is exact, each fix's against what it was measured with. For a built set
   holding a listed pair, the rest is shown as the interaction, never spread over the fixes.
+- An estimated set says so wherever its numbers are: "≈" on every value that may lie off the
+  build of the whole set, and "Estimated:" before its counts, the worst values and the
+  distributions. Those values are every sum, and every value taken from one build S (a fix
+  with what it requires, a built set inside the set, or the base, where no fix changes the
+  item on its own) unless every listed pair the set holds lies wholly inside S; where
+  interactions were not checked, unless S is the whole set, so that every value is marked.
+  Two fixes outside S can still move a value together: a fix of a factor that was 0 and a fix
+  that adds that flow upstream each move nothing alone. Pairs are listed per file, not per
+  item, so the mark falls on some values a pair never meets: the file cannot say which, and a
+  mark too many is the honest error. A built or exact set marks nothing. A value no sum
+  can be formed for reads "no sum", never "missing", wherever the page names it: in its
+  cell, in the counts of the distributions and the column titles, and in the Class filter,
+  where it is a class of its own. `fixes.counts` counts it as missing (after, or on both
+  sides where the base has no result); the page takes it out of "missing" and counts it as
+  "no sum", so that the two never collapse into one.
+- The page offers the choice between the steps of the chain and a set of fixes only where
+  a file of fixes came with it. `sentier-diagnostics page FILE --out FOLDER --fixes FIXES`
+  checks the file of fixes against the file and its matrix and writes it beside the page as
+  `fixes.js`, which adds `{src, fixes}` to `SENTIER_DIAGNOSTICS_FIXES_FILES`, as `matrix.js`
+  does; the root names it (`data-sd-fixes`) and the page takes the entry of that script
+  only. A host may name `fixes.json` instead (read over http, and held to its size in bytes
+  and to UTF-8 as a matrix is), or set one file of fixes for one page,
+  `SENTIER_DIAGNOSTICS_FIXES`. A file of fixes that does not hang on the file
+  shown is refused, and the page says why: its title, a base that is no state of it or
+  whose noise is not that state's (none where it is the published results), other
+  indicators or words, other floors (16.4), other items than the matrix's in its order and
+  whole (name, place, group, unit), other base results, an item a fix brings that has a
+  base result or no result from any fix, or a built set that names no state after the base.
+  Without the matrix, the listed items hold it. A file of another shape, from a script or a
+  host's global, is refused the same way and never stops the page. The page does not hold a
+  built set that names a state to that state's results, which `check` does.
 
 ### 16.9 Checks
 

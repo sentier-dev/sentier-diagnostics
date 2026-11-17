@@ -705,7 +705,7 @@ test('a matrix beside the page is loaded as a script after the page is drawn', (
 });
 
 test('a matrix is fetched as JSON over http, and one of another file is not drawn', async () => {
-  const served = (m) => () => Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify(m)) });
+  const served = (m) => () => Promise.resolve({ ok: true, status: 200, arrayBuffer: () => Promise.resolve(bytesOf(Buffer.from(JSON.stringify(m)))) });
   const drawn = dom.page(local(), undefined, { protocol: 'https:', fetch: served(full()) });
   await new Promise((done) => setImmediate(done));
   assert.equal(gridRows(drawn).length, 10);
@@ -714,6 +714,25 @@ test('a matrix is fetched as JSON over http, and one of another file is not draw
   await new Promise((done) => setImmediate(done));
   assert.equal(gridRows(refused).length, 6);
   assert.match(refused.byId['matrix-said'].textContent, /not loaded: it is the matrix of another file/);
+});
+
+// a Buffer's own bytes, as a response's arrayBuffer() gives them
+const bytesOf = (buffer) => buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.length);
+
+test('a matrix over http is held to its size in bytes, and refused when it is not JSON, not UTF-8 or not served', async () => {
+  const fetched = async (bytes, status) => {
+    const drawn = dom.page(local(), undefined, { protocol: 'https:', fetch: () => Promise.resolve({ ok: !status, status: status || 200,
+      arrayBuffer: () => Promise.resolve(bytes ? bytesOf(bytes) : null) }) });
+    await new Promise((done) => setImmediate(done));
+    return drawn.byId['matrix-said'].textContent;
+  };
+  // 2-byte characters: the text is half as long as the file, so only its size in bytes is over
+  const max = 64 * 1024 * 1024, large = Buffer.alloc(max + 2, 'é');
+  assert.equal(large.toString('utf8').length, max / 2 + 1);
+  assert.match(await fetched(large), /matrix\.json is larger than 67\D108\D864 bytes/);
+  assert.match(await fetched(Buffer.from('{"format": ')), /matrix\.json is not JSON/);
+  assert.match(await fetched(Buffer.from([0x7b, 0xff, 0x7d])), /matrix\.json is not UTF-8 text/);
+  assert.match(await fetched(null, 404), /matrix\.json could not be read \(404\)/);
 });
 
 test('a key written twice in one object is refused wherever the page reads JSON, as the Python refuses it (issue 19)', async () => {
@@ -730,7 +749,9 @@ test('a key written twice in one object is refused wherever the page reads JSON,
   const twice = (value) => JSON.stringify(value).replace('"tier":', '"tier": "counts", "tier":');
   const data = dom.page(undefined, undefined, { scripts: { data: new dom.Text(twice(example())) } });
   assert.match(data.byId['load-error'].textContent, /The data of this page cannot be read: the key "tier" is written twice in one object/);
-  const served = (text) => () => Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(text) });
+  // served as a response serves it: its text, or its bytes (a matrix, held to its size in bytes)
+  const served = (text) => () => Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(text),
+    arrayBuffer: () => Promise.resolve(bytesOf(Buffer.from(text))) });
   const matrix = dom.page(local(), undefined, { protocol: 'https:', fetch: served(JSON.stringify(full()).replace('"items":', '"items": [], "items":')) });
   await new Promise((done) => setImmediate(done));
   assert.match(matrix.byId['matrix-said'].textContent, /matrix\.json cannot be read: the key "items" is written twice/);
