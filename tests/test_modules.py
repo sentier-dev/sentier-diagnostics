@@ -1162,11 +1162,32 @@ class Chain(unittest.TestCase):
                 found = fileformat.errors(helpers.mutated(data, lambda d, f=field, v=value: (
                     d["items"][0].update({f: v}), d["items"][-1].update(unit=5))))
                 self.assertEqual([e.split(":")[0] for e in found], [f"item {first!r}", f"item {last!r}"], found)
-        # an item that is not a table, which no explanation is about
+        # each fault that stops the check, on an item no explanation is about: the explanations
+        # about the other listed items are not said to be about an item the file does not list
+        # (review of 2d0d545). In a file of counts no explanation is held to the listed items.
         broken = next(k for k, i in enumerate(data["items"]) if 0 < k and i["id"] not in explained)
-        found = fileformat.errors(helpers.mutated(data, lambda d: d["items"].__setitem__(broken, 5)))
-        self.assertTrue(any(e.startswith("an item is not {") for e in found), found)
-        self.assertFalse([e for e in found if "does not list" in e], found)
+        ind = data["indicators"][0]["id"]
+        item = lambda d: d["items"][broken]  # noqa: E731
+        stops = {
+            "`items` is not a list of the": lambda d: d["items"].pop(broken),
+            "an item is not {": lambda d: d["items"].__setitem__(broken, 5),
+            "an item's `id` ": lambda d: item(d).update(id=5),
+            "`unit` is not a text": lambda d: item(d).update(unit=5),
+            "results, classes, directions and bands are given": lambda d: item(d).update(values={}),
+            "verdicts are given for every indicator": lambda d: item(d).update(verdicts=None),
+            "the results are not one finite number": lambda d: item(d)["values"].update({ind: [1.0]}),
+            "classes, directions and bands are one per step": lambda d: item(d)["classes"].update({ind: []}),
+            "the file holds no floor for unit": lambda d: item(d).update(unit="zz"),
+            "verdicts are one per step": lambda d: item(d)["verdicts"].update({ind: []}),
+            "the rule gives": lambda d: item(d)["classes"][ind].__setitem__(1, "differs"),
+            "cannot be 'nonsense'": lambda d: item(d)["verdicts"][ind].__setitem__(1, "nonsense"),
+            "the claim gives 'unchanged'": lambda d: item(d)["verdicts"][ind].__setitem__(1, "claimed, not moved"),
+        }  # fmt: skip
+        for fault, change in stops.items():
+            with self.subTest(fault):
+                found = fileformat.errors(helpers.mutated(data, change))
+                self.assertTrue(any(fault in e for e in found), found)
+                self.assertFalse([e for e in found if "does not list" in e], found)
         # a count of items that cannot be read
         found = fileformat.errors(helpers.mutated(data, lambda d: d.update(items_count=5)))
         self.assertEqual(found, ["`items_count` is not {all, qualifying, listed, not_listed} in counts"])
