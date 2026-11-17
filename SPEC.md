@@ -490,9 +490,13 @@ stage, triage, ledger, layer, upstream, provider and candidate (a test holds thi
 
 **The page is a matrix page.** From the top: the header (10.1); a row of chips that
 chooses the comparison, the whole way first and then each step with its number, the values
-that moved in it, a `!` where nothing explains it and a mark for each verdict worth a look;
-one row of controls (name, group, class, verdict, the size filter) with the count and the
-legend on its right; then the matrix (10.5), which opens an item in a drawer (10.6). Below
+that moved in it, a `!` where nothing explains it and a mark for each verdict worth a look
+(the arrow keys move between them); under the chips one line for the chosen step: the
+states it goes between, what it is, its claim with who made it, what the claim found, its
+tolerance and its noise; one row of controls (name, group, class, verdict, the size
+filter) with the count and the legend in the row under it; then the matrix (10.5), which
+opens an item in a drawer (10.6). The address keeps the chosen step and an open item
+(`#step=<id>&item=<id>`), so that a reviewer can send someone to exactly that view. Below
 it, each closed until a reader opens it: the steps and the whole way (10.2), the
 distributions (10.3), the worst values (10.4), the explanations and the rule (10.7). A
 host's page never offers to open a file; it says only why nothing is drawn.
@@ -525,7 +529,9 @@ ratio). The page always says how many it shows of how many, and how many items w
 look the file does not hold.
 
 ### 10.5 Matrix
-Items by indicator for one comparison: each cell with a ratio shows the result after
+Items by indicator for the comparison the chips have chosen. **The indicators in which that
+comparison moved most come first**, so that what a step did is in view without scrolling;
+an indicator in which it moved nothing comes last, quietened, and keeps its column. In it: each cell with a ratio shows the result after
 divided by the result before in three significant digits (`1.00`, `0.984`, `2.27`,
 `1.01e−3`), agreeing pairs included, so that a column reads as numbers; a cell without one
 says what the class says (from 0, to 0, + → −, missing, ≈ 0). The class shows as the tint
