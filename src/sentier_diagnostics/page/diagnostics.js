@@ -511,7 +511,10 @@
   }
 
   // whether numbers add up to a total as a breakdown must: to within 1e-9 of the largest of
-  // them, summed from the left (breakdown.CLOSURE and breakdown._adds_up)
+  // them (breakdown.CLOSURE and breakdown._adds_up). The page sums from the left, and
+  // Python's sum() makes up for its rounding from 3.12 on. The two sums part by a few units
+  // in the last place of the largest number, far inside 1e-9 of it: they can answer apart
+  // only for a sum that lies that close to the edge.
   var CLOSURE = 1e-9;
   function addsUp(parts, total) {
     var size = Math.abs(total), sum = 0;
