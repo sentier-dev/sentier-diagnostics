@@ -26,7 +26,7 @@ import json
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 
-from . import __version__, claims, fileformat, rule
+from . import __version__, claims, fileformat, matrix, rule
 
 FILE = "diagnostics.json"
 
@@ -103,17 +103,23 @@ def step(id: str, label: str, *, kind: str, explained: bool = True, about: str |
 
 
 def state(id: str, label: str, *, kind: str = "build", about: str | None = None,
-          identity: Mapping[str, str] | None = None, join: Mapping | None = None) -> dict:  # fmt: skip
+          identity: Mapping[str, str | None] | None = None, join: Mapping | None = None) -> dict:  # fmt: skip
     """One state: a set of results. `kind` is "published" for the results its publisher released.
+
+    `identity` is a short table of texts (commit, release, machine); an entry whose value is
+    None is left out, so that a writer can pass what it may not know.
 
     `join` is what the reader that made the state counted when it matched its rows to items:
     `{"compared": n, "unmatched": n, "ambiguous": n, "note": text or None}`.
+
+    >>> state("b", "Build", identity={"commit": "0e1f5be", "machine": None})["identity"]
+    {'commit': '0e1f5be'}
     """
     if join is not None:
         join = {"compared": join["compared"], "unmatched": join.get("unmatched", 0),
                 "ambiguous": join.get("ambiguous", 0), "note": join.get("note")}  # fmt: skip
     return {"id": id, "label": label, "about": about, "kind": kind,
-            "identity": dict(identity or {}), "join": join}  # fmt: skip
+            "identity": {k: v for k, v in (identity or {}).items() if v is not None}, "join": join}  # fmt: skip
 
 
 def explanation(text: str, by: dict, *, step: str | None = None, indicator: str | None = None,
@@ -170,7 +176,21 @@ def _values(values, states, indicators) -> dict:
     return found
 
 
-def build(
+def build(title: str, **given) -> dict:
+    """A whole chain, counted, judged, attributed and checked: the file, without a matrix.
+    The keywords are those of `_build`, whose docstring says what each one holds."""
+    return _build(title, **given)[0]
+
+
+def build_with_matrix(title: str, *, matrix_file: str = "matrix.json", **given) -> tuple[dict, dict]:
+    """The file and its full matrix (`sentier_diagnostics.matrix`): every item with its
+    results and codes, the worst first, in a second file named `matrix_file` that the file
+    names. Only a local file of items has one."""
+    data, found = _build(title, matrix_file=matrix_file, **given)
+    return data, found
+
+
+def _build(
     title: str,
     *,
     indicators: Iterable,
@@ -180,6 +200,7 @@ def build(
     units: Mapping[str, str | None] | None = None,
     names: Mapping[str, Mapping] | None = None,
     item_word: tuple[str, str] = ("item", "items"),
+    indicator_word: tuple[str, str] | None = None,
     about: str | None = None,
     floors: Mapping[tuple[str, str | None], float] | None = None,
     floor_factor: float = rule.FLOOR_FACTOR,
@@ -190,8 +211,10 @@ def build(
     explanations: Iterable[dict] = (),
     notes: Iterable[str] = (),
     breakdowns: Mapping[str, Mapping[str, str]] | None = None,
-) -> dict:
-    """A whole chain, counted, judged, attributed and checked.
+    matrix_file: str | None = None,
+) -> tuple[dict, dict | None]:
+    """A whole chain, counted, judged, attributed and checked, and its matrix where
+    `matrix_file` names one.
 
     - `indicators`: `(id, name, short, unit)` or dicts with those keys.
     - `states`: `state(...)`, in order; `steps`: `step(...)`, one fewer than the states.
@@ -209,7 +232,10 @@ def build(
     - `audience`: "local" (the default: for the people who made it) or "public" (its writer
       says it may be published). The tool checks only that it is one of the two.
     - `breakdowns`: `{item id: {step id or "total": file name}}`.
+    - `matrix_file`: the name of the full matrix, for a local file of items; None for none.
     """
+    if matrix_file is not None and (tier != "items" or audience != "local"):
+        raise ValueError("only a local file of items has a matrix: a public file keeps the listed items only")
     meta = [_indicator(i) for i in indicators]
     ids = [i["id"] for i in meta]
     if len(steps) != len(states) - 1:
@@ -371,8 +397,8 @@ def build(
     shown = qualifying[: max(0, listed)] if tier == "items" else []
     breakdowns = breakdowns or {}
     any_claim = any(s.get("claim") for s in steps)
-    out_items = []
-    for item in shown:
+
+    def record_of(item):
         about_item = names.get(item) or {}
         record = {
             "id": item,
@@ -394,7 +420,9 @@ def build(
             record["bands"][indicator] = [r[4] for r in row]
             if any_claim:
                 record["verdicts"][indicator] = [r[5] for r in row[:-1]]
-        out_items.append(record)
+        return record
+
+    out_items = [record_of(item) for item in shown]
 
     data = {
         "format": fileformat.FORMAT,
@@ -403,6 +431,7 @@ def build(
         "title": title,
         "about": about,
         "item": {"one": item_word[0], "many": item_word[1]},
+        **({"indicator": {"one": indicator_word[0], "many": indicator_word[1]}} if indicator_word else {}),
         "indicators": meta,
         "rule": {
             "floor_factor": floor_factor,
@@ -431,10 +460,18 @@ def build(
         "notes": list(notes),
         "made_by": f"sentier-diagnostics {__version__}",
     }
+    if matrix_file is not None:
+        data["matrix"] = {"file": matrix_file, "items": len(items)}
     errors = fileformat.errors(data)
     if errors:
         raise ValueError("not a diagnostics file: " + "; ".join(errors[:10]))
-    return data
+    if matrix_file is None:
+        return data, None
+    full = matrix.make(data, [record_of(item) for item in sorted(items, key=worst)])
+    errors = matrix.errors(full) or matrix.against(full, data)
+    if errors:
+        raise ValueError("not a matrix of this file: " + "; ".join(errors[:10]))
+    return data, full
 
 
 #: Stands in for the list of items while the rest of a file is written. A file's texts hold

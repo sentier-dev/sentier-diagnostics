@@ -1,10 +1,11 @@
 """The command `sentier-diagnostics`: check, build, summarise and show diagnostics files.
 
-    sentier-diagnostics check FILE [FILE ...]      exit 1 if any file is not one a page shows
-    sentier-diagnostics build DESCRIPTION --out FILE
-    sentier-diagnostics summary FILE
-    sentier-diagnostics page FILE --out FOLDER
-    sentier-diagnostics example --out FOLDER
+sentier-diagnostics check FILE [FILE ...]      exit 1 if any file is not one a page shows
+                                               (a matrix beside a file is checked against it)
+sentier-diagnostics build DESCRIPTION --out FILE
+sentier-diagnostics summary FILE
+sentier-diagnostics page FILE --out FOLDER
+sentier-diagnostics example --out FOLDER
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import __version__, breakdown, chain, example, fileformat, from_tables, page, summary
+from . import __version__, breakdown, chain, example, fileformat, from_tables, matrix, page, summary
 
 
 def check(paths) -> int:
@@ -27,11 +28,15 @@ def check(paths) -> int:
             continue
         if isinstance(data, dict) and data.get("format") == breakdown.FORMAT:
             errors = breakdown.errors(data)
+        elif isinstance(data, dict) and str(data.get("format", "")).startswith(matrix.FAMILY):
+            errors = matrix.errors(data)  # against its file when the file is checked
         else:
             errors = fileformat.errors(data)
             size = Path(path).stat().st_size
             if size > fileformat.MAX_BYTES:
-                errors.append(f"{size} bytes, and a page holds {fileformat.MAX_BYTES} at most: list fewer items")
+                errors.append(
+                    f"{size} bytes, and a page holds {fileformat.MAX_BYTES} at most: list fewer items"
+                )
             if not errors:
                 try:
                     found, absent = page.named_breakdowns(data, Path(path).parent)
@@ -41,6 +46,14 @@ def check(paths) -> int:
                 errors += page.breakdown_errors(data, found)
                 for name in absent:
                     print(f"note {path}: names the breakdown {name}, which is not beside it (not checked)")
+                if data.get("matrix"):
+                    try:
+                        if page.named_matrix(data, Path(path).parent) is None:
+                            print(
+                                f"note {path}: names the matrix {data['matrix']['file']}, which is not beside it (not checked)"
+                            )
+                    except ValueError as error:
+                        errors.append(str(error))
         if errors:
             failed += 1
             print(f"FAIL {path}")
@@ -73,8 +86,13 @@ def main(argv=None) -> int:
         if args.command == "check":
             return check(args.files)
         if args.command == "build":
-            chain.write(from_tables.build(args.description), args.out)
-            print(f"wrote {args.out}")
+            data, full = from_tables.build_with_matrix(args.description)
+            chain.write(data, args.out)
+            if full is None:
+                print(f"wrote {args.out}")
+                return 0
+            beside = matrix.write(full, Path(args.out).parent / data["matrix"]["file"])
+            print(f"wrote {args.out} and its matrix {beside}")
             return 0
         if args.command == "summary":
             print(summary.text(chain.read(args.file)), end="")
@@ -82,9 +100,14 @@ def main(argv=None) -> int:
         if args.command == "page":
             data = chain.read(args.file)
             found, absent = page.named_breakdowns(data, args.file.parent)
-            where = page.write(data, args.out, found)
+            full = page.named_matrix(data, args.file.parent)
+            where = page.write(data, args.out, found, full)
             for name in absent:
                 print(f"note: the breakdown {name} is not beside the file; the page says so")
+            if data.get("matrix") and full is None:
+                print(
+                    f"note: the matrix {data['matrix']['file']} is not beside the file; the page shows the listed items and says so"
+                )
             print(f"wrote {where}")
             return 0
         if args.command == "example":
@@ -93,7 +116,13 @@ def main(argv=None) -> int:
             one = example.wheat_breakdown()
             breakdown.write(one, args.out / "p01-fix-1.json")
             where = page.write(data, args.out / "page", {"p01-fix-1.json": one})
-            print(f"wrote {args.out / chain.FILE} and {where}")
+            local, full = example.build_local()
+            chain.write(local, args.out / "local" / chain.FILE)
+            matrix.write(full, args.out / "local" / local["matrix"]["file"])
+            local_page = page.write(local, args.out / "local" / "page", None, full)
+            print(
+                f"wrote {args.out / chain.FILE} and {where}; the local example and its matrix: {local_page}"
+            )
             return 0
     except (ValueError, OSError) as error:
         print(f"error: {error}", file=sys.stderr)

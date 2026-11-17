@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 
-from . import chain, claims, rule
+from . import chain, claims, fileformat, rule
 
 MOVES_ORDER = [k for k in rule.CLASSES if k in rule.MOVES]
 #: The characters that make Markdown of a text where it stands in a line (GitHub's flavour
@@ -63,6 +63,8 @@ def text(data: Mapping) -> str:
     labels = {s["id"]: md(s["label"]) for s in data["steps"]}
     count = data["items_count"]
     many = md(data["item"]["many"])
+    word = {k: md(v) for k, v in fileformat.indicator_word(data).items()}
+    indicators = word["one"] if len(data["indicators"]) == 1 else word["many"]
     out = [f"# {md(data['title'])}", ""]
     if data["audience"] == "local":
         out += ["**Local file: its writer has not said that it may be published.**", ""]
@@ -77,7 +79,7 @@ def text(data: Mapping) -> str:
                 f"unmatched, {_n(join['ambiguous'])} ambiguous." + (f" {md(join['note'])}" if join["note"] else "")
             )
     out.append(
-        f"{_n(count['all'])} {many}, {len(data['indicators'])} indicators. "
+        f"{_n(count['all'])} {many}, {len(data['indicators'])} {indicators}. "
         + (
             "This file holds counts only."
             if data["tier"] == "counts"
@@ -88,7 +90,7 @@ def text(data: Mapping) -> str:
     out += ["", "## Steps", "",
             "| Step | Kind | Explained | Values moved | Missing before | Missing after | As claimed | Off claim | Not claimed | Claimed, not moved |",
             "|---|---|---|---:|---:|---:|---:|---:|---:|---:|"]  # fmt: skip
-    for number, step in enumerate(data["steps"]):
+    for number, step in enumerate(data["steps"], fileformat.first_step(data)):
         blocks = data["counts"]["steps"][step["id"]].values()
         moved = sum(b["classes"][k] for b in blocks for k in rule.MOVES)
         # a result missing on both sides is missing before and missing after
@@ -112,7 +114,7 @@ def text(data: Mapping) -> str:
                 "residual the chain starts from, not a regression."]
     first, last = md(data["states"][0]["label"]), md(data["states"][-1]["label"])
     out += ["", f"## The whole way: {first} → {last}", ""]
-    header = ["Indicator", *rule.CLASSES, "Largest step", "Spread over steps", "Not attributable",
+    header = [word["one"][:1].upper() + word["one"][1:], *rule.CLASSES, "Largest step", "Spread over steps", "Not attributable",
               "Moved by what nothing explains"]  # fmt: skip
     out.append("| " + " | ".join(header) + " |")
     out.append("|---|" + "---:|" * (len(header) - 1))
@@ -132,7 +134,7 @@ def text(data: Mapping) -> str:
         out.append(f"- {labels[step['id']]}: tolerance {tol['value']:g} ({tol['basis']}); {noise_text(step['noise'], names)}")
     floors = data["rule"]["floors"]
     out.append(
-        f"- Floors: {len(floors)}, one per indicator and reference unit, "
+        f"- Floors: {len(floors)}, one per {word['one']} and reference unit, "
         f"{data['rule']['floor_factor']:g} of the median size in {md(states[data['rule']['floors_from']]['label'])}"
         f" ({sum(1 for f in floors if f['basis'] == 'declared')} declared, "
         f"{sum(1 for f in floors if f['basis'] == 'none')} without a result to take one from)."

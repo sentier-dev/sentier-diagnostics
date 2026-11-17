@@ -7,7 +7,7 @@ The words this repository uses, each in one line. [SPEC.md](SPEC.md) says the re
 - **Reference unit**: the unit an item's result is per (kg, MJ, machine hour). Floors are kept apart per unit.
 - **State**: one set of results. The first may be the published results; the others are builds.
 - **Step**: from one state to the next, with its kind, claim, tolerance and noise.
-- **Step 0**: the reproduction of the published results. The start, never the target.
+- **Step 0**: the reproduction of the published results. The start, never the target. A chain that does not start from the published results has no step 0: its steps are numbered from 1.
 - **Chain**: the states in order and the steps between them.
 - **Pair**: one item in one indicator, before and after a step.
 - **Class**: what a pair is, by one rule: agrees, within noise, differs, beyond 10x, zero reference, zero result, sign change, near zero, missing.
@@ -25,3 +25,7 @@ The words this repository uses, each in one line. [SPEC.md](SPEC.md) says the re
 - **Breakdown**: what one item's result is made of, before and after one step.
 - **Tier**: whether a file lists items (`items`) or holds counts only (`counts`).
 - **Audience**: whether a file's writer says it may be published (`public`) or not (`local`).
+- **Listed items**: the items a file holds, the worst first, up to `listed`.
+- **Matrix**: every item of a local file, listed or not, in a second file the page loads after it has drawn.
+- **Body**: the page as one element a site holds in its own page; its style stays inside it.
+- **Drawer**: the panel of one item, at the right of the page, opened from a row.

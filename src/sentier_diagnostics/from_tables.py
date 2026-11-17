@@ -3,6 +3,7 @@
     {
       "title": "Our database, from the published results to main",
       "item": {"one": "dataset", "many": "datasets"},
+      "indicator": {"one": "impact category", "many": "impact categories"},
       "indicators": [{"id": "ef31:climate", "name": "Climate change", "short": "Climate",
                       "unit": "kg CO2 eq"}],
       "items": "items.csv",
@@ -19,6 +20,10 @@
       "tier": "items"
     }
 
+A local file of items may also name its matrix of every item (`"matrix": "matrix.json"`,
+with `"audience": "local"`): `build_with_matrix` then gives it, and `sentier-diagnostics
+build` writes it beside the file.
+
 Paths are relative to the description. A step's `noise` is
 `{"states": ["a", "b"]}` (two states of this chain that are builds of one state) or
 `{"tables": [{"label": "...", "results": "a.csv"}, {"label": "...", "results": "b.csv"}]}`.
@@ -32,8 +37,8 @@ from pathlib import Path
 
 from . import chain, claims, fileformat, tables
 
-KEYS = {"title", "about", "item", "indicators", "items", "states", "steps", "listed", "tier", "audience", "claim_lists",
-        "explanations", "notes", "floor_factor"}  # fmt: skip
+KEYS = {"title", "about", "item", "indicator", "indicators", "items", "states", "steps", "listed", "tier", "audience",
+        "claim_lists", "explanations", "notes", "floor_factor", "matrix"}  # fmt: skip
 
 
 def _origin(said):
@@ -71,13 +76,29 @@ def description_errors(spec) -> list[str]:
         ("listed", lambda v: isinstance(v, int) and not isinstance(v, bool) and v >= 0, "a whole number"),
         ("claim_lists", lambda v: isinstance(v, bool), "true or false"),
         ("floor_factor", _number, "a number"),
-        ("item", lambda v: _table(v, ("one", "many")) and all(map(_text, v.values())), "{one, many} in words"),
+        (
+            "item",
+            lambda v: _table(v, ("one", "many")) and all(map(_text, v.values())),
+            "{one, many} in words",
+        ),
+        (
+            "indicator",
+            lambda v: _table(v, ("one", "many")) and all(map(_text, v.values())),
+            "{one, many} in words",
+        ),
         ("notes", lambda v: isinstance(v, list) and all(map(_text, v)), "a list of texts"),
+        (
+            "matrix",
+            lambda v: isinstance(v, str) and fileformat.FILE_NAME.fullmatch(v) is not None,
+            "the plain name of a .json file",
+        ),
     ):
         if key in spec and spec[key] is not None and not check(spec[key]):
             found.append(f"`{key}` is {says}")
     indicators = spec.get("indicators")
-    if not (isinstance(indicators, list) and indicators and all(_table(i, ("id", "name")) for i in indicators)):
+    if not (
+        isinstance(indicators, list) and indicators and all(_table(i, ("id", "name")) for i in indicators)
+    ):
         found.append("`indicators` is a list of {id, name, short, unit}")
     states = spec.get("states")
     if not (isinstance(states, list) and len(states) >= 2
@@ -94,7 +115,10 @@ def description_errors(spec) -> list[str]:
         if said is not None:
             if not (_table(said, ("text",)) and _text(said["text"])):
                 found.append(f"{where}: a claim says what it claims (`text`)")
-            elif not (isinstance(said.get("scope", []), list) and all(isinstance(e, dict) for e in said.get("scope", []))):
+            elif not (
+                isinstance(said.get("scope", []), list)
+                and all(isinstance(e, dict) for e in said.get("scope", []))
+            ):
                 found.append(f"{where}: a claim's `scope` is a list of entries")
             elif said.get("by") is not None and not isinstance(said["by"], dict):
                 found.append(f"{where}: a claim's `by` is {{kind, name}}")
@@ -106,11 +130,17 @@ def description_errors(spec) -> list[str]:
             pair = said.get("states") if isinstance(said, dict) else None
             tables_ = said.get("tables") if isinstance(said, dict) else None
             if pair is not None:
-                if not (isinstance(pair, list) and len(pair) == 2 and all(isinstance(s, str) and s in known for s in pair)):
+                if not (
+                    isinstance(pair, list)
+                    and len(pair) == 2
+                    and all(isinstance(s, str) and s in known for s in pair)
+                ):
                     found.append(f"{where}: a noise's `states` names two states of this chain")
             elif not (isinstance(tables_, list) and len(tables_) == 2
                       and all(_table(t, ("label", "results")) and _text(t["results"]) for t in tables_)):  # fmt: skip
-                found.append(f"{where}: a noise is {{states: [a, b]}} or {{tables: [{{label, results}}, {{label, results}}]}}")
+                found.append(
+                    f"{where}: a noise is {{states: [a, b]}} or {{tables: [{{label, results}}, {{label, results}}]}}"
+                )
     explanations = spec.get("explanations", [])
     if not (isinstance(explanations, list) and all(_table(e, ("text",)) for e in explanations)):
         found.append("`explanations` is a list of {text, by, ...}")
@@ -120,6 +150,12 @@ def description_errors(spec) -> list[str]:
 def build(path: Path) -> dict:
     """The diagnostics file a description and its tables give, checked. Every mistake is a
     ValueError that says what is wrong (`tables.TableError` for a table)."""
+    return build_with_matrix(path)[0]
+
+
+def build_with_matrix(path: Path) -> tuple[dict, dict | None]:
+    """The diagnostics file, and its matrix of every item where the description names one
+    (None where it does not). Only a local file of items may name one."""
     path = Path(path)
     spec = fileformat.load_json(path)
     errors = description_errors(spec)
@@ -160,8 +196,13 @@ def build(path: Path) -> dict:
             found_claim = claims.claim(
                 said_claim["text"],
                 [
-                    claims.scope(e.get("indicators", "*"), e.get("items", "*"), e.get("direction", "any"),
-                                 e.get("largest"), e.get("expect", claims.MAY))
+                    claims.scope(
+                        e.get("indicators", "*"),
+                        e.get("items", "*"),
+                        e.get("direction", "any"),
+                        e.get("largest"),
+                        e.get("expect", claims.MAY),
+                    )
                     for e in said_claim.get("scope", [])
                 ],  # fmt: skip
                 by=_origin(said_claim.get("by")),
@@ -186,29 +227,53 @@ def build(path: Path) -> dict:
         said_tol = one.get("tolerance")
         steps.append(
             chain.step(
-                one["id"], one["label"], kind=one["kind"], explained=one.get("explained", True),
-                about=one.get("about"), link=one.get("link"), claim=found_claim,
+                one["id"],
+                one["label"],
+                kind=one["kind"],
+                explained=one.get("explained", True),
+                about=one.get("about"),
+                link=one.get("link"),
+                claim=found_claim,
                 tolerance=chain.tolerance(said_tol["value"], said_tol.get("basis"), said_tol.get("note"))
-                if said_tol else None,
+                if said_tol
+                else None,
                 noise=found_noise,
             )  # fmt: skip
         )
     explanations = [
         chain.explanation(
-            e["text"], _origin(e.get("by")), step=e.get("step"), indicator=e.get("indicator"),
-            item=e.get("item"), link=e.get("link"), doc=e.get("doc"), not_checked=e.get("not_checked"),
+            e["text"],
+            _origin(e.get("by")),
+            step=e.get("step"),
+            indicator=e.get("indicator"),
+            item=e.get("item"),
+            link=e.get("link"),
+            doc=e.get("doc"),
+            not_checked=e.get("not_checked"),
             finding=e.get("finding", "reason"),
         )  # fmt: skip
         for e in spec.get("explanations", [])
     ]
     word = spec.get("item", {"one": "item", "many": "items"})
-    return chain.build(
-        spec["title"],
+    named = spec.get("matrix")
+    if named is not None and (
+        spec.get("audience", "local") != "local" or spec.get("tier", "items") != "items"
+    ):
+        raise ValueError(
+            f"{path}: only a local file of items names a matrix; a public file keeps the listed items only"
+        )
+    given = dict(
         about=spec.get("about"),
         indicators=indicators,
         states=[
-            chain.state(s["id"], s["label"], kind=s.get("kind", "build"), about=s.get("about"),
-                        identity=s.get("identity"), join=s.get("join"))  # fmt: skip
+            chain.state(
+                s["id"],
+                s["label"],
+                kind=s.get("kind", "build"),
+                about=s.get("about"),
+                identity=s.get("identity"),
+                join=s.get("join"),
+            )  # fmt: skip
             for s in spec["states"]
         ],
         steps=steps,
@@ -216,6 +281,7 @@ def build(path: Path) -> dict:
         units=units,
         names=items,
         item_word=(word["one"], word["many"]),
+        indicator_word=(spec["indicator"]["one"], spec["indicator"]["many"]) if spec.get("indicator") else None,
         listed=spec.get("listed", 200),
         tier=spec.get("tier", "items"),
         audience=spec.get("audience", "local"),
@@ -224,3 +290,6 @@ def build(path: Path) -> dict:
         explanations=explanations,
         notes=spec.get("notes", []),
     )
+    if named is None:
+        return chain.build(spec["title"], **given), None
+    return chain.build_with_matrix(spec["title"], matrix_file=named, **given)

@@ -1,7 +1,7 @@
 // A small stand-in for the part of the DOM the page script uses, so that the page can be
 // drawn under Node without a browser or a package. Elements hold children, attributes and
-// listeners; text nodes hold text. `page(data, breakdowns)` runs diagnostics.js against
-// the ids of index.html and returns what it drew.
+// listeners; text nodes hold text. `page(data, breakdowns)` builds the elements of body.html
+// that carry `data-sd`, runs diagnostics.js against them and returns what it drew.
 'use strict';
 
 const fs = require('node:fs');
@@ -9,6 +9,17 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const PAGE = path.join(__dirname, '..', '..', 'src', 'sentier_diagnostics', 'page');
+
+// the selectors the script asks for: [attr], [attr="value"], tag[attr], tag[attr="value"]
+function matches(node, selector) {
+  const one = /^([a-z0-9]*)\[([a-z-]+)(?:="([^"]*)")?\]$/.exec(selector);
+  if (!one) throw new Error('the stand-in does not know the selector ' + selector);
+  const [, tag, key, value] = one;
+  if (node.text !== undefined) return false;
+  if (tag && node.tagName !== tag.toUpperCase()) return false;
+  if (!(key in node.attributes)) return false;
+  return value === undefined || node.attributes[key] === value;
+}
 
 class FakeNode {
   constructor(tag, text) {
@@ -22,7 +33,7 @@ class FakeNode {
     this.className = '';
     this.value = '';
     this.disabled = false;
-    this.onclick = null;
+    this.focused = false;
   }
 
   get firstChild() { return this.childNodes[0] || null; }
@@ -60,23 +71,35 @@ class FakeNode {
 
   getAttribute(key) { return key in this.attributes ? this.attributes[key] : null; }
 
+  removeAttribute(key) { delete this.attributes[key]; }
+
   addEventListener(type, listener) { (this.listeners[type] = this.listeners[type] || []).push(listener); }
 
-  dispatch(type, event) { (this.listeners[type] || []).forEach((listener) => listener({ target: this, ...event })); }
+  // an event on this node, passed up to its parents as a browser does
+  dispatch(type, event) {
+    const full = { target: this, ...event };
+    for (let node = this; node; node = node.parentNode) (node.listeners[type] || []).forEach((listener) => listener(full));
+  }
 
   closest(selector) {
-    if (selector !== 'tr[data-item]') throw new Error('the stand-in knows tr[data-item] only');
-    for (let node = this; node; node = node.parentNode) {
-      if (node.tagName === 'TR' && node.getAttribute('data-item') !== null) return node;
-    }
+    for (let node = this; node; node = node.parentNode) if (matches(node, selector)) return node;
     return null;
   }
 
+  querySelectorAll(selector) { return this.all().slice(1).filter((n) => matches(n, selector)); }
+
+  querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
+
+  contains(other) { for (let n = other; n; n = n.parentNode) if (n === this) return true; return false; }
+
+  focus() { this.focused = true; }
+
   scrollIntoView() {}
 
-  // every text a reader sees: text nodes and tooltips, in order
+  // every text a reader sees: text nodes and tooltips, in order; nothing under a hidden node
   seen() {
     if (this.text !== undefined) return [this.text];
+    if (this.hidden) return [];
     const own = this.attributes.title ? [this.attributes.title] : [];
     return own.concat(...this.childNodes.map((c) => c.seen()));
   }
@@ -85,44 +108,80 @@ class FakeNode {
   all() { return this.text !== undefined ? [] : [this].concat(...this.childNodes.map((c) => c.all())); }
 }
 
-function page(data, breakdowns) {
-  const html = fs.readFileSync(path.join(PAGE, 'index.html'), 'utf8');
-  const byId = {};
+// the root of body.html and every element in it that carries `data-sd` or `data-sd-word`, each a child of the
+// root; the data scripts as the Python writes them where `scripts` holds them
+function body(scripts) {
+  const html = fs.readFileSync(path.join(PAGE, 'body.html'), 'utf8');
+  const root = new FakeNode('div');
+  root.setAttribute('class', 'sentier-diagnostics');
+  root.setAttribute('data-sentier-diagnostics', '');
   for (const [whole, tag] of html.matchAll(/<([a-z0-9]+)\b[^>]*>/g)) {
-    const id = /\sid="([^"]+)"/.exec(whole);
-    if (!id) continue;
-    byId[id[1]] = new FakeNode(tag);
-    byId[id[1]].attributes.id = id[1];
-    byId[id[1]].hidden = /\shidden[\s>=]/.test(whole);
+    const word = /\sdata-sd-word="([^"]+)"/.exec(whole);
+    if (word) { const span = new FakeNode(tag); span.setAttribute('data-sd-word', word[1]); root.appendChild(span); continue; }
+    const name = /\sdata-sd="([^"]+)"/.exec(whole);
+    if (!name) continue;
+    const node = new FakeNode(tag);
+    node.setAttribute('data-sd', name[1]);
+    node.hidden = /\shidden[\s>=]/.test(whole);
+    root.appendChild(node);
   }
+  for (const [name, value] of Object.entries(scripts || {})) {
+    const node = new FakeNode('script');
+    node.setAttribute('type', 'application/json');
+    node.setAttribute('data-sd', name);
+    node.textContent = JSON.stringify(value);
+    root.appendChild(node);
+  }
+  return root;
+}
+
+// `options`: {standalone, attributes, globals, fetch, protocol, scripts}
+function page(data, breakdowns, options) {
+  options = options || {};
+  const scripts = options.scripts || {};
+  if (data !== undefined && !options.globals) scripts.data = data;
+  if (breakdowns && !options.globals) scripts.breakdowns = breakdowns;
+  const root = body(scripts);
+  if (options.standalone) root.setAttribute('data-sd-standalone', '');
+  for (const [key, value] of Object.entries(options.attributes || {})) root.setAttribute(key, value);
+  const head = new FakeNode('head');
   const listeners = {};
   const document = {
     title: '',
     readyState: 'complete',
+    head,
+    activeElement: null,
     createElement: (tag) => new FakeNode(tag),
     createTextNode: (text) => new FakeNode(null, String(text)),
-    getElementById: (id) => byId[id] || null,
+    querySelectorAll: (selector) => (matches(root, selector) ? [root] : []),
     addEventListener: () => {},
   };
+  root.ownerDocument = document;
   const context = {
     document,
-    location: { hash: '', search: '', pathname: '/index.html', protocol: 'file:' },
-    history: { replaceState: () => {} },
+    location: { hash: '', search: '', pathname: '/index.html', protocol: options.protocol || 'file:' },
+    history: { replaceState: () => { context.location.hash = ''; } },
     addEventListener: (type, listener) => { (listeners[type] = listeners[type] || []).push(listener); },
     URLSearchParams,
     FileReader: class {},
-    fetch: () => Promise.reject(new Error('no network')),
-    SENTIER_DIAGNOSTICS: data,
-    SENTIER_DIAGNOSTICS_BREAKDOWNS: breakdowns || {},
+    fetch: options.fetch || (() => Promise.reject(new Error('no network'))),
+    ...(options.globals || {}),
   };
+  if (options.globals && data !== undefined) context.SENTIER_DIAGNOSTICS = data;
+  if (options.globals && breakdowns) context.SENTIER_DIAGNOSTICS_BREAKDOWNS = breakdowns;
   context.window = context;
   vm.createContext(context);
   vm.runInContext(fs.readFileSync(path.join(PAGE, 'diagnostics.js'), 'utf8'), context, { filename: 'diagnostics.js' });
+  const byName = {};
+  root.childNodes.forEach((n) => { if (n.getAttribute('data-sd')) byName[n.getAttribute('data-sd')] = n; });
   return {
-    byId,
+    root,
+    byId: byName, // by the name in data-sd
+    head,
     document,
-    // the text of everything drawn, tooltips included
-    text: () => Object.values(byId).filter((n) => !n.hidden).map((n) => n.seen().join(' ')).join('\n'),
+    context,
+    // the text of everything drawn and not hidden, tooltips included
+    text: () => root.childNodes.filter((n) => !n.hidden && n.tagName !== 'SCRIPT').map((n) => n.seen().join(' ')).join('\n'),
     open: (hash) => {
       context.location.hash = '#' + hash;
       (listeners.hashchange || []).forEach((listener) => listener({}));
@@ -130,4 +189,4 @@ function page(data, breakdowns) {
   };
 }
 
-module.exports = { FakeNode, page };
+module.exports = { FakeNode, page, body };

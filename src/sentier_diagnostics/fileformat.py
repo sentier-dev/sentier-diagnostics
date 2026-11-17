@@ -39,6 +39,8 @@ TOLERANCE_BASES = ("default", "declared", "measured", "published rounding")
 FLOOR_BASES = ("median", "declared", "none")
 ORIGIN_KINDS = ("person", "code", "model")
 TOTAL = "total"
+#: Keys a file may leave out; each is null where it says nothing.
+OPTIONAL_KEYS = {"matrix", "indicator"}
 
 #: The largest file a page reads: it holds the whole file.
 MAX_BYTES = 12 * 1024 * 1024
@@ -150,6 +152,27 @@ def is_count(value) -> bool:
 
 def is_share(value) -> bool:
     return rule.is_value(value) and value >= 0
+
+
+def indicator_word(data: Mapping) -> dict:
+    """What the file calls an indicator, {one, many}: its own word, or "indicator".
+
+    >>> indicator_word({"indicator": {"one": "impact category", "many": "impact categories"}})["many"]
+    'impact categories'
+    >>> indicator_word({})["one"]
+    'indicator'
+    """
+    return data.get("indicator") or {"one": "indicator", "many": "indicators"}
+
+
+def first_step(data: Mapping) -> int:
+    """The number of the first step: 0 where the chain starts from the published results (that
+    step checks they are reproduced), 1 otherwise.
+
+    >>> first_step({"states": [{"kind": "published"}]}), first_step({"states": [{"kind": "build"}]})
+    (0, 1)
+    """
+    return 0 if data["states"][0]["kind"] == "published" else 1
 
 
 def is_link(value) -> bool:
@@ -795,7 +818,7 @@ def _errors(data, found: list[str]) -> list[str]:
         if isinstance(said, str) and said.startswith(FAMILY):
             return [f"format {said!r}: this reader knows {FORMAT} only"]
         return [f"not a diagnostics file of format {FORMAT}"]
-    found += [f"a key this format does not know: {key}" for key in sorted(set(data) - KEYS)]
+    found += [f"a key this format does not know: {key}" for key in sorted(set(data) - KEYS - OPTIONAL_KEYS)]
     found += [f"a key this format requires: {key}" for key in sorted(KEYS - set(data))]
     if found:
         return found
@@ -810,6 +833,10 @@ def _errors(data, found: list[str]) -> list[str]:
     if not (isinstance(item, dict) and set(item) == {"one", "many"}
             and all(is_text(w, 30) for w in item.values())):  # fmt: skip
         found.append("`item` is not {one, many}")
+    word = data.get("indicator")
+    if word is not None and not (isinstance(word, dict) and set(word) == {"one", "many"}
+                                 and all(is_text(w, 30) for w in word.values())):  # fmt: skip
+        found.append("`indicator` is not {one, many}, or null")
     if not is_text(data["made_by"], 60):
         found.append("`made_by` is not a short text")
     notes = data["notes"]
@@ -831,4 +858,21 @@ def _errors(data, found: list[str]) -> list[str]:
     _attribution(data, found, indicators, steps, blocks)
     items = _items(data, found, indicators, states, steps, floors, tier, blocks)
     _explanations(data, found, indicators, steps, set(items), tier)
+    _matrix(data, found)
     return found
+
+
+def _matrix(data, found) -> None:
+    """A matrix holds every item with its results: only a local file of items may name one."""
+    named = data.get("matrix")
+    if named is None:
+        return
+    if not (isinstance(named, dict) and set(named) == {"file", "items"} and isinstance(named["file"], str)
+            and FILE_NAME.fullmatch(named["file"]) and is_count(named["items"])):  # fmt: skip
+        found.append("`matrix` is not {file, items} with a file name, or null")
+        return
+    if data["tier"] != "items" or data["audience"] != "local":
+        found.append("only a local file of items names a matrix: a public file keeps the listed items only")
+    count = data["items_count"]
+    if isinstance(count, dict) and named["items"] != count.get("all"):
+        found.append(f"`matrix` says {named['items']} items, the file counts {count.get('all')}")
