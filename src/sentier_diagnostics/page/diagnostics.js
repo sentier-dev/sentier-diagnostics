@@ -150,7 +150,8 @@
       return '1e' + String(Math.round(orders)).replace('-', '−');
     }
     var d = r - 1;
-    if (d !== 0 && Math.abs(d) < 1e-3) return '1 ' + (d > 0 ? '+ ' : '− ') + formatNumber(Math.abs(d));
+    // chosen by d as it is written: 1.001 − 1 is 0.000999999999999889 in floats, and reads 1.001
+    if (d !== 0 && Number(Math.abs(d).toPrecision(4)) < 1e-3) return '1 ' + (d > 0 ? '+ ' : '− ') + formatNumber(Math.abs(d));
     return formatNumber(r);
   }
 

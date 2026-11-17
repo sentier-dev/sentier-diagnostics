@@ -152,6 +152,9 @@ test('a number that rounds across a threshold of its style is written as the num
   same(page.shareText, [99.99996], [100]);
   same(page.shareText, [0.000999], [0.001]);
   same(page.ratioShort, [1, 0.009996], [1, 0.01]);
+  // 1.001 − 1 is 0.000999999999999889 in floats: the ratio still reads 1.001 (review of 9a11c09)
+  same(page.ratioText, [1, 1.001], [1, 1.0010001]);
+  same(page.ratioText, [1, 0.99900001], [1, 0.999]);
   same(page.ratioShort, [1, 999.6], [1, 1000]);
   const all = (v) => ({ p10: v, median: v, p90: v });
   assert.deepEqual(page.quantileTexts(all(0.0099996)), page.quantileTexts(all(0.01)));
