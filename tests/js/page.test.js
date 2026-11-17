@@ -1744,8 +1744,8 @@ test('a host that answers the page\'s reading of its colours sets off no other r
   const first = dom.page(example(), undefined, { globals: { ...browserStyles(vars), MutationObserver: observerKind(observers), requestAnimationFrame: (f) => frames.push(f) } });
   // as a browser runs frames; a page that kept asking for one would never let this end
   const flush = () => { for (let n = 0; n < 50 && frames.length; n++) frames.shift()(); return frames.length; };
-  const loaded = [];
-  first.document.addEventListener = (type, react, capture) => { if (type === 'load' && capture) loaded.push(react); };
+  // the loads the document hears on their way down (capture), for every page of the window
+  const loaded = () => (first.documentListeners.load || []).filter(([, capture]) => capture).map(([react]) => react);
   const around = new dom.FakeNode('main');
   around.nodeType = 1;
   const themed = dom.body({ data: example() });
@@ -1786,7 +1786,8 @@ test('a host that answers the page\'s reading of its colours sets off no other r
   // a stylesheet that finished loading (a host that swapped its theme's sheet) changes no
   // element: the load is caught on its way down the document, and looked at
   vars['--ink'] = '#1d232a';
-  loaded.forEach((react) => react({ type: 'load' }));
+  assert.equal(loaded().length, 1, 'one listener for the loads, whatever the number of pages');
+  loaded().forEach((react) => react({ type: 'load' }));
   flush();
   assert.equal(themed.getAttribute('data-sd-scheme'), null);
   assert.equal(probes, 6);
@@ -1951,7 +1952,7 @@ test('a page in the document takes its key when it is mounted, file or not; one 
     return root;
   };
   const empty = mount(null, true); // a host that hands it its file later
-  const held = () => Object.keys(drawn.context.SENTIER_DIAGNOSTICS_KEYS).map((k) => [k, drawn.context.SENTIER_DIAGNOSTICS_KEYS[k].root]);
+  const held = () => Object.keys(drawn.context.SENTIER_DIAGNOSTICS_KEYS).map((k) => [k, drawn.context.SENTIER_DIAGNOSTICS_KEYS[k].deref().root]);
   assert.deepEqual(held(), [['sd', empty]]);
   const later = mount(example(), false);
   later.isConnected = true;
@@ -2245,4 +2246,288 @@ test('a breakdown is held to its item\'s results, whether it came with the page 
   right.open('sd.item=p01');
   await new Promise((done) => setImmediate(done));
   assert.match(body(right), /Dinitrogen monoxide, field/);
+});
+
+// ------------------------------------------------------------------ issue 40: what a page leaves behind
+
+// a full collection, as the engine runs one when memory is short; a WeakRef made or read in
+// a task holds what it names to the end of that task, so the tests collect between tasks
+const vm = require('node:vm');
+require('node:v8').setFlagsFromString('--expose-gc');
+const collect = vm.runInNewContext('gc');
+const nextTask = () => new Promise((resolve) => setImmediate(resolve));
+const collected = async (refs) => {
+  for (let n = 0; n < 3; n++) { await nextTask(); collect(); }
+  return refs.map((ref) => ref.deref() === undefined);
+};
+// the reader's colour scheme, as matchMedia gives it: every query a list of its own, each
+// with the listeners put on it
+const schemeReader = (lists) => () => {
+  const list = { matches: false, held: [] };
+  list.addEventListener = (type, react) => list.held.push([type, react]);
+  list.removeEventListener = (type, react) => { const at = list.held.findIndex(([t, r]) => t === type && r === react); if (at >= 0) list.held.splice(at, 1); };
+  lists.push(list);
+  return list;
+};
+const listening = (lists) => lists.reduce((n, list) => n + list.held.length, 0);
+// a made-up page with its file of fixes (SPEC 16.8), as tests/test_fixes_page.py writes them
+const fixesPage = () => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'fixes_page.json'), 'utf8')).pages['fixes that need others'];
+
+test('a page a host removed without unmount() is let go once nothing holds it, and then nothing listens (issue 40)', async () => {
+  const observers = [], lists = [];
+  const drawn = dom.page(undefined, undefined, { attributes: { 'data-sentier-diagnostics': 'manual' }, globals: { MutationObserver: observerKind(observers), matchMedia: schemeReader(lists) } });
+  const { mount } = drawn.context.SentierDiagnostics;
+  // pages as a host leaves them: mounted, used, taken out of the document, never unmounted,
+  // and dropped; only a weak reference to each is kept here
+  const removed = (() => {
+    const refs = [];
+    const put = (scripts, attributes) => {
+      const root = dom.body(scripts);
+      for (const [name, value] of Object.entries(attributes || {})) root.setAttribute(name, value);
+      root.ownerDocument = drawn.document;
+      mount(root);
+      refs.push(new WeakRef(root));
+      return root;
+    };
+    const open = put({ data: example() }); // "sd": its drawer open
+    drawn.open('sd.item=p01');
+    assert.equal(open.querySelector('[data-sd="item"]').hidden, false);
+    put({ data: example() }, { 'data-sd-key': 'left' }); // holds the key "left"
+    const waiter = put({ data: example() }, { 'data-sd-key': 'left' }); // waits for it
+    assert.match(waiter.querySelector('[data-sd="load-error"]').textContent, /Another page in the document has the key/);
+    // its file of fixes still coming, and one whose file came: fixes.js stays in the head too
+    const fp = fixesPage();
+    drawn.context.SENTIER_DIAGNOSTICS_MATRIX = fp.matrix;
+    put({ data: fp.data }, { 'data-sd-fixes': 'fixes.js' });
+    const fixed = put({ data: fp.data }, { 'data-sd-fixes': 'fixes.js' });
+    delete drawn.context.SENTIER_DIAGNOSTICS_MATRIX;
+    const fixScripts = drawn.head.querySelectorAll('script[src]').filter((script) => script.getAttribute('src') === 'fixes.js');
+    assert.equal(fixScripts.length, 2);
+    drawn.context.SENTIER_DIAGNOSTICS_FIXES_FILES = [{ src: 'fixes.js', fixes: fp.fixes }];
+    fixScripts[1].onload();
+    assert.match(fixed.querySelector('[data-sd="fixes-said"]').textContent, /^5 fixes/);
+    delete drawn.context.SENTIER_DIAGNOSTICS_FIXES_FILES;
+    put({ data: local() }, { 'data-sd-matrix': 'matrix.js' }); // its matrix still coming
+    put({ data: local() }, { 'data-sd-matrix': 'matrix.js' }); // its matrix come
+    const scripts = drawn.head.querySelectorAll('script[src]').filter((script) => script.getAttribute('src') === 'matrix.js');
+    assert.equal(scripts.length, 2);
+    drawn.context.SENTIER_DIAGNOSTICS_MATRIX = full();
+    scripts[1].onload();
+    delete drawn.context.SENTIER_DIAGNOSTICS_MATRIX;
+    refs.forEach((ref) => { ref.deref().isConnected = false; });
+    observers.forEach((o) => o.react([{ type: 'childList' }])); // the document changed: they left
+    return refs;
+  })();
+  assert.equal(observers.length, 1, 'one observer for every page');
+  assert.equal(drawn.listeners.hashchange.length, 1, 'one listener on the window for every page');
+  assert.deepEqual(await collected(removed), removed.map(() => true), 'every page removed and dropped is collected');
+  // once they are gone, the next event finds no page, and the window and the document are left alone
+  drawn.changed();
+  assert.equal(drawn.listeners.hashchange.length, 0);
+  assert.deepEqual(observers[0].watched, [], 'the document is watched no more');
+  assert.equal((drawn.documentListeners.load || []).length, 0);
+  assert.equal(listening(lists), 0, 'nor the reader\'s colour scheme');
+  assert.ok(drawn.context.SENTIER_DIAGNOSTICS_WAITERS.every((ref) => ref.deref() === undefined), 'no page is held waiting');
+  // the scripts left in the head call nothing
+  drawn.head.querySelectorAll('script[src]').forEach((script) => { assert.doesNotThrow(() => { script.onload(); script.onerror(); }); });
+  // and a page mounted after takes the first key, and the window's listeners again
+  const next = dom.body({ data: example() });
+  next.ownerDocument = drawn.document;
+  drawn.context.location.hash = '#sd.item=p02';
+  const api = mount(next);
+  assert.equal(next.querySelector('[data-sd="item"]').hidden, false);
+  assert.equal(drawn.listeners.hashchange.length, 1);
+  assert.ok(observers[0].watched.some(([node]) => node === drawn.document));
+  // the next page that gives a key up takes a page collected while it waited off the list
+  api.unmount();
+  assert.equal(drawn.context.SENTIER_DIAGNOSTICS_WAITERS.length, 0);
+});
+
+test('a page out of the document that its host still holds is kept, and works when it is put back (issue 40)', async () => {
+  const observers = [];
+  const drawn = dom.page(undefined, undefined, { attributes: { 'data-sentier-diagnostics': 'manual' }, globals: { MutationObserver: observerKind(observers) } });
+  const tab = dom.body({ data: example() }); // a hidden tab's page, held by the host
+  tab.ownerDocument = drawn.document;
+  drawn.context.SentierDiagnostics.mount(tab);
+  tab.isConnected = false;
+  observers[0].react([{ type: 'childList' }]);
+  await collected([]);
+  tab.isConnected = true; // put back
+  observers[0].react([{ type: 'childList' }]);
+  drawn.open('sd.item=p01');
+  assert.equal(tab.querySelector('[data-sd="item"]').hidden, false, 'it still answers its address');
+});
+
+test('the pages of a window share one observer, one listener of each kind and one look a frame, however many are removed (issue 40)', () => {
+  const observers = [], lists = [], frames = [];
+  const drawn = dom.page(undefined, undefined, { attributes: { 'data-sentier-diagnostics': 'manual' }, globals: { ...browserStyles({ '--ink': '#1d232a' }), MutationObserver: observerKind(observers), matchMedia: schemeReader(lists), requestAnimationFrame: (f) => frames.push(f) } });
+  const roots = [];
+  for (let n = 0; n < 50; n++) {
+    const root = dom.body({ data: example() });
+    root.ownerDocument = drawn.document;
+    drawn.context.SentierDiagnostics.mount(root);
+    roots.push(root);
+  }
+  roots.slice(1).forEach((root) => { root.isConnected = false; }); // 49 removed, held here
+  assert.equal(observers.length, 1);
+  assert.equal(observers[0].watched.length, 1, 'the document watched once');
+  assert.equal(drawn.listeners.hashchange.length, 1);
+  assert.equal(drawn.documentListeners.load.length, 1);
+  assert.equal(listening(lists), 1);
+  for (let n = 0; n < 100; n++) observers[0].react([{ type: 'attributes' }]);
+  assert.equal(frames.length, 1, 'a hundred changes, one look for every page');
+});
+
+test('without WeakRef a removed page is held until unmount(), as before, and works the same (issue 40)', async () => {
+  const observers = [];
+  const drawn = dom.page(undefined, undefined, { attributes: { 'data-sentier-diagnostics': 'manual' }, globals: { WeakRef: undefined, MutationObserver: observerKind(observers) } });
+  const { mount } = drawn.context.SentierDiagnostics;
+  let api;
+  const refs = (() => {
+    const root = dom.body({ data: example() });
+    root.ownerDocument = drawn.document;
+    api = mount(root);
+    root.isConnected = false;
+    observers[0].react([{ type: 'childList' }]);
+    return [new WeakRef(root)];
+  })();
+  assert.deepEqual(await collected(refs), [false], 'held: the browser cannot let it go');
+  // a page drawn in its place takes the key it left, and its address opens it
+  const next = dom.body({ data: example() });
+  next.ownerDocument = drawn.document;
+  drawn.context.location.hash = '#sd.item=p01';
+  mount(next);
+  assert.equal(next.querySelector('[data-sd="item"]').hidden, false);
+  api.unmount();
+  api = null;
+  assert.deepEqual(await collected(refs), [true], 'unmounted, it is let go');
+});
+
+test('a page that leaves wakes a page another copy of the script mounted, which its own listeners may not tell (issue 40)', () => {
+  // two copies of the script in one window, each with its own listeners; the holder sits in
+  // a shadow root only the first copy watches
+  const observers = [];
+  const drawn = dom.page(undefined, undefined, { attributes: { 'data-sentier-diagnostics': 'manual' }, globals: { MutationObserver: observerKind(observers) } });
+  const first = drawn.context.SentierDiagnostics;
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'sentier_diagnostics', 'page', 'diagnostics.js'), 'utf8'), drawn.context);
+  const second = drawn.context.SentierDiagnostics;
+  assert.notEqual(first, second);
+  const named = (copy) => {
+    const root = dom.body({ data: example() });
+    root.setAttribute('data-sd-key', 'left');
+    root.ownerDocument = drawn.document;
+    copy.mount(root);
+    return root;
+  };
+  const holder = named(first);
+  const waiter = named(second);
+  assert.equal(observers.length, 2, 'an observer for each copy');
+  assert.match(waiter.querySelector('[data-sd="load-error"]').textContent, /Another page in the document has the key/);
+  holder.isConnected = false;
+  observers[0].react([{ type: 'childList' }]); // only the first copy's observer sees it leave
+  assert.equal(waiter.querySelector('[data-sd="load-error"]').textContent, '');
+  assert.equal(waiter.querySelector('[data-sd="content"]').hidden, false, 'drawn once the holder is gone');
+});
+
+test('a page moved with its drawer open shows it again where it now stands (issue 40)', () => {
+  const setUp = (narrow, kinds, standalone) => {
+    const observers = [];
+    const drawn = dom.page(example(), undefined, { standalone, globals: { MutationObserver: observerKind(observers) } });
+    const drawer = drawn.byId.item;
+    const calls = [];
+    const state = { popover: false, modal: false };
+    // as a browser: nothing out of the document is shown above, and a dialog open is not shown modal
+    const out = () => drawn.root.isConnected === false;
+    if (kinds.includes('popover')) {
+      drawer.showPopover = () => { if (out()) throw new Error('InvalidStateError'); calls.push('popover'); state.popover = true; };
+      drawer.hidePopover = () => { calls.push('hide'); state.popover = false; };
+    }
+    if (kinds.includes('dialog')) {
+      drawer.showModal = () => { if (drawer.open || out()) throw new Error('InvalidStateError'); calls.push('modal'); drawer.open = true; state.modal = true; };
+      drawer.close = () => { calls.push('close'); drawer.open = false; state.modal = false; };
+    }
+    drawer.matches = (selector) => (selector === ':popover-open' && state.popover) || (selector === ':modal' && state.modal);
+    drawn.context.matchMedia = (query) => ({ matches: narrow && /max-width/.test(query) });
+    // the host moves the page: the browser no longer draws the drawer above the rest (a popover
+    // is hidden; a modal dialog stays open, no longer modal), and the change reaches the page
+    const move = () => { state.popover = false; state.modal = false; observers.forEach((o) => o.react([{ type: 'childList' }])); };
+    return { drawn, drawer, calls, state, move, observers };
+  };
+  const wide = setUp(false, ['popover', 'dialog']);
+  wide.drawn.open('sd.item=p01');
+  assert.deepEqual(wide.calls, ['popover']);
+  wide.move();
+  assert.deepEqual(wide.calls, ['popover', 'popover'], 'shown again as a popover');
+  assert.ok(wide.state.popover);
+  wide.observers.forEach((o) => o.react([{ type: 'attributes' }])); // a change that moves nothing
+  assert.deepEqual(wide.calls, ['popover', 'popover']);
+  wide.drawn.root.dispatch('keydown', { key: 'Escape' });
+  wide.move();
+  assert.deepEqual(wide.calls, ['popover', 'popover', 'hide'], 'a closed drawer is not opened by a move');
+  // out of the document, it is not shown; put back, it is
+  wide.drawn.open('sd.item=p01');
+  wide.drawn.root.isConnected = false;
+  wide.move();
+  assert.equal(wide.state.popover, false);
+  wide.drawn.root.isConnected = true;
+  wide.observers.forEach((o) => o.react([{ type: 'childList' }]));
+  assert.ok(wide.state.popover, 'shown once it is back');
+
+  const phone = setUp(true, ['popover', 'dialog']);
+  phone.drawn.open('sd.item=p01');
+  assert.deepEqual(phone.calls, ['modal']);
+  phone.move();
+  assert.deepEqual(phone.calls, ['modal', 'close', 'modal'], 'closed, as an open dialog is not shown modal, and shown modal again');
+  assert.ok(phone.state.modal);
+  phone.drawer.dispatch('close', {}); // the close the page called is heard after it showed it again
+  assert.equal(phone.drawer.hidden, false, 'and closes nothing');
+  assert.equal(phone.drawn.context.location.hash, '#sd.item=p01');
+  // a modal drawer taken out and put back later: shown modal again, not left open as it was
+  phone.drawn.root.isConnected = false;
+  phone.move();
+  phone.drawn.root.isConnected = true;
+  phone.observers.forEach((o) => o.react([{ type: 'childList' }]));
+  assert.ok(phone.state.modal);
+  phone.drawer.open = false; // the browser closes it itself (a back gesture)
+  phone.state.modal = false;
+  phone.drawer.dispatch('close', {});
+  assert.equal(phone.drawer.hidden, true);
+
+  // a page of its own, out of the document a while with its drawer open: nothing is tried
+  // while it is out, and the drawer is shown above once it is back (review of b2ab444)
+  for (const narrow of [false, true]) {
+    const own = setUp(narrow, ['popover', 'dialog'], true);
+    own.drawn.open('item=p01');
+    own.drawn.root.isConnected = false;
+    own.move();
+    own.drawn.root.isConnected = true;
+    own.observers.forEach((o) => o.react([{ type: 'childList' }]));
+    if (own.calls.includes('close')) own.drawer.dispatch('close', {}); // the close the page called, heard after it is back
+    assert.deepEqual(own.calls, narrow ? ['modal', 'close', 'modal'] : ['popover', 'popover'], String(narrow));
+    assert.ok(own.state.popover || own.state.modal, 'shown above again');
+    assert.equal(own.drawer.hidden, false, 'the item is still open');
+  }
+
+  // a browser that knows neither: the fixed element stands, and a move tries nothing
+  const none = setUp(false, []);
+  none.drawn.open('sd.item=p01');
+  none.move();
+  assert.deepEqual(none.calls, []);
+  assert.equal(none.drawer.hidden, false);
+  // a browser that knows dialogs and not ":modal": an open dialog is taken as modal, and a
+  // change to the document does not close and show it again (which would change the
+  // document again, and again)
+  const older = setUp(false, ['dialog']);
+  older.drawer.matches = (selector) => { throw new SyntaxError(selector); };
+  older.drawn.open('sd.item=p01');
+  for (let n = 0; n < 3; n++) older.observers.forEach((o) => o.react([{ type: 'attributes' }]));
+  older.drawn.open('sd.item=p03'); // another item while it is open
+  assert.deepEqual(older.calls, ['modal']);
+  // showing it failed: the fixed element stands, and a move does not try again
+  const failing = setUp(false, ['popover']);
+  failing.drawer.showPopover = () => { failing.calls.push('popover'); throw new Error('not supported'); };
+  failing.drawn.open('sd.item=p01');
+  failing.move();
+  assert.deepEqual(failing.calls, ['popover']);
+  assert.equal(failing.drawer.hidden, false);
 });

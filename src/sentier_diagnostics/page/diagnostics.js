@@ -691,6 +691,122 @@
       classes: item.classes, directions: item.directions, bands: item.bands, verdicts: item.verdicts, item: item };
   }
 
+  // ------------------------------------------------------------------ what the pages share
+
+  // A weak reference: one that lets what it names be collected once nothing else holds it.
+  // Where the browser has no WeakRef, it holds what it names, as a plain reference does.
+  function weakly(value) {
+    var Ref = global.WeakRef;
+    return typeof Ref === 'function' ? new Ref(value) : { deref: function () { return value; } };
+  }
+
+  // A function called through a weak reference, for something that outlives a page (a
+  // script element left in the head) to call it: once the page is collected, the call does
+  // nothing. The page holds the function itself, so that it lives as long as the page does.
+  function weakCall(react) {
+    var ref = weakly(react);
+    return function () {
+      var held = ref.deref();
+      return held ? held.apply(this, arguments) : undefined;
+    };
+  }
+
+  var DARK_READER = '(prefers-color-scheme: dark)';
+  var WATCHED = { attributes: true, childList: true, subtree: true };
+
+  // The listeners every page of this script shares (issue 40). A page in a host listens to
+  // the window (the address), to the reader's colour scheme, and to the document and each
+  // shadow root it sits in (what changes there, and what finishes loading). Were each page
+  // to listen itself, the window and the document would hold every page a host removed
+  // without unmount() for as long as the window is open, its file and its matrix with it, and
+  // the browser would record every change to the document once for each of them, and wake
+  // each of them. So there is one listener of each kind, and one observer
+  // of the document, for all the pages; they hold each page weakly. A page nobody holds any
+  // more (out of the document, its element and what `mount` returned dropped by the host) is
+  // collected without unmount(), and the shared listeners leave it at their next call. A page
+  // out of the document that its host still holds is still told, so that it works again once
+  // it is put back. Once no page is left, the listeners are taken off. Where the browser has
+  // no WeakRef, the pages are held until unmount(), as each page held itself before.
+  var shared = null;
+  function sharedListeners() {
+    if (shared) return shared;
+    var win = global;
+    var pages = []; // a weak reference to each page that joined: {changed, look, address}
+    var tops = []; // a weak reference to the document and each shadow root watched
+    var observer = null, reader = null, armed = false, queued = false;
+    var frame = function (f) { if (win.requestAnimationFrame) win.requestAnimationFrame(f); else f(); };
+    // the pages still held; those collected are forgotten here. A page unmounted while the
+    // pages are told answers nothing (released), so it may be told once more.
+    function live() {
+      var out = [];
+      pages = pages.filter(function (ref) {
+        var page = ref.deref();
+        if (page) out.push(page);
+        return !!page;
+      });
+      return out;
+    }
+    function settle() { if (armed && !pages.length) disarm(); }
+    // a look once a frame, however much changed, for every page
+    function look() {
+      queued = false;
+      live().forEach(function (page) { page.look(); });
+      settle();
+    }
+    function later() { if (armed && !queued) { queued = true; frame(look); } }
+    function changed() {
+      live().forEach(function (page) { page.changed(); });
+      later();
+      settle();
+    }
+    function address() {
+      live().forEach(function (page) { page.address(); });
+      settle();
+    }
+    function arm() {
+      if (armed) return;
+      armed = true;
+      if (win.addEventListener) win.addEventListener('hashchange', address);
+      reader = win.matchMedia ? win.matchMedia(DARK_READER) : null;
+      if (reader && reader.addEventListener) reader.addEventListener('change', later);
+      if (!observer && win.MutationObserver) observer = new win.MutationObserver(changed);
+    }
+    function disarm() {
+      armed = false;
+      if (win.removeEventListener) win.removeEventListener('hashchange', address);
+      if (reader && reader.removeEventListener) reader.removeEventListener('change', later);
+      reader = null;
+      if (observer) observer.disconnect();
+      tops.forEach(function (ref) {
+        var top = ref.deref();
+        if (top && top.removeEventListener) top.removeEventListener('load', later, true);
+      });
+      tops = [];
+    }
+    shared = {
+      // a page joins; what it is given back makes it leave
+      join: function (page) {
+        arm();
+        var ref = weakly(page);
+        pages.push(ref);
+        return function () {
+          pages = pages.filter(function (other) { return other !== ref; });
+          settle();
+        };
+      },
+      // a root the page sits in, watched for changes and for loads (a load does not leave a
+      // shadow root) from now on, once whichever pages sit in it
+      watch: function (top) {
+        for (var i = 0; i < tops.length; i++) if (tops[i].deref() === top) return;
+        tops = tops.filter(function (ref) { return ref.deref(); });
+        tops.push(weakly(top));
+        if (observer) observer.observe(top, WATCHED);
+        if (top.addEventListener) top.addEventListener('load', later, true);
+      }
+    };
+    return shared;
+  }
+
   // ------------------------------------------------------------------ fixes against one base
 
   // A file of fixes (SPEC 16) measures each fix on its own against one base, so that a reader
@@ -2028,12 +2144,14 @@
       if (/\.js$/.test(name)) {
         var script = doc.createElement('script');
         script.setAttribute('src', base + name);
-        script.onload = function () {
+        // the script stays in the head once it has run: it calls the page weakly, as the
+        // matrix script does (issue 40)
+        script.onload = hold(function () {
           var got = fixesAt(script.src || addressOf(name));
           if (got) takeFixes(got); // refused, and said why, if not this file's
           else refuseFixes(name + ' holds no file of fixes');
-        };
-        script.onerror = function () { refuseFixes(name + ' is not beside the page'); };
+        });
+        script.onerror = hold(function () { refuseFixes(name + ' is not beside the page'); });
         (doc.head || doc.body || root).appendChild(script);
         return;
       }
@@ -2979,23 +3097,47 @@
     // grid beside it still in use. Where it fills the window (a phone), or where the browser
     // knows no popovers, it opens as a modal dialog, the rest of the page inert behind it. A
     // browser that knows neither, or where showing it fails, shows it as a fixed element.
+    //
+    // A browser no longer draws an element above the rest once it is taken out of the
+    // document, so a host that moves the page while the drawer is open leaves a popover
+    // hidden and a modal dialog open but no longer modal. The page shows it above again
+    // where it now stands (keepDrawer), at the change to the document that moved it, before
+    // it is drawn.
     var NARROW = '(max-width: 47.99rem)'; // the width at which the style makes it the whole window
+    var drawerAbove = false; // the drawer was last shown above the rest, not as the fixed element
     function popoverOpen(node) {
       try { return !!node.showPopover && node.matches(':popover-open'); } catch (error) { return false; }
     }
+    // open as a modal dialog; a browser that knows no ":modal" is taken at its word
+    function modalOpen(node) {
+      if (!node.open) return false;
+      try { return node.matches(':modal'); } catch (error) { return true; }
+    }
     function showDrawer(node) {
-      if (node.open || popoverOpen(node)) return;
+      if (popoverOpen(node) || modalOpen(node)) return;
       var narrow = !!(win.matchMedia && win.matchMedia(NARROW).matches);
       try {
+        // open but no longer modal (moved): closed first, as a dialog open is not shown modal
+        if (node.open && node.close) node.close();
         if (node.showPopover && !(narrow && node.showModal)) node.showPopover();
         else if (node.showModal) node.showModal();
       } catch (error) { /* the fixed element stands */ }
+      drawerAbove = popoverOpen(node) || modalOpen(node);
     }
     function hideDrawer(node) {
       try {
         if (popoverOpen(node)) node.hidePopover();
         if (node.open && node.close) node.close();
       } catch (error) { /* hidden as an element all the same */ }
+    }
+    // an open drawer the page had shown above the host's page, and the browser took out of it
+    // when the host moved the page, shown there again; never one the page could not show so,
+    // and not while the page is out of the document, where a browser shows nothing above (a
+    // page of its own acts out of it too): it is shown once the page is back
+    function keepDrawer() {
+      var drawer = q('item');
+      if (!acting || !inDocument() || !drawerAbove || !drawer || drawer.hidden || popoverOpen(drawer) || modalOpen(drawer)) return;
+      showDrawer(drawer);
     }
 
     function markOpen() {
@@ -3184,13 +3326,15 @@
       if (/\.js$/.test(name)) {
         var script = doc.createElement('script');
         script.setAttribute('src', base + name);
-        script.onload = function () {
+        // the script stays in the head once it has run: it calls the page weakly, so that it
+        // does not keep a page the host removed (issue 40)
+        script.onload = hold(function () {
           var got = handedAt(script.src || addressOf(name));
           if (got) takeMatrix(got); // refused, and said why, if not this file's
           else if (win.SENTIER_DIAGNOSTICS_MATRIX && win.SENTIER_DIAGNOSTICS_MATRIX !== hostMatrix) takeMatrix(win.SENTIER_DIAGNOSTICS_MATRIX); // a script that sets the global
           else refuseMatrix(name + ' holds no matrix');
-        };
-        script.onerror = function () { refuseMatrix(name + ' is not beside the page'); };
+        });
+        script.onerror = hold(function () { refuseMatrix(name + ' is not beside the page'); });
         (doc.head || doc.body || root).appendChild(script);
         return;
       }
@@ -3318,16 +3462,31 @@
     // no page in the document took it, or else the next free one (an address made for it
     // before now opens the page that took its key); a page the host named waits, says why,
     // and is drawn once the other page with its name has left. Two pages in the document
-    // never hold one key. `unmount()` takes a page's listeners off and gives its key up: a
-    // host that removes pages for good calls it, or each removed page stays in memory.
+    // never hold one key. `unmount()` takes a page's listeners off and gives its key up at
+    // once. A page removed without it is let go once nothing holds it (see sharedListeners):
+    // the list of keys and the list of pages waiting hold each page weakly, so a key whose
+    // page was collected is free.
     var OWN_PARTS = ['step', 'steps', 'set', 'item'];
     var keyProblem = null; // a key the page can never hold: it is not a word, or it is one of the page's own
     var waiting = false; // another page in the document holds the key the host named: the page draws nothing
+    // the key each page holds, by key: a weak reference to the page's entry
+    //
+    // Every copy of this script in a window reads these two lists, whatever its version, so
+    // their shape is a contract between versions: an entry is an object whose deref() gives
+    // the page's {root, wake}, or nothing once the page is gone. An entry of another shape
+    // reads as free, so a version that changed it would let two pages take one key. A key
+    // whose page was collected keeps its spent entry until the key is taken again.
     var keys = win.SENTIER_DIAGNOSTICS_KEYS = win.SENTIER_DIAGNOSTICS_KEYS || {};
     // the pages waiting for a key another holds: one that gives a key up wakes them, as no
-    // change to the document may reach them (it left from inside a shadow root they do not watch)
+    // change to the document may reach them (it left from inside a shadow root they do not
+    // watch, or the page that left was mounted by another copy of this script)
     var waiters = win.SENTIER_DIAGNOSTICS_WAITERS = win.SENTIER_DIAGNOSTICS_WAITERS || [];
     var self = { root: root, wake: function () { present(); } }; // this page's entry in the list of keys
+    var selfRef = weakly(self); // and how the lists hold it
+    function holderOf(key) {
+      var ref = keys[key];
+      return ref && typeof ref.deref === 'function' ? ref.deref() || null : null;
+    }
     var named = root.getAttribute('data-sd-key');
     var KEY = standalone ? '' : null; // what the page's parts start with, while it holds a key
     var lastKey = null;
@@ -3341,13 +3500,21 @@
       else if (OWN_KEY.test(named)) keyProblem = 'The page\'s key, data-sd-key="' + named + '", is one the page gives a page the host names none for (sd, sd2 ...): name it otherwise.';
     }
     function inDocument() { return root.isConnected !== false; }
-    function holding() { return standalone || (lastKey !== null && keys[lastKey] === self); }
+    function holding() { return standalone || (lastKey !== null && holderOf(lastKey) === self); }
     function free(key) {
-      var held = keys[key];
+      var held = holderOf(key);
       return !held || held === self || held.root.isConnected === false;
     }
-    function stopWaiting() { var at = waiters.indexOf(self); if (at >= 0) waiters.splice(at, 1); }
-    function wakeOthers() { waiters.slice().forEach(function (other) { other.wake(); }); }
+    function stopWaiting() { var at = waiters.indexOf(selfRef); if (at >= 0) waiters.splice(at, 1); }
+    // each page still waiting, woken; one collected while it waited is taken off the list
+    function wakeOthers() {
+      waiters.slice().forEach(function (ref) {
+        var other = ref && typeof ref.deref === 'function' ? ref.deref() : null;
+        if (other) { other.wake(); return; }
+        var at = waiters.indexOf(ref);
+        if (at >= 0) waiters.splice(at, 1);
+      });
+    }
     function pick() {
       if (named !== null) return free(named) ? named : null;
       if (lastKey !== null && free(lastKey)) return lastKey;
@@ -3363,14 +3530,14 @@
       if (holding()) return true;
       var key = pick();
       if (key === null) {
-        if (waiters.indexOf(self) < 0) waiters.push(self);
+        if (waiters.indexOf(selfRef) < 0) waiters.push(selfRef);
         if (!waiting) {
           waiting = true;
           refuse('Another page in the document has the key data-sd-key="' + named + '": two pages with one key would open on each other\'s items. Give each its own. This page is drawn once the other has left.');
         }
         return false;
       }
-      keys[key] = self;
+      keys[key] = selfRef;
       lastKey = key;
       KEY = key + '.';
       stopWaiting();
@@ -3402,7 +3569,7 @@
       acting = false;
       while (teardown.length) teardown.pop()();
       stopWaiting();
-      if (lastKey !== null && keys[lastKey] === self) delete keys[lastKey];
+      if (lastKey !== null && holderOf(lastKey) === self) delete keys[lastKey];
       closeItem();
       D = null; M = null; LISTED = []; shown = null;
       FX = null; FXROWS = null; FXCHECKED = {}; C = null; // the file of fixes and the set drawn from it
@@ -3636,7 +3803,6 @@
     // the browser computes them (another var() in them already put in), the colour scheme
     // they may resolve by (light-dark(), a system colour), and the reader's. Null for a page
     // out of the document, which has no host to read.
-    var DARK_READER = '(prefers-color-scheme: dark)';
     function schemeSign() {
       if (root.isConnected === false || !win.getComputedStyle) return null;
       var style = win.getComputedStyle(root);
@@ -3670,14 +3836,18 @@
       return got[0] === got[1] ? got[0] : null;
     }
 
-    // A listener, taken off when the page is released: on the window, the document, or the
-    // page's own elements, which a page mounted again on the same element would otherwise
-    // share with this one.
+    // A listener on the page's own elements, taken off when the page is released: a page
+    // mounted again on the same element would otherwise share it with this one. What the
+    // page listens to outside itself it shares with the other pages (sharedListeners).
     function listen(target, type, react, capture) {
       if (!target || !target.addEventListener) return;
       target.addEventListener(type, react, capture);
       teardown.push(function () { if (target.removeEventListener) target.removeEventListener(type, react, capture); });
     }
+    // what calls back into the page from outside it, held here, so that it lives as long as
+    // the page does; held weakly there (weakCall, sharedListeners)
+    var kept = [];
+    function hold(react) { kept.push(react); return weakCall(react); }
 
     // Look again whenever the host may have switched its theme: the reader's colour scheme
     // changed, the document changed (a class or an attribute anywhere, an element put in or
@@ -3690,11 +3860,13 @@
     // through the CSS object model alone, which changes nothing in the document.
     //
     // A change to the document is also where a page put in after it was built, or put
-    // back, is found: it takes its key there, before the next frame (`present`).
-    var WATCHED = { attributes: true, childList: true, subtree: true };
+    // back, is found: it takes its key there, before the next frame (`present`); and where a
+    // page moved with its drawer open shows the drawer again (`keepDrawer`). The listeners
+    // are the ones every page shares; this page's entry among them is `entry`.
+    var entry = null;
     function followScheme() {
-      var last = schemeSign(), queued = false, watch = null, heard = [doc];
-      var frame = win.requestAnimationFrame ? function (f) { win.requestAnimationFrame(f); } : function (f) { f(); };
+      var last = schemeSign();
+      var listeners = sharedListeners();
       function tops() { // the document, and each shadow root from the page's out to it
         var out = [doc];
         for (var node = root; node && node.getRootNode; ) {
@@ -3706,29 +3878,22 @@
         return out;
       }
       // the roots the page sits in now: put in, or moved, it may sit in others than before
-      function observe() {
-        tops().forEach(function (top) {
-          if (watch) watch.observe(top, WATCHED);
-          if (heard.indexOf(top) < 0) { heard.push(top); listen(top, 'load', later, true); }
-        });
-      }
-      function look() {
-        queued = false;
-        if (released) return;
-        var sign = schemeSign();
-        if (sign === null) return;
-        observe();
-        if (sign === last) return;
-        last = sign;
-        matchScheme();
-      }
-      function later() { if (!queued && !released) { queued = true; frame(look); } }
-      if (win.matchMedia) listen(win.matchMedia(DARK_READER), 'change', later);
-      listen(doc, 'load', later, true);
-      if (win.MutationObserver) {
-        watch = new win.MutationObserver(function () { present(); later(); });
-        teardown.push(function () { watch.disconnect(); });
-      }
+      function observe() { tops().forEach(function (top) { listeners.watch(top); }); }
+      entry = {
+        changed: function () { present(); keepDrawer(); },
+        look: function () {
+          if (released) return;
+          var sign = schemeSign();
+          if (sign === null) return;
+          observe();
+          if (sign === last) return;
+          last = sign;
+          matchScheme();
+        },
+        // a page that takes its key here has read the address already
+        address: function () { var was = acting; if (present() && was) route(); }
+      };
+      teardown.push(listeners.join(entry));
       observe();
     }
 
@@ -3819,14 +3984,13 @@
       listen(q('grid-more'), 'click', function () { view.limit += PAGE; renderGrid(); });
       listen(q('item-close'), 'click', closeItem);
       listen(root, 'keydown', function (e) { if (e.key === 'Escape') closeItem(); });
-      // a modal drawer the browser closed itself (a phone's back gesture) is closed here too
-      listen(q('item'), 'close', function () { if (!q('item').hidden) closeItem(); });
+      // a modal drawer the browser closed itself (a phone's back gesture) is closed here too;
+      // one the page closed to show it again (keepDrawer) is open by the time this is heard
+      listen(q('item'), 'close', function () { if (!q('item').hidden && !q('item').open) closeItem(); });
       ['grid-table', 'worst-table'].forEach(function (name) {
         listen(q(name), 'click', openFrom);
         listen(q(name), 'keydown', function (e) { if (e.key === 'Enter') openFrom(e); else moveRow(e); });
       });
-      // a page that takes its key here has read the address already
-      listen(win, 'hashchange', function () { var was = acting; if (present() && was) route(); });
       listen(q('file'), 'change', function (e) {
         var file = e.target.files[0];
         if (!file) return;

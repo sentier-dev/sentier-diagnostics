@@ -602,8 +602,13 @@ page's listeners off (on the window, the document and its own elements), gives i
 and draws nothing more, leaving the address as it was; a file or a matrix that comes after
 it is not drawn. The element is left free: a page may be mounted on it again, as React's
 StrictMode does. A page that gives a key up, by `unmount()` or by leaving the document,
-wakes a page waiting for it. A host that removes a page for good calls `unmount()`; a page
-removed without it stays in memory, in case it is put back. Every part the page does not
+wakes a page waiting for it. A host that removes a page for good calls `unmount()`, which
+lets it go at once. A page removed without it, that the host no longer holds, is let go
+too: the pages of a window share one listener on the window, one on the colour scheme, one
+on each root they sit in, and one observer of the document, and each of these holds the
+pages weakly, as do the list of keys and a matrix's script. A page the host still holds is
+kept and works again when it is put back. Where the browser has no `WeakRef`, a removed page
+is held until `unmount()`. Every part the page does not
 own is kept as it was. An
 address naming a step the file does not have, steps apart, or a run the page cannot judge
 (no matrix), says so and shows the whole way. Below
@@ -718,7 +723,9 @@ filter changes no count.
 A drawer at the right (the whole window on a phone), opened from a row of the matrix or the
 worst list, closed with Close or Escape. It is a dialog drawn above the host's page, named
 by the item: beside the matrix, which stays in use, where the window is wide; modal, the
-rest inert, where it fills the window or the browser knows no popovers. First **why it differs**: the explanations about
+rest inert, where it fills the window or the browser knows no popovers. A host that moves
+the page while the drawer is open leaves it no longer drawn above the rest; the page shows
+it above again, as it was, at the change that moved it. First **why it differs**: the explanations about
 the item, then those about a step or an indicator in which it moved (said to be so, as they
 may not be about it), or "none given" when the file holds neither; the file holds every
 explanation, so this "none" is never said over a part of a list. Then per indicator, the
