@@ -222,3 +222,13 @@ test('a file of fixes beside the page loads after it is drawn, and takes the ent
   assert.deepEqual(ticked(d), ['a', 'd', 'e']);
   assert.match(d.byId['fixes-said'].textContent, /^5 fixes/);
 });
+
+test('a page whose key is refused loads no file of fixes, and keeps saying why', () => {
+  const p = pageOf('fixes that need others');
+  const d = dom.page(p.data, undefined, { hash: 'left.set=e', attributes: { 'data-sd-key': 'sd2', 'data-sd-fixes': 'fixes.js' },
+    globals: { SENTIER_DIAGNOSTICS_MATRIX: p.matrix } });
+  assert.equal(d.head.all().filter((n) => n.tagName === 'SCRIPT').length, 0, 'no script is added');
+  assert.match(d.byId['load-error'].textContent, /is one the page gives/);
+  assert.equal(d.byId.content.hidden, true);
+  assert.equal(d.context.location.hash, '#left.set=e', 'the address is left as it was');
+});
