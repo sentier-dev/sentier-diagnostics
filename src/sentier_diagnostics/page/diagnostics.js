@@ -511,7 +511,10 @@
   }
 
   // whether numbers add up to a total as a breakdown must: to within 1e-9 of the largest of
-  // them, summed from the left (breakdown.CLOSURE and breakdown._adds_up)
+  // them (breakdown.CLOSURE and breakdown._adds_up). The page sums from the left, and
+  // Python's sum() makes up for its rounding from 3.12 on. The two sums part by a few units
+  // in the last place of the largest number, far inside 1e-9 of it: they can answer apart
+  // only for a sum that lies that close to the edge.
   var CLOSURE = 1e-9;
   function addsUp(parts, total) {
     var size = Math.abs(total), sum = 0;
@@ -527,25 +530,31 @@
     return a.length - b.length;
   }
 
-  // The relative luminance of a colour as CSS writes it (WCAG 2), or null where it cannot be
-  // read. Hex, rgb(), oklab() and oklch() are read here: the browser gives a host's colour in
-  // one of these where the host wrote it in sRGB or in OKLab (Tailwind 4 writes every colour
-  // in oklch). Any other form (lab(), color() ...) is drawn on a canvas of one pixel and read
-  // back. A canvas keeps its colour when it is given one it cannot read (light-dark(), a bare
-  // "0 0% 100%"): set over two different colours, such a text leaves two different colours,
-  // and is unknown, never black. A browser that hides what a canvas holds (against
-  // fingerprinting) gives back blank or altered pixels: a known colour that does not come
-  // back as it went says that nothing drawn can be read, and the colour is unknown.
-  function luminance(text, doc) {
+  // A colour as CSS writes it, read: its red, green and blue in sRGB (0 to 255) and its alpha
+  // (0 to 1), or null where it cannot be read. Hex, rgb(), oklab() and oklch() are read here:
+  // the browser gives a host's colour in one of these where the host wrote it in sRGB or in
+  // OKLab (Tailwind 4 writes every colour in oklch). Any other form (lab(), color() ...) is
+  // drawn on a canvas of one pixel and read back. A canvas keeps its colour when it is given
+  // one it cannot read (light-dark(), a bare "0 0% 100%"): set over two different colours,
+  // such a text leaves two different colours, and is unknown, never black. A browser that
+  // hides what a canvas holds (against fingerprinting) gives back blank or altered pixels: a
+  // known colour that does not come back as it went says that nothing drawn can be read, and
+  // the colour is unknown.
+  function colourOf(text, doc) {
     text = String(text || '').trim();
-    var rgb = null, m;
+    var rgb = null, alpha = 1, m;
     if ((m = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(text))) {
       var h = m[1].length <= 4 ? m[1].replace(/(.)/g, '$1$1') : m[1];
       rgb = [0, 2, 4].map(function (at) { return parseInt(h.slice(at, at + 2), 16); });
-    } else if ((m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(text))) {
+      if (h.length === 8) alpha = parseInt(h.slice(6), 16) / 255;
+    } else if ((m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)\s*(?:[,\/]\s*([\d.]+%?|none)\s*)?\)$/i.exec(text))) {
       rgb = [+m[1], +m[2], +m[3]];
+      alpha = alphaOf(m[4]);
     } else if ((m = OKLAB.exec(text))) {
-      return oklabLuminance(m);
+      var lin = oklabLinear(m);
+      // to sRGB as a canvas draws it, where a ground is laid over what is behind it
+      if (lin) rgb = lin.map(function (v) { return 255 * (v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055); });
+      alpha = alphaOf(m[5]);
     } else if (text && doc && doc.createElement) {
       try {
         var canvas = doc.createElement('canvas');
@@ -561,24 +570,52 @@
           context.fillStyle = fill;
           context.fillRect(0, 0, 1, 1);
           var d = context.getImageData(0, 0, 1, 1).data;
-          return [d[0], d[1], d[2]];
+          return [d[0], d[1], d[2], d[3]];
         };
-        if (drawn('#010203').join() !== '1,2,3') return null;
-        rgb = drawn(text);
+        if (drawn('#010203').join() !== '1,2,3,255') return null;
+        var pixel = drawn(text);
+        rgb = pixel.slice(0, 3);
+        alpha = pixel[3] / 255;
       } catch (error) { return null; }
     }
-    if (!rgb || rgb.some(function (v) { return !isFinite(v); })) return null;
-    var lin = rgb.map(function (v) { v = Math.min(255, v) / 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+    if (!rgb || !rgb.concat(alpha).every(isFinite)) return null;
+    return { rgb: rgb.map(function (v) { return Math.min(255, Math.max(0, v)); }), alpha: Math.min(1, Math.max(0, alpha)) };
+  }
+  // an alpha as CSS writes it after a colour: a number or a percentage, "none" as zero, and
+  // 1 where none is written
+  function alphaOf(text) {
+    if (text === undefined || text === '') return 1;
+    if (/^none$/i.test(text)) return 0;
+    return /%$/.test(text) ? parseFloat(text) / 100 : parseFloat(text);
+  }
+
+  // The relative luminance of a colour as CSS writes it (WCAG 2), or null where it cannot be
+  // read. Its alpha is left aside: a colour of none at all (alpha 0) is no colour, and null.
+  function luminance(text, doc) {
+    var c = colourOf(text, doc);
+    if (!c || c.alpha === 0) return null;
+    var lin = c.rgb.map(function (v) { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
     return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+  }
+
+  // Colours laid one over another, the first on top and the last opaque: the colour seen, as
+  // a browser composites a page (source over, in sRGB).
+  function seenThrough(coats) {
+    var out = coats[coats.length - 1].rgb.slice();
+    for (var i = coats.length - 2; i >= 0; i--) {
+      var top = coats[i];
+      out = out.map(function (v, k) { return top.rgb[k] * top.alpha + v * (1 - top.alpha); });
+    }
+    return 'rgb(' + out.join(', ') + ')';
   }
 
   // oklab(L a b) and oklch(L C H), as CSS Color 4 writes them: L a number or a percentage of
   // 1, a, b and C a number or a percentage of 0.4, H in degrees (or deg, grad, rad, turn),
-  // "none" as zero; an alpha after "/" is left aside, as rgb() leaves it
+  // "none" as zero; an alpha after "/". Given in linear sRGB, or null.
   var OKNUM = '(none|[+-]?(?:\\d+\\.?\\d*|\\.\\d+)(?:e[+-]?\\d+)?(?:%|deg|grad|rad|turn)?)';
-  var OKLAB = new RegExp('^okl(ab|ch)\\(\\s*' + OKNUM + '\\s+' + OKNUM + '\\s+' + OKNUM + '\\s*(?:\\/[^)]*)?\\)$', 'i');
+  var OKLAB = new RegExp('^okl(ab|ch)\\(\\s*' + OKNUM + '\\s+' + OKNUM + '\\s+' + OKNUM + '\\s*(?:\\/\\s*' + OKNUM + '\\s*)?\\)$', 'i');
   var TURN = { deg: 1, grad: 0.9, rad: 180 / Math.PI, turn: 360 };
-  function oklabLuminance(m) {
+  function oklabLinear(m) {
     function part(t, whole) {
       if (/^none$/i.test(t)) return 0;
       var unit = /[a-z%]+$/i.exec(t), v = parseFloat(t);
@@ -604,7 +641,7 @@
       -1.2684380046 * l + 2.6097574011 * mm - 0.3413193965 * s,
       -0.0041960863 * l - 0.7034186147 * mm + 1.7076147010 * s,
     ].map(function (v) { return Math.min(1, Math.max(0, v)); });
-    return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+    return lin;
   }
 
   // Whether the host's tokens make a dark page: a light ink (whatever its ground), or a dark
@@ -815,9 +852,36 @@
   // it is put back. Once no page is left, the listeners are taken off. Where the browser has
   // no WeakRef, the pages are held until unmount(), as each page held itself before.
   var shared = null;
+  // A node's property (a getter) or method (`call`) as the DOM itself holds it, read through
+  // the prototype of `type` in the window `win`. A plain property can say something else: a
+  // document gives its named elements for their names (with an image named addEventListener
+  // in it, document.addEventListener is that image; an inline frame named host makes
+  // document.host its window), a form gives its controls for theirs, and a link's `host` is
+  // the host name of its address. Without the prototype (no DOM, as in the tests' stand-in),
+  // the plain property. Null where the call throws or the node has no such thing.
+  function domRelation(win, type, name, call) {
+    var proto = win && win[type] && win[type].prototype, own = null;
+    try { own = proto ? Object.getOwnPropertyDescriptor(proto, name) : null; } catch (error) { own = null; }
+    var read = own && (call ? own.value : own.get);
+    return function (node) {
+      if (!node) return null;
+      var args = Array.prototype.slice.call(arguments, 1);
+      try {
+        if (typeof read === 'function') return call ? read.apply(node, args) : read.call(node);
+        var said = node[name];
+        return call ? (typeof said === 'function' ? said.apply(node, args) : null) : said;
+      } catch (error) { return null; }
+    };
+  }
+
   function sharedListeners() {
     if (shared) return shared;
     var win = global;
+    // what a theme switch can change with no change in the document: a transition or an
+    // animation of a background, heard where it ends
+    var HEARD = ['load', 'transitionend', 'animationend'];
+    var on = domRelation(win, 'EventTarget', 'addEventListener', true);
+    var off = domRelation(win, 'EventTarget', 'removeEventListener', true);
     var pages = []; // a weak reference to each page that joined: {changed, look, address}
     var tops = []; // a weak reference to the document and each shadow root watched
     var observer = null, reader = null, armed = false, queued = false;
@@ -866,7 +930,7 @@
       if (observer) observer.disconnect();
       tops.forEach(function (ref) {
         var top = ref.deref();
-        if (top && top.removeEventListener) top.removeEventListener('load', later, true);
+        if (top) HEARD.forEach(function (type) { off(top, type, later, true); });
       });
       tops = [];
     }
@@ -881,14 +945,15 @@
           settle();
         };
       },
-      // a root the page sits in, watched for changes and for loads (a load does not leave a
-      // shadow root) from now on, once whichever pages sit in it
+      // a root the page sits in, watched for changes, and for loads and the ends of
+      // transitions and animations (heard as they go down, so whether or not they leave a
+      // shadow root), from now on, once whichever pages sit in it
       watch: function (top) {
         for (var i = 0; i < tops.length; i++) if (tops[i].deref() === top) return;
         tops = tops.filter(function (ref) { return ref.deref(); });
         tops.push(weakly(top));
         if (observer) observer.observe(top, WATCHED);
-        if (top.addEventListener) top.addEventListener('load', later, true);
+        HEARD.forEach(function (type) { on(top, type, later, true); });
       }
     };
     return shared;
@@ -3563,6 +3628,12 @@
     // the list of keys and the list of pages waiting hold each page weakly, so a key whose
     // page was collected is free.
     var OWN_PARTS = ['step', 'steps', 'set', 'item'];
+    // A host that routes by its hash (`#/products/12`) reads any part after it as part of its
+    // route, so it keeps the page out of the address: `data-sd-address="off"`. The page then
+    // holds its parts itself, as it would write them, and reads them back from there; it
+    // neither reads nor writes the address, and no address opens it.
+    var addressed = root.getAttribute('data-sd-address') !== 'off';
+    var ownAddress = '';
     var keyProblem = null; // a key the page can never hold: it is not a word, or it is one of the page's own
     var waiting = false; // another page in the document holds the key the host named: the page draws nothing
     // the key each page holds, by key: a weak reference to the page's entry
@@ -3675,7 +3746,7 @@
       wakeOthers();
     }
     function hashList() {
-      var text = (win.location.hash || '').replace(/^#/, '');
+      var text = addressed ? (win.location.hash || '').replace(/^#/, '') : ownAddress;
       return text ? text.split('&') : [];
     }
     function ownName(part) {
@@ -3720,6 +3791,7 @@
       if (item) said.push(KEY + 'item=' + encodeURIComponent(item));
       var others = hashList().filter(function (part) { return ownName(part) === null; });
       var wanted = others.concat(said).join('&');
+      if (!addressed) { ownAddress = wanted; return false; } // kept, and drawn by the caller
       if ((win.location.hash || '').replace(/^#/, '') === wanted) return false;
       if (wanted) win.location.hash = wanted;
       // nothing left to say: the address loses its "#", and the host keeps its history state
@@ -3879,7 +3951,8 @@
     // not set, so that the host's ink is never set on the page's white. A host that sets a
     // dark ground and no ink gets the light ink. A host that sets neither keeps the light
     // colours, the ground set with the ink. Read again when the reader's colour scheme
-    // changes, as a host's tokens may follow it.
+    // changes, as a host's tokens may follow it. A ground with alpha is read as it is seen
+    // (groundSeen).
     // The page's own mark sets only its own tokens (`--sd-*`), never `--ink`, `--surface` or
     // `color-scheme`, so the host's are read with the mark in place, and the mark is changed
     // only where the answer changed: a host that watches the page sees nothing for a reading
@@ -3887,7 +3960,7 @@
     function matchScheme() {
       var style = win.getComputedStyle ? win.getComputedStyle(root) : null;
       if (!style || !style.getPropertyValue) return;
-      var dark = schemeIsDark(tokenColour(style, '--ink'), tokenColour(style, '--surface'), function (text) {
+      var dark = schemeIsDark(tokenColour(style, '--ink'), groundSeen(tokenColour(style, '--surface')), function (text) {
         return luminance(text, doc);
       });
       if (dark === (root.getAttribute('data-sd-scheme') === 'dark')) return;
@@ -3895,17 +3968,107 @@
       else root.removeAttribute('data-sd-scheme');
     }
 
+    // The host's ground as a reader sees it. A ground with alpha below 1 (a faint tint, a
+    // dark theme's raised surface, `transparent`) shows what is behind the page through it:
+    // the backgrounds of the elements around the page, out to the first opaque one, and
+    // behind them all the document's canvas. Read as their composite, as a browser draws it.
+    // Where a background behind it cannot be read, the ground is unknown. Background images
+    // are not read. An opaque ground, or one that cannot be read, is given as it is.
+    function groundSeen(surface) {
+      var top = surface ? colourOf(surface, doc) : null;
+      if (!top || top.alpha >= 1) return surface;
+      var coats = [top], steps = 0;
+      for (var node = around(root); node; node = around(node)) {
+        if (++steps > WALK_LIMIT) return null;
+        var said = backgroundOf(node), behind = said ? colourOf(said, doc) : null;
+        if (said && !behind) return null;
+        if (!behind || behind.alpha === 0) continue;
+        coats.push(behind);
+        if (behind.alpha >= 1) return seenThrough(coats);
+      }
+      coats.push(canvasIsDark() ? { rgb: [18, 18, 18], alpha: 1 } : { rgb: [255, 255, 255], alpha: 1 });
+      return seenThrough(coats);
+    }
+    // The elements around the page, read out to this many; past it the ground is unknown. A
+    // document's tree has no loop, and none is near this deep: the limit holds a walk that
+    // was handed something else for a node.
+    var WALK_LIMIT = 4096;
+    // A node's relations as the DOM holds them (domRelation): a host's names, a form's
+    // controls among them, do not stand in for them.
+    function related(type, name, call) { return domRelation(win, type, name, call); }
+    var parentOf = related('Node', 'parentNode'), typeOf = related('Node', 'nodeType'),
+      slotOf = related('Element', 'assignedSlot'), hostOf = related('ShadowRoot', 'host'),
+      rootNodeOf = related('Node', 'getRootNode', true), rootElementOf = related('Document', 'documentElement'),
+      firstOf = related('Document', 'querySelector', true);
+    // the element a node is drawn in: its slot where it is slotted, its parent, or the host
+    // of the shadow root it is the top of; none above the document's root element, and none
+    // where what is above is not an element
+    function around(node) {
+      var up = slotOf(node) || parentOf(node);
+      if (up && typeOf(up) === 11) up = hostOf(up);
+      return up && typeOf(up) === 1 ? up : null;
+    }
+    function backgroundOf(node) {
+      var style = win.getComputedStyle ? win.getComputedStyle(node) : null;
+      return style && style.getPropertyValue ? String(style.getPropertyValue('background-color') || '').trim() : '';
+    }
+    // The canvas behind the document, which a browser paints with the colour scheme of the
+    // root element: dark where its `color-scheme` (or the document's
+    // `<meta name="color-scheme">`, where the root's says nothing) allows only dark, or both
+    // with the reader's dark. Browsers paint a dark canvas a little apart (#121212 in
+    // Chrome); any of them is dark.
+    function canvasScheme() {
+      var top = rootElementOf(doc), said = '';
+      try {
+        var style = top && typeOf(top) === 1 && win.getComputedStyle ? win.getComputedStyle(top) : null;
+        said = style && style.getPropertyValue ? String(style.getPropertyValue('color-scheme') || '') : '';
+        var meta = !/\b(light|dark)\b/i.test(said) ? firstOf(doc, 'meta[name="color-scheme"]') : null;
+        if (meta) said = String(meta.getAttribute('content') || '');
+      } catch (error) { said = ''; }
+      return said.toLowerCase();
+    }
+    function canvasIsDark() {
+      var words = canvasScheme().split(/\s+/);
+      if (words.indexOf('dark') < 0) return false;
+      if (words.indexOf('light') < 0) return true;
+      var reader = win.matchMedia ? win.matchMedia(DARK_READER) : null;
+      return !!(reader && reader.matches);
+    }
+
     // What the scheme is read from, read without changing anything: the host's two tokens as
     // the browser computes them (another var() in them already put in), the colour scheme
-    // they may resolve by (light-dark(), a system colour), and the reader's. Null for a page
-    // out of the document, which has no host to read.
+    // they may resolve by (light-dark(), a system colour), the reader's, and what a ground
+    // with alpha shows through: the backgrounds around the page and the canvas's scheme.
+    // Those are read only where the ground as written may have alpha, or cannot be read
+    // here; an opaque ground hides them, and a switch to one with alpha changes the token.
+    // Null for a page out of the document, which has no host to read.
     function schemeSign() {
       if (root.isConnected === false || !win.getComputedStyle) return null;
       var style = win.getComputedStyle(root);
       if (!style || !style.getPropertyValue) return null;
       var reader = win.matchMedia ? win.matchMedia(DARK_READER) : null;
-      return [style.getPropertyValue('--ink'), style.getPropertyValue('--surface'),
-        style.getPropertyValue('color-scheme'), reader && reader.matches ? 'dark' : 'light'].join('\n');
+      var surface = style.getPropertyValue('--surface'), behind = '';
+      if (seenThroughMay(surface)) {
+        var said = [], steps = 0;
+        for (var node = around(root); node && ++steps <= WALK_LIMIT; node = around(node)) said.push(backgroundOf(node));
+        behind = said.join(';') + '\n' + canvasScheme();
+      }
+      return [style.getPropertyValue('--ink'), surface, style.getPropertyValue('color-scheme'),
+        reader && reader.matches ? 'dark' : 'light', behind].join('\n');
+    }
+    // whether a ground as written may show what is behind it: it has alpha, or it cannot be
+    // read here (light-dark(), a colour this script does not parse). The last answer is
+    // kept, as a look asks it again for the same text.
+    var seenThroughText = null, seenThroughAnswer = true;
+    function seenThroughMay(text) {
+      text = String(text || '').trim();
+      if (!text) return false;
+      if (text !== seenThroughText) {
+        var c = colourOf(text, doc);
+        seenThroughText = text;
+        seenThroughAnswer = !c || c.alpha < 1;
+      }
+      return seenThroughAnswer;
     }
 
     // A host's colour token as the browser resolves it, set on a probe in the page, so that
@@ -3947,9 +4110,11 @@
 
     // Look again whenever the host may have switched its theme: the reader's colour scheme
     // changed, the document changed (a class or an attribute anywhere, an element put in or
-    // taken out, the page itself put in after it was built), or a stylesheet finished
-    // loading. Watched: the document and every shadow root the page sits in, for changes
-    // and for loads (a load does not leave a shadow root). A look reads only what the
+    // taken out, the page itself put in after it was built), a stylesheet finished loading,
+    // or a transition or an animation ended (a switch animated over time moves a background
+    // and changes nothing in the document). Watched: the document and every shadow root the
+    // page sits in, for changes, loads and those ends (heard on their way down, as a load
+    // does not leave a shadow root). A look reads only what the
     // scheme is read from (schemeSign), once a frame however much changed, and reads the
     // scheme itself only where that changed. So the page's own probes, and a host's
     // observer that answers them, end after one look. Not seen: a rule a host adds or edits
@@ -3965,11 +4130,11 @@
       var listeners = sharedListeners();
       function tops() { // the document, and each shadow root from the page's out to it
         var out = [doc];
-        for (var node = root; node && node.getRootNode; ) {
-          var top = node.getRootNode();
-          if (!top || top === doc || !top.host) break;
+        for (var node = root, steps = 0; node && ++steps <= WALK_LIMIT; ) {
+          var top = rootNodeOf(node), host = top && top !== doc && typeOf(top) === 11 ? hostOf(top) : null;
+          if (!host) break;
           out.push(top);
-          node = top.host;
+          node = host;
         }
         return out;
       }
@@ -3987,7 +4152,7 @@
           matchScheme();
         },
         // a page that takes its key here has read the address already
-        address: function () { var was = acting; if (present() && was) route(); }
+        address: function () { var was = acting; if (present() && was && addressed) route(); }
       };
       teardown.push(listeners.join(entry));
       observe();
@@ -4152,7 +4317,7 @@
     bandStep: bandStep, bandOf: bandOf, readJSON: readJSON, checkShape: checkShape, checkMatrix: checkMatrix, matrixRows: matrixRows,
     safeLink: safeLink, safeName: safeName, splitOf: splitOf, splitText: splitText, distance: distance, quantileTexts: quantileTexts, RANK: RANK,
     judge: judge, runsOf: runsOf, runPair: runPair, noiseOfStates: noiseOfStates, endsKnown: endsKnown, statesCarryNoise: statesCarryNoise,
-    luminance: luminance, schemeIsDark: schemeIsDark,
+    colourOf: colourOf, luminance: luminance, seenThrough: seenThrough, schemeIsDark: schemeIsDark,
     fixChosen: fixChosen, fixCompose: fixCompose, fixCounts: fixCounts, fixOwnCounts: fixOwnCounts, fixCountsDiffer: fixCountsDiffer, checkFixes: checkFixes,
     fixesAgainst: fixesAgainst, fixesProblem: fixesProblem, fixPageBlocks: fixPageBlocks, inOrder: inOrder,
     mount: mount, mountAll: mountAll };

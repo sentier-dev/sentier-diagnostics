@@ -557,6 +557,9 @@ test('the page refuses a breakdown for each reason the check has, and says which
     ['is not of the shape of a breakdown in', (b) => { b.indicators[indicator] = null; }],
     ['does not add up', (b) => { b.indicators[indicator].rest[0] += 1; }],
     ['is not of this file', (b) => { const e = b.indicators[indicator]; e.total[1] += 1; e.rest[1] += 1; }],
+    // off by a millionth: the check holds parts and totals to 1e-9, as the Python does (review of #34)
+    ['does not add up', (b) => { const e = b.indicators[indicator]; e.rest[0] += 1e-6 * Math.abs(e.total[0]); }],
+    ['is not of this file', (b) => { const e = b.indicators[indicator]; const off = 1e-6 * Math.abs(e.total[1]); e.total[1] += off; e.rest[1] += off; }],
   ];
   assert.ok(shown(wheat()).includes('What it is made of') && !/not drawn/.test(shown(wheat())), 'the breakdown itself is drawn');
   for (const [said, change, comp] of cases) {
@@ -566,6 +569,10 @@ test('the page refuses a breakdown for each reason the check has, and says which
     assert.ok(body.includes('The breakdown b.json ' + said), said + ' | ' + body.slice(-240));
     assert.ok(body.includes(': not drawn.'), said);
   }
+  // and off by less than 1e-9 of the size, it is drawn
+  const close = wheat();
+  close.indicators[indicator].rest[0] += 1e-11 * Math.abs(close.indicators[indicator].total[0]);
+  assert.ok(!/not drawn/.test(shown(close)), 'within 1e-9');
 });
 
 test('a breakdown the page fetches is checked as one that came with it (issue 5)', async () => {
@@ -595,6 +602,27 @@ test('a file the page cannot draw draws nothing', () => {
   assert.equal(drawn.byId.content.hidden, true);
   assert.equal(drawn.byId.load.hidden, false);
   assert.equal(drawn.byId.title.textContent, '');
+});
+
+// a file of counts made from one of items, as `build(tier="counts")` writes it: no item, no
+// explanation of one, and claims without their lists
+const countsOf = (d) => {
+  d.tier = 'counts';
+  d.items = [];
+  d.items_count.not_listed += d.items_count.listed;
+  d.items_count.listed = 0;
+  d.explanations = d.explanations.filter((e) => !e.about.item);
+  d.steps.forEach((s) => { if (s.claim) s.claim.scope.forEach((e) => { e.items = null; }); });
+  return d;
+};
+
+test('a file of counts beside a host\'s matrix says nothing of a matrix (review of #34)', () => {
+  const counts = dom.page(countsOf(local()), undefined, { globals: { SENTIER_DIAGNOSTICS_MATRIX: full() } });
+  assert.equal(counts.byId.load.hidden, true, counts.byId['load-error'].textContent);
+  assert.equal(counts.byId['matrix-said'].textContent, '');
+  // the same file with its items takes the host's matrix
+  const items = dom.page(local(), undefined, { globals: { SENTIER_DIAGNOSTICS_MATRIX: full() } });
+  assert.match(items.byId['matrix-said'].textContent, /matrix of all 10 products is loaded/);
 });
 
 test('a host page never offers to open a file; a page of its own does', () => {
@@ -899,6 +927,16 @@ test('sorting from the keyboard keeps the focus on the heading it sorted by (iss
   drawn.document.activeElement = again;
   again.dispatch('click', {}); // back to the furthest apart first: still this heading
   assert.equal(climate().focused, true);
+  // every heading of its kind, not only the first: the focus goes to the one sorted by
+  // (review of #34)
+  for (const name of ['Climate', 'Water', 'Human']) {
+    const each = dom.page(example());
+    const heading = () => each.byId['grid-table'].querySelectorAll('th[scope="col"]').find((th) => (th.getAttribute('title') || '').indexOf(name) === 0).querySelector('button[type="button"]');
+    each.document.activeElement = heading();
+    heading().dispatch('click', {});
+    assert.equal(heading().focused, true, name);
+    assert.deepEqual(each.byId['grid-table'].querySelectorAll('button[type="button"]').filter((b) => b.focused), [heading()], name);
+  }
   const unfocused = dom.page(example());
   const other = unfocused.byId['grid-table'].querySelectorAll('th[scope="col"]').find((th) => (th.getAttribute('title') || '').indexOf('Climate') === 0).querySelector('button[type="button"]');
   other.dispatch('click', {}); // a click with the focus elsewhere moves no focus
@@ -1081,6 +1119,58 @@ test('the matrix shows first the indicators in which the chosen comparison moved
     const cells = row.childNodes.filter((n) => n.tagName === 'TD').slice(1); // after the group
     cells.forEach((td, k) => assert.equal(/sd-still/.test(td.className), counts[k] === 0, comp + ' cell ' + k));
   }
+});
+
+test('a host that routes by its hash keeps the page out of the address, and the page keeps its view (review of #34)', () => {
+  const data = example();
+  const step = data.steps[2];
+  const pressed = (drawn) => chips(drawn).find((c) => c.getAttribute('aria-pressed') === 'true').getAttribute('data-comp');
+  // without it, the page's part joins the host's route: a hash router reads it as its path
+  const joined = dom.page(data, undefined, { hash: '/products/12' });
+  const first = gridRows(joined)[0].getAttribute('data-item');
+  gridRows(joined)[0].childNodes[0].dispatch('click', {});
+  assert.equal(joined.context.location.hash, '/products/12&sd.item=' + first);
+  // with it, the address is the host's alone, and the page keeps what is chosen itself
+  const off = { 'data-sd-address': 'off' };
+  const drawn = dom.page(data, undefined, { hash: '/products/12', attributes: off });
+  chips(drawn).find((c) => c.getAttribute('data-comp') === step.id).dispatch('click', {});
+  const item = gridRows(drawn)[0].getAttribute('data-item');
+  gridRows(drawn)[0].childNodes[0].dispatch('click', {});
+  assert.equal(drawn.context.location.hash, '#/products/12');
+  assert.equal(drawn.byId.item.hidden, false, 'the item opens');
+  assert.match(drawn.byId['item-title'].textContent, new RegExp(data.items.find((i) => i.id === item).name));
+  assert.equal(pressed(drawn), step.id);
+  // the host's route moves on: the page keeps its step and its item, and leaves the open
+  // item as it is: not drawn again, so its scroll and the focus in it stay
+  const shown = drawn.byId['item-body'].firstChild;
+  assert.ok(shown);
+  drawn.open('/products/13');
+  assert.equal(pressed(drawn), step.id);
+  assert.equal(drawn.byId.item.hidden, false);
+  assert.equal(drawn.byId['item-body'].firstChild, shown, 'the open item is not drawn again');
+  // an address in the page's own words is not the page's
+  drawn.open('sd.step=' + encodeURIComponent(data.steps[0].id));
+  assert.equal(pressed(drawn), step.id);
+  assert.equal(drawn.byId['item-body'].firstChild, shown);
+  // closing the item leaves the address as the host has it, and keeps the step
+  drawn.byId['item-close'].dispatch('click', {});
+  assert.equal(drawn.byId.item.hidden, true);
+  assert.equal(drawn.context.location.hash, '#sd.step=' + encodeURIComponent(data.steps[0].id));
+  assert.equal(pressed(drawn), step.id);
+  // and none opens it when it is drawn
+  const asked = dom.page(data, undefined, { hash: 'sd.step=' + encodeURIComponent(step.id) + '&sd.item=' + encodeURIComponent(data.items[0].id), attributes: off });
+  assert.equal(asked.byId.item.hidden, true);
+  assert.equal(pressed(asked), 'total');
+  // what is chosen survives the page reading its parts again, as it does when its matrix comes
+  const later = dom.page(local(), undefined, { attributes: { ...off, 'data-sd-matrix': 'matrix.js' } });
+  const chosen = local().steps[1].id;
+  chips(later).find((c) => c.getAttribute('data-comp') === chosen).dispatch('click', {});
+  gridRows(later)[0].childNodes[0].dispatch('click', {});
+  later.context.SENTIER_DIAGNOSTICS_MATRIX = full();
+  later.head.querySelectorAll('script[src]')[0].onload();
+  assert.match(later.byId['matrix-said'].textContent, /matrix of all 10 products is loaded/);
+  assert.equal(pressed(later), chosen);
+  assert.equal(later.byId.item.hidden, false);
 });
 
 test('an address with a step opens the page on that step, and with an item on that item', () => {
@@ -1714,6 +1804,10 @@ test('where the drawer fills the window, or no popover is known, it opens modal;
   const css = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'sentier_diagnostics', 'page', 'diagnostics.css'), 'utf8');
   const drawerRule = css.slice(css.indexOf(' .sd-drawer {'), css.indexOf('}', css.indexOf(' .sd-drawer {')));
   for (const said of ['position: fixed', 'z-index: 2147483000', 'max-height: none', 'margin: 0', 'border: 0']) assert.ok(drawerRule.includes(said), said);
+  // a dialog and a popover take the browser's own place and size (inset 0, margin auto, fit
+  // to their content), which centres them: the drawer sets its own, at the right edge and
+  // the window's height (review of #34)
+  for (const said of ['inset: 0 0 0 auto', 'width: var(--sd-drawer)', 'height: auto', 'padding: 0']) assert.ok(drawerRule.includes(said), said);
   // a drawer that leaves the grid in use does not darken it: only the modal one
   assert.match(css, /\.sd-drawer:modal::backdrop \{/);
   assert.doesNotMatch(css, /\.sd-drawer::backdrop/);
@@ -2038,7 +2132,7 @@ test('the page reads the host\'s tokens as the browser resolves them, and follow
   // a page in a shadow root: that root is watched too, as the document does not see into
   // it, and loads are heard there, as a load does not leave it
   const loadsIn = (top) => { top.loads = []; top.addEventListener = (type, react, capture) => { if (type === 'load' && capture) top.loads.push(react); }; return top; };
-  const shadow = loadsIn({ host: around });
+  const shadow = loadsIn({ host: around, nodeType: 11 });
   const shaded = dom.body({ data: example() });
   shaded.ownerDocument = first.document;
   shaded.getRootNode = () => shadow;
@@ -2055,11 +2149,344 @@ test('the page reads the host\'s tokens as the browser resolves them, and follow
   const elsewhere = new dom.FakeNode('section');
   elsewhere.nodeType = 1;
   elsewhere.getRootNode = () => first.document;
-  const moved = loadsIn({ host: elsewhere });
+  const moved = loadsIn({ host: elsewhere, nodeType: 11 });
   shaded.getRootNode = () => moved;
   shadedWatch.react([{ type: 'childList' }]);
   assert.ok(shadedWatch.watched.some(([node]) => node === moved));
   assert.equal(moved.loads.length, 1);
+});
+
+// A host page in a browser's styles: the page's tokens and the probes set to them, as
+// browserStyles gives them, with a ground of alpha below 1 resolved as a browser writes it; the
+// background of each element around the page (main, body, html); and the root element's
+// colour scheme. Every value here is made up.
+const SEEN = { transparent: 'rgba(0, 0, 0, 0)', 'rgba(0,0,0,.04)': 'rgba(0, 0, 0, 0.04)', 'rgb(255 255 255 / .05)': 'rgba(255, 255, 255, 0.05)', '#111': 'rgb(17, 17, 17)', '#fff': 'rgb(255, 255, 255)' };
+const inHost = (vars, grounds, options = {}) => {
+  const reader = { matches: !!options.readerDark, heard: [], addEventListener(type, react) { if (type === 'change') this.heard.push(react); } };
+  const scheme = { value: options.scheme || 'normal', meta: options.meta || null };
+  const observers = [];
+  class Observer {
+    constructor(react) { this.react = react; observers.push(this); }
+    observe() {}
+    disconnect() {}
+  }
+  let reads = 0;
+  const read = new Set();
+  const styles = {
+    getComputedStyle: (node) => {
+      // as a browser: an element or a TypeError; and a walk that does not end is ended here
+      if (!(node instanceof dom.FakeNode)) throw new TypeError('parameter 1 is not of type \'Element\'');
+      if (++reads > 50000) throw new Error('the walk around the page did not end');
+      read.add(node);
+      const color = node.style ? node.style.getPropertyValue('color') : '';
+      if (color.startsWith('var(')) {
+        let said = vars[color.slice(4, -1)];
+        const both = /^light-dark\(([^,]+), ([^)]+)\)$/.exec(said || ''); // as the reader's scheme resolves it
+        if (both) said = both[reader.matches ? 2 : 1];
+        return { color: SEEN[said] || RESOLVED[said] || node.parentNode.style.getPropertyValue('color') };
+      }
+      return { getPropertyValue: (name) => (name === 'background-color' ? node.bg || '' : name === 'color-scheme' ? (node.isRoot ? scheme.value : '') : vars[name] || '') };
+    },
+  };
+  // `manual`: the first page waits, so that `before` changes the document before any page mounts
+  const first = dom.page(example(), undefined, {
+    attributes: options.manual ? { 'data-sentier-diagnostics': 'manual' } : {},
+    globals: { ...styles, matchMedia: () => reader, MutationObserver: Observer, ...(options.globals || {}) },
+  });
+  const html = new dom.FakeNode('html'), body = new dom.FakeNode('body'), main = new dom.FakeNode('main');
+  html.isRoot = true;
+  [html.bg, body.bg, main.bg] = [grounds.html, grounds.body, grounds.main];
+  html.appendChild(body);
+  body.appendChild(main);
+  first.document.nodeType = 9;
+  html.parentNode = first.document;
+  first.document.documentElement = html;
+  first.document.querySelector = (selector) => (selector === 'meta[name="color-scheme"]' && scheme.meta !== null
+    ? { getAttribute: () => scheme.meta } : null);
+  const themed = dom.body({ data: example() });
+  themed.ownerDocument = first.document;
+  main.appendChild(themed);
+  if (options.before) options.before({ document: first.document, html, body, main, themed });
+  first.context.SentierDiagnostics.mount(themed);
+  const look = () => observers[observers.length - 1].react([]);
+  return {
+    themed, html, body, main, reader, scheme, vars, look,
+    dark: () => themed.getAttribute('data-sd-scheme') === 'dark',
+    ended: () => reads <= 50000, // every walk ended (a page that threw is refused, and light)
+    wasRead: (node) => read.has(node),
+    // an event the document hears on its way down (capture): a transition or animation ending
+    fire: (type) => (first.documentListeners[type] || []).filter(([, capture]) => capture).forEach(([react]) => react({ type })),
+  };
+};
+
+test('a ground with alpha is read as it is seen, through what is behind the page (issue 45)', () => {
+  // a colour's alpha, as CSS and the browser write it
+  assert.equal(page.colourOf('rgba(0, 0, 0, 0.04)').alpha, 0.04);
+  assert.equal(page.colourOf('rgb(255 255 255 / 5%)').alpha, 0.05);
+  assert.equal(page.colourOf('#ffffff80').alpha, 128 / 255);
+  assert.equal(page.colourOf('#fff8').alpha, 136 / 255);
+  assert.equal(page.colourOf('oklch(0.5 0.1 200 / 0.5)').alpha, 0.5);
+  assert.equal(page.colourOf('oklch(0.5 0.1 200 / none)').alpha, 0);
+  assert.equal(page.colourOf('rgb(0 0 0 / none)').alpha, 0);
+  assert.equal(page.colourOf('rgb(0 0 0 / 0.5) 1px'), null, 'a colour and something after it is not a colour');
+  assert.equal(page.colourOf('rgb(29, 35, 42)').alpha, 1);
+  assert.deepEqual(page.colourOf('rgba(0, 0, 0, 0)'), { rgb: [0, 0, 0], alpha: 0 });
+  assert.equal(page.colourOf('color(srgb 1 1 1 / 0.5)', canvasOf()).alpha, 128 / 255, 'read back from a canvas');
+  assert.equal(page.luminance('rgba(0, 0, 0, 0)'), null, 'a colour of nothing at all is no colour, and not black');
+  // a faint white over a dark veil over white: 255 × 0.05 + (255 × 0.2) × 0.95 = 61.2
+  const seen = page.seenThrough([{ rgb: [255, 255, 255], alpha: 0.05 }, { rgb: [0, 0, 0], alpha: 0.8 }, { rgb: [255, 255, 255], alpha: 1 }]);
+  assert.match(seen, /^rgb\((61\.\d+), \1, \1\)$/);
+  assert.ok(Math.abs(parseFloat(seen.slice(4)) - 61.2) < 1e-9, seen);
+
+  // the three hosts of the issue, with no ink: the page is light on a light host, dark on a dark one
+  assert.equal(inHost({ '--surface': 'transparent' }, { body: 'rgb(255, 255, 255)' }).dark(), false, 'transparent on white');
+  assert.equal(inHost({ '--surface': 'rgba(0,0,0,.04)' }, { body: 'rgb(255, 255, 255)' }).dark(), false, 'a faint tint on white');
+  assert.equal(inHost({ '--surface': 'rgb(255 255 255 / .05)' }, { body: 'rgb(17, 17, 17)' }).dark(), true, 'a raised surface on #111');
+  // an opaque ground is read as it is, whatever is behind it
+  assert.equal(inHost({ '--surface': '#111' }, { body: 'rgb(255, 255, 255)' }).dark(), true);
+  // each background is laid over the next: a dark veil on white, under a faint white, is dark;
+  // a light one is not
+  assert.equal(inHost({ '--surface': 'rgb(255 255 255 / .05)' }, { main: 'rgba(0, 0, 0, 0.8)', body: 'rgb(255, 255, 255)' }).dark(), true);
+  assert.equal(inHost({ '--surface': 'rgb(255 255 255 / .05)' }, { main: 'rgba(0, 0, 0, 0.3)', body: 'rgb(255, 255, 255)' }).dark(), false);
+  // the first opaque background ends the walk: html's is not seen through body's, nor read
+  assert.equal(inHost({ '--surface': 'transparent' }, { body: 'rgb(255, 255, 255)', html: 'rgb(17, 17, 17)' }).dark(), false);
+  assert.equal(inHost({ '--surface': 'transparent' }, { body: 'rgb(17, 17, 17)', html: 'color(display-p3 0 0 0)' }).dark(), true);
+  // behind every element the canvas, painted with the root's colour scheme, or the
+  // document's meta where the root says nothing
+  const bare = (options) => inHost({ '--surface': 'transparent' }, {}, options).dark();
+  assert.equal(bare({}), false);
+  assert.equal(bare({ scheme: 'dark' }), true);
+  assert.equal(bare({ scheme: 'light dark' }), false);
+  assert.equal(bare({ scheme: 'light dark', readerDark: true }), true);
+  assert.equal(bare({ scheme: 'only light', readerDark: true }), false);
+  assert.equal(bare({ meta: 'dark' }), true);
+  assert.equal(bare({ scheme: 'light', meta: 'dark' }), false, 'the root\'s own scheme before the meta');
+  // a background behind the ground that cannot be read leaves the ground unknown: the page
+  // keeps its light colours, never reading past it to the dark canvas
+  assert.equal(inHost({ '--surface': 'transparent' }, { body: 'color(display-p3 0 0 0)' }, { scheme: 'dark' }).dark(), false);
+  // where the ink says something, the ink decides, as before
+  assert.equal(inHost({ '--ink': '#1d232a', '--surface': 'rgb(255 255 255 / .05)' }, { body: 'rgb(17, 17, 17)' }).dark(), false);
+  // an opaque ground hides what is behind it: nothing around the page is read, then or on a look
+  const opaque = inHost({ '--surface': '#fff' }, { body: 'rgb(17, 17, 17)' });
+  opaque.look();
+  assert.ok(![opaque.main, opaque.body, opaque.html].some(opaque.wasRead), 'an opaque ground reads nothing around it');
+  const faint = inHost({ '--surface': 'rgb(255 255 255 / .05)' }, { body: 'rgb(17, 17, 17)' });
+  assert.ok([faint.main, faint.body].every(faint.wasRead));
+});
+
+test('a host that switches what is behind a translucent ground is followed, its tokens unchanged (issue 45)', () => {
+  const host = inHost({ '--surface': 'rgb(255 255 255 / .05)' }, { body: 'rgb(255, 255, 255)' });
+  assert.equal(host.dark(), false);
+  host.body.bg = 'rgb(17, 17, 17)'; // a class on body switched its background
+  host.look();
+  assert.equal(host.dark(), true);
+  host.body.bg = 'rgb(255, 255, 255)';
+  host.look();
+  assert.equal(host.dark(), false);
+  // a page in a shadow root: what is behind it is its host's, and on; a page slotted into
+  // a host is drawn in the slot, inside the host's own shadow tree
+  const shaded = inHost({ '--surface': 'rgb(255 255 255 / .05)' }, { body: 'rgb(255, 255, 255)' });
+  const panel = new dom.FakeNode('x-panel');
+  panel.bg = 'rgb(17, 17, 17)';
+  shaded.main.appendChild(panel);
+  shaded.main.removeChild(shaded.themed);
+  shaded.themed.parentNode = { host: panel, nodeType: 11 };
+  shaded.look();
+  assert.equal(shaded.dark(), true, 'in a shadow root of a dark host');
+  const slotted = inHost({ '--surface': 'rgb(255 255 255 / .05)' }, { body: 'rgb(255, 255, 255)' });
+  const card = new dom.FakeNode('x-card'), frame = new dom.FakeNode('div'), slot = new dom.FakeNode('slot');
+  frame.bg = 'rgb(17, 17, 17)'; // the card's own dark frame, inside its shadow tree
+  frame.appendChild(slot);
+  frame.parentNode = { host: card, nodeType: 11 };
+  slotted.main.appendChild(card);
+  card.appendChild(slotted.themed);
+  slotted.themed.assignedSlot = slot;
+  slotted.look();
+  assert.equal(slotted.dark(), true, 'slotted into a card whose frame is dark');
+  // a ground made translucent is seen through from then on: what is behind it is followed
+  const turned = inHost({ '--surface': '#fff' }, { body: 'rgb(17, 17, 17)' });
+  assert.equal(turned.dark(), false);
+  turned.vars['--surface'] = 'rgb(255 255 255 / .05)';
+  turned.look();
+  assert.equal(turned.dark(), true);
+  turned.body.bg = 'rgb(255, 255, 255)';
+  turned.look();
+  assert.equal(turned.dark(), false);
+  // and the canvas: the root's colour scheme switched, with nothing behind the page
+  const bare = inHost({ '--surface': 'transparent' }, {});
+  assert.equal(bare.dark(), false);
+  bare.scheme.value = 'dark';
+  bare.look();
+  assert.equal(bare.dark(), true);
+});
+
+test('the walk around the page follows the tree, not what a host\'s names put in its place (review of #46)', () => {
+  // a faint white on a dark body: dark, read through every element out to the body
+  const faint = (options) => inHost({ '--surface': 'rgb(255 255 255 / .05)' }, { body: 'rgb(17, 17, 17)' }, options);
+  assert.equal(faint().dark(), true);
+  // an element named "host" in the document (<form name="host">, <img name="host">) is
+  // document.host; an <iframe name="host"> makes it a window. Nothing is above the document.
+  const named = faint({ before: ({ document, body }) => { document.host = body; } });
+  assert.equal(named.dark(), true, 'document.host an element of the page');
+  named.look();
+  assert.equal(named.dark(), true);
+  assert.equal(faint({ before: ({ document }) => { document.host = { closed: false }; } }).dark(), true, 'document.host a window');
+  // a page inside a link: the link's host is its address's host name, and no node
+  const linked = faint({
+    before: ({ main, themed }) => {
+      const link = new dom.FakeNode('a');
+      link.host = 'example.org';
+      main.removeChild(themed);
+      main.appendChild(link);
+      link.appendChild(themed);
+    },
+  });
+  assert.equal(linked.dark(), true, 'inside a link');
+  // In a browser the walk reads the DOM's own getters. A form gives its controls by name
+  // (WebForms wraps a whole page in one form), so a control named parentNode, nodeType,
+  // assignedSlot or host is what the form says for that name; the getters say what it is.
+  const truth = new WeakMap();
+  const held = (key) => function () {
+    if (!truth.has(this)) throw new TypeError('Illegal invocation');
+    return truth.get(this)[key];
+  };
+  class Node {}
+  Object.defineProperty(Node.prototype, 'parentNode', { get: held('parentNode') });
+  Object.defineProperty(Node.prototype, 'nodeType', { get: held('nodeType') });
+  Node.prototype.getRootNode = function () { let n = this; while (truth.get(n).parentNode) n = truth.get(n).parentNode; return n; };
+  class Element {}
+  Object.defineProperty(Element.prototype, 'assignedSlot', { get: held('assignedSlot') });
+  class ShadowRoot {}
+  Object.defineProperty(ShadowRoot.prototype, 'host', { get: held('host') });
+  const wrapped = (globals, options, names = ['parentNode', 'nodeType', 'assignedSlot', 'host']) => faint({
+    ...options,
+    globals,
+    before: ({ document, html, body, main, themed }) => {
+      const form = new dom.FakeNode('form'), control = new dom.FakeNode('input');
+      main.removeChild(themed);
+      main.appendChild(form);
+      form.appendChild(control);
+      form.appendChild(themed);
+      [html, body, main, form, control, themed].forEach((n) => truth.set(n, { parentNode: n.parentNode, nodeType: 1, assignedSlot: null }));
+      truth.set(document, { parentNode: null, nodeType: 9 });
+      names.forEach((name) => { form[name] = control; });
+    },
+  });
+  assert.equal(wrapped({ Node, Element, ShadowRoot }).dark(), true, 'inside a form whose controls take its names');
+  // a page deep in its host is read out to its body: the limit is far above any real depth
+  const deep = faint({
+    before: ({ main, themed }) => {
+      main.removeChild(themed);
+      let at = main;
+      for (let n = 0; n < 300; n++) { const div = new dom.FakeNode('div'); at.appendChild(div); at = div; }
+      at.appendChild(themed);
+    },
+  });
+  assert.equal(deep.dark(), true, 'a page 300 elements deep reads its body');
+  // without the getters, a form whose control is named assignedSlot leads the walk round
+  // and round between them: it ends at its limit, and the ground is unknown (light), never
+  // a hang or an error, nor the canvas behind
+  const round = wrapped({}, {}, ['assignedSlot']);
+  assert.equal(round.dark(), false);
+  assert.ok(round.ended());
+  round.look();
+  assert.ok(round.ended());
+  const roundDark = wrapped({}, { scheme: 'dark' }, ['assignedSlot']);
+  assert.equal(roundDark.dark(), false, 'not read past the limit to a dark canvas');
+  assert.ok(roundDark.ended());
+  // the walk out to the document, through shadow roots, ends too: a stand-in whose shadow
+  // root is the page's own
+  let asked = 0;
+  const looped = faint({
+    before: ({ themed }) => {
+      const top = { nodeType: 11, host: themed, addEventListener() {}, removeEventListener() {} };
+      themed.getRootNode = () => { if (++asked > 50000) throw new Error('the walk out to the document did not end'); return top; };
+    },
+  });
+  looped.look();
+  assert.ok(asked <= 50000);
+});
+
+test('a host that animates its switch is followed where the transition or animation ends (review of #46)', () => {
+  // a transition moves the body's background and changes nothing in the document: no look is
+  // asked for until it ends, and then one is
+  const host = inHost({ '--surface': 'rgb(255 255 255 / .05)' }, { body: 'rgb(255, 255, 255)' });
+  assert.equal(host.dark(), false);
+  host.body.bg = 'rgb(17, 17, 17)';
+  assert.equal(host.dark(), false, 'nothing heard while it runs');
+  host.fire('transitionend');
+  assert.equal(host.dark(), true);
+  host.body.bg = 'rgb(255, 255, 255)'; // a theme switched by @keyframes
+  host.fire('animationend');
+  assert.equal(host.dark(), false);
+  // A document whose names stand in for its own: an <img name="addEventListener">, an
+  // <iframe name="documentElement"> (a window), an <img name="querySelector">. The page reads
+  // the document through its prototypes: it hears the ends, and reads the canvas's scheme
+  // from the root element or the meta, as in any document.
+  const own = new WeakMap(); // what the document's prototype holds, once its names stand in for it
+  const ownOf = (node) => (own.has(node) ? own.get(node) : node);
+  const by = (name) => function (...args) { return ownOf(this)[name].apply(this, args); };
+  class EventTarget {}
+  EventTarget.prototype.addEventListener = by('addEventListener');
+  EventTarget.prototype.removeEventListener = by('removeEventListener');
+  class Document {}
+  Object.defineProperty(Document.prototype, 'documentElement', { get() { return ownOf(this).documentElement; } });
+  Document.prototype.querySelector = by('querySelector');
+  const named = (globals, options, names = ['addEventListener', 'removeEventListener', 'documentElement', 'querySelector']) => inHost({ '--surface': 'transparent' }, {}, {
+    ...options,
+    globals,
+    manual: true, // the document's names stand in before the first page mounts
+    before: ({ document }) => {
+      const kept = {};
+      names.forEach((name) => { kept[name] = document[name]; });
+      own.set(document, kept);
+      const img = new dom.FakeNode('img');
+      names.forEach((name) => { document[name] = name === 'documentElement' ? { closed: false } : img; });
+    },
+  });
+  const read = named({ EventTarget, Document }, { scheme: 'dark' });
+  assert.equal(read.dark(), true, 'the root element\'s scheme, read through the document\'s getter');
+  assert.equal(named({ EventTarget, Document }, { meta: 'dark' }).dark(), true, 'the meta, found through the document\'s own querySelector');
+  read.body.bg = 'rgb(255, 255, 255)';
+  read.fire('transitionend');
+  assert.equal(read.dark(), false, 'the end heard through the document\'s own addEventListener');
+  // without the prototypes those names are all the page has: nothing is read or heard, and
+  // nothing throws
+  const unread = named({}, { scheme: 'dark' });
+  assert.equal(unread.dark(), false);
+  assert.ok(unread.ended());
+  // and a root element that is not one is not read: the meta still is
+  assert.equal(named({}, { meta: 'dark' }, ['documentElement']).dark(), true);
+});
+
+test('the reader\'s scheme alone is followed: a token in light-dark() resolves anew, its text unchanged (review of #34)', () => {
+  // the host's ink is light-dark(#1d232a, #eee) and its root takes both schemes: the text the
+  // page reads of the token stays the same, and only the reader's switch says it changed
+  const host = inHost({ '--ink': 'light-dark(#1d232a, #eee)' }, { body: 'rgb(255, 255, 255)' });
+  assert.equal(host.dark(), false);
+  host.reader.matches = true;
+  host.reader.heard.forEach((react) => react({ matches: true }));
+  assert.equal(host.dark(), true);
+  host.vars['--ink'] = 'light-dark(#1d232a, #eee)'; // a change elsewhere in the document: still dark
+  host.look();
+  assert.equal(host.dark(), true);
+  host.reader.matches = false;
+  host.reader.heard.forEach((react) => react({ matches: false }));
+  assert.equal(host.dark(), false);
+});
+
+test('a page reads only the parts of the address under its own key, whatever the length of another key (review of #34)', () => {
+  // `sd.` and `ab.` are as long: the page `sd` does not read `ab.item` as its own `item`
+  const sd = dom.page(example(), undefined, { hash: 'ab.item=p01' });
+  const ab = dom.body({ data: example() });
+  ab.setAttribute('data-sd-key', 'ab');
+  ab.ownerDocument = sd.document;
+  sd.context.SentierDiagnostics.mount(ab);
+  sd.open('ab.item=p01');
+  assert.equal(ab.querySelector('[data-sd="item"]').hidden, false, 'ab opens its item');
+  assert.equal(sd.byId.item.hidden, true, 'sd opens nothing');
+  sd.open('sd.item=p01');
+  assert.equal(sd.byId.item.hidden, false);
 });
 
 test('a key the host names is a plain word, neither the page\'s own nor another page\'s (review of issue 27)', () => {
@@ -2742,7 +3169,7 @@ test('a page a host removed without unmount() is let go once nothing holds it, a
   drawn.changed();
   assert.equal(drawn.listeners.hashchange.length, 0);
   assert.deepEqual(observers[0].watched, [], 'the document is watched no more');
-  assert.equal((drawn.documentListeners.load || []).length, 0);
+  ['load', 'transitionend', 'animationend'].forEach((type) => assert.equal((drawn.documentListeners[type] || []).length, 0, type));
   assert.equal(listening(lists), 0, 'nor the reader\'s colour scheme');
   assert.ok(drawn.context.SENTIER_DIAGNOSTICS_WAITERS.every((ref) => ref.deref() === undefined), 'no page is held waiting');
   // the scripts left in the head call nothing
@@ -2789,7 +3216,7 @@ test('the pages of a window share one observer, one listener of each kind and on
   assert.equal(observers.length, 1);
   assert.equal(observers[0].watched.length, 1, 'the document watched once');
   assert.equal(drawn.listeners.hashchange.length, 1);
-  assert.equal(drawn.documentListeners.load.length, 1);
+  ['load', 'transitionend', 'animationend'].forEach((type) => assert.equal(drawn.documentListeners[type].length, 1, type));
   assert.equal(listening(lists), 1);
   for (let n = 0; n < 100; n++) observers[0].react([{ type: 'attributes' }]);
   assert.equal(frames.length, 1, 'a hundred changes, one look for every page');

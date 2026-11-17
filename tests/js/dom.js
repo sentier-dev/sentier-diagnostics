@@ -25,6 +25,7 @@ class FakeNode {
   constructor(tag, text) {
     this.tagName = tag ? tag.toUpperCase() : null;
     this.text = text; // a text node holds this; an element has none
+    this.nodeType = tag ? 1 : 3; // an element, or a text node
     this.childNodes = [];
     this.parentNode = null;
     this.attributes = {};

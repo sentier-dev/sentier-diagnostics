@@ -563,12 +563,27 @@ on the page's white. It reads the tokens as the browser resolves them (`light-da
 another `var()`), and a token it cannot read as a colour is unknown, never black. A colour
 the browser gives in sRGB, `oklab()` or `oklch()` is read as written; any other is drawn on
 a canvas of one pixel and read back, and where the browser hides what a canvas holds (a
-known colour does not come back as it went) it is unknown as well. It looks
+known colour does not come back as it went) it is unknown as well. A ground with alpha
+below 1 (`transparent`, a faint tint, a dark theme's raised surface) is read as it is seen:
+laid over the backgrounds of the elements around the page, out to the first opaque one,
+and over the document's canvas, which is dark where the root's `color-scheme` (or the
+document's `<meta name="color-scheme">`) and the reader make it so. A background behind it
+that cannot be read leaves the ground unknown; background images are not read. The
+elements around the page are those of the document's tree (for a slotted page its slot, for
+a page in a shadow root its host), read through the DOM's own properties, so that a host's
+names do not stand in for them (an element named `host`, a form's control named
+`parentNode`); past 4,096 of them the ground is unknown. What is painted is not read: an
+ancestor's opacity, filter, backdrop filter or blend mode, an element placed or transformed
+away from its parents, and an element of `display: contents` (a slot among them), which
+paints no background and whose background is read all the same. It looks
 again when the reader's colour scheme changes, when anything changes in the document or in
-a shadow root the page sits in, and when a stylesheet loads: once a frame at most, and it
-reads the tokens again only where they, the computed `color-scheme` or the reader's
-scheme changed, so that a host's observer that answers the page's reading sets off no
-other. A rule a site changes through the CSS object model alone changes nothing the page
+a shadow root the page sits in, when a stylesheet loads, and when a transition or an
+animation ends there (a host that animates its switch changes a background and nothing in
+the document): once a frame at most, and it
+reads the tokens again only where they, the computed `color-scheme`, the reader's scheme or
+what a translucent ground shows changed (it reads what is around the page only where the
+ground as written may have alpha), so that a host's observer that answers the page's
+reading sets off no other. A rule a site changes through the CSS object model alone changes nothing the page
 can see.
 
 **A host lets the body be wide.** The matrix needs the page's width, and a site that caps
@@ -646,7 +661,15 @@ on each root they sit in, and one observer of the document, and each of these ho
 pages weakly, as do the list of keys and a matrix's script. A page the host still holds is
 kept and works again when it is put back. Where the browser has no `WeakRef`, a removed page
 is held until `unmount()`. Every part the page does not
-own is kept as it was. An
+own is kept as it was, and the page's parts are joined to it with `&`. A host that routes
+by its hash (`#/products/12`, as Vue's hash mode, React's `HashRouter` or Angular's
+`useHash` do) would read `#/products/12&sd.item=p08` as the path `/products/12&sd.item=p08`;
+a route with a query (`#/products?tab=2`) takes them as more of its query, which does no
+harm. Such
+a host keeps the page out of the address with `data-sd-address="off"`: the page then holds
+its parts itself, neither reads nor writes the address, and no address opens it. The
+attribute is read once, when the page is mounted. A host that wants to open a step or an
+item on such a page has no call for it yet. An
 address naming a step the file does not have, steps apart, or a run the page cannot judge
 (no matrix), says so and shows the whole way. Below
 them, each closed until a reader opens it: the steps and the whole way (10.2), the worst
