@@ -828,6 +828,24 @@ class Chain(unittest.TestCase):
             claims.published(claims.claim("t", [claims.scope([A], {"p", "q"})], reach=4900))
         self.assertEqual(claims.published(claims.claim("t", [claims.scope([A], {"p", "q"})]))["reach"], 2)
 
+    def test_a_claim_that_lists_no_items_has_no_reach(self):
+        # issue 35: every entry takes "*", or there is none: a reach would count nothing
+        for entries in ([claims.scope([A])], [claims.scope([A]), claims.scope([B])], []):
+            with self.assertRaises(ValueError):
+                claims.published(claims.claim("t", entries, reach=7))
+            self.assertIsNone(claims.published(claims.claim("t", entries))["reach"])
+        # a list kept private is a list: its reach is the only trace of it, and stays
+        private = claims.published(claims.claim("t", [claims.scope([A], None), claims.scope([B])], reach=7))
+        self.assertEqual(private["reach"], 7)
+        data = helpers.two_states({A: {"p": 1.0}}, {A: {"p": 2.0}}, claim=claims.claim("t", [claims.scope([A])], by=claims.origin("person", "A")))
+        self.assertEqual(fileformat.errors(data), [])
+        for scope in ([{"indicators": "*", "items": "*", "direction": "any", "largest": None, "expect": "may"}], []):
+            given = helpers.mutated(data, lambda d, scope=scope: d["steps"][0]["claim"].update(reach=7, scope=scope))
+            self.assertTrue(any("no entry of it lists items" in e for e in fileformat.errors(given)), fileformat.errors(given))
+        kept = helpers.mutated(data, lambda d: d["steps"][0]["claim"].update(
+            reach=7, scope=[{"indicators": "*", "items": None, "direction": "any", "largest": None, "expect": "may"}]))
+        self.assertFalse(any("reach" in e for e in fileformat.errors(kept)), fileformat.errors(kept))
+
     def test_a_lone_surrogate_is_not_a_text(self):
         data = example.build()
         data["title"] = "half \ud800 a character"

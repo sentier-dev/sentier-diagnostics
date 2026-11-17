@@ -116,6 +116,16 @@ def reach_of(entries: Iterable[Mapping]) -> int | None:
     return len(set().union(*listed)) if listed else None
 
 
+def lists_nothing(entries: Iterable[Mapping]) -> bool:
+    """Whether no entry of a claim lists items: each takes every item (`"*"`), or there is
+    none. Such a claim has no reach; a list kept private (`items: null`) is a list.
+
+    >>> lists_nothing([scope(["x"])]), lists_nothing([]), lists_nothing([scope(["x"], None)])
+    (True, True, False)
+    """
+    return all(e["items"] == "*" for e in entries)
+
+
 def published(found: dict, keep_items: bool = True) -> dict:
     """A claim as a file holds it: lists sorted, and with `keep_items` false every list of
     items left out (`items: null`), its size kept in `reach`."""
@@ -124,6 +134,8 @@ def published(found: dict, keep_items: bool = True) -> dict:
         if reach is not None and reach != size:
             raise ValueError(f"a claim's reach is {reach}, and its lists name {size} items")
         reach = size
+    elif reach is not None and lists_nothing(found["scope"]):
+        raise ValueError(f"a claim's reach is {reach}, and no entry of it lists items")
     entries = []
     for entry in found["scope"]:
         items = entry["items"]

@@ -396,7 +396,8 @@ A step may say what it moves. A claim is text, who wrote it (section 8), and a s
   claim that names an item no state holds (a typo would otherwise be a claim about nothing).
 - `reach`: how many items the claim's lists name together, `"*"` entries aside. Where every
   list is in the file the validator checks it; where a list stays private it is the only
-  trace of that list. It is null where no entry lists items.
+  trace of that list. It is null where no entry lists items (every entry takes `"*"`, or
+  there is none), and the validator refuses a reach there: it would count nothing.
 - `direction`: `up`, `down` or `any`. `largest`: the largest change relative to the result
   before, or null.
 - `expect`: `must` (each covered pair must move) or `may` (the default: it may move).

@@ -291,6 +291,8 @@ def claim_errors(found_claim, where, indicators, tier) -> list[str]:
     size = claims.reach_of(found_claim["scope"])
     if size is not None and found_claim["reach"] != size:
         found.append(f"{where}: the reach of a claim is {found_claim['reach']}, and its lists name {size} items")
+    if found_claim["reach"] is not None and claims.lists_nothing(found_claim["scope"]):
+        found.append(f"{where}: the reach of a claim is {found_claim['reach']}, and no entry of it lists items")
     return found
 
 
