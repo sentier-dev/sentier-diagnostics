@@ -1170,7 +1170,10 @@ class Chain(unittest.TestCase):
             with self.subTest(key):
                 self.assertTrue(any("`identity`" in e for e in said(key)))
         for key in ("solver", "database_version", "brightway-flows", "checksum", "token", "package", "run",
-                    "stratified", "authority", "signal", "nuclear_share", "decimals", "event"):  # fmt: skip
+                    "stratified", "authority", "signal", "nuclear_share", "decimals", "event",
+                    # a stem is not looked for across two words (review of 9a11c09)
+                    "stat_test", "format_test", "at_test", "design_at", "clear_edge", "grant_edge",
+                    "designation", "designator", "designate"):  # fmt: skip
             with self.subTest(key):
                 self.assertEqual(said(key), [])
 
