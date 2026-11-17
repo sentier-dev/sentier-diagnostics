@@ -363,13 +363,14 @@ def dense(f, fix_id, under=None, under_noise=None):
 
 class SparseCounts(unittest.TestCase):
     def test_counting_the_changed_items_only_is_counting_every_item(self):
-        last = {A: {"p1": 1.0, "p2": 2.0, "p3": 3.0, "p4": 0.0, "p5": None, "p6": -2.0},
-                B: {"p1": 3.0, "p2": 5.0, "p3": 7.0, "p4": 1.0, "p5": 4.0, "p6": 0.001}}  # fmt: skip
+        # p4 (near zero) and p7 (missing) are untouched under a `must`: left open (issue 3)
+        last = {A: {"p1": 1.0, "p2": 2.0, "p3": 3.0, "p4": 0.0, "p5": None, "p6": -2.0, "p7": None},
+                B: {"p1": 3.0, "p2": 5.0, "p3": 7.0, "p4": 1.0, "p5": 4.0, "p6": 0.001, "p7": 5.0}}  # fmt: skip
         data, full = chain_and_matrix(last)
         every = claims.claim("All of B must move; p1 and p5 may move in A.",
                              [claims.scope([B], "*", "up", None, claims.MUST),
                               claims.scope([A], {"p1", "p5"}, "any", None, claims.MAY),
-                              claims.scope([A], {"p2", "p4"}, "down", 0.1, claims.MUST)])  # fmt: skip
+                              claims.scope([A], {"p2", "p4", "p7"}, "down", 0.1, claims.MUST)])  # fmt: skip
         wide = fixes.fix("w", "Wide", kind="amount", claim=every, noise=chain.noise(["one", "two"], {A: 0.05}))
         moved = {A: {"p1": 1.02, "p5": 3.0, "p2": None, "p6": 2.0}, B: {"p1": 3.5, "p5": None, "p6": 0.002, "p4": 1.0001}}
         f = fixes.build("Sparse", data=data, full=full, base="s1", fixes=[wide], results={"w": moved})
@@ -378,7 +379,8 @@ class SparseCounts(unittest.TestCase):
             for key in ("classes", "missing", "verdicts"):
                 with self.subTest(ind=ind, key=key):
                     self.assertEqual(block[key], again[ind][key])
-        self.assertEqual(sum(f["fixes"][0]["counts"][B]["verdicts"].values()), 6)
+        self.assertEqual(sum(f["fixes"][0]["counts"][B]["verdicts"].values()), 7)
+        self.assertEqual(f["fixes"][0]["counts"][A]["verdicts"][claims.OPEN], 3)  # p2 (now missing), p4, p7
 
 
 class Acceptance(unittest.TestCase):

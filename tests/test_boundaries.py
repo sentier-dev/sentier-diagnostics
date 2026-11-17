@@ -53,11 +53,16 @@ def pairs():
             for after in near(size * factor):
                 yield f"the band edge at {factor}", size, after, 0.0, TOLERANCE, None
         for floor in near(size):
-            # its mirror is the floor after
-            yield "the floor before", size, 5 * size, floor, TOLERANCE, None
+            # its mirror is the floor after; twenty times: across the floor it has no ratio
+            yield "the floor before", size, 20 * size, floor, TOLERANCE, None
+            # five times: across the floor or not, the ratio classes it (issue #38)
+            yield "the floor before, within ten times", size, 5 * size, floor, TOLERANCE, None
             yield "the floor on both sides", size, size * 0.5, floor, TOLERANCE, None
             # crossing the floor by less than the tolerance agrees (SPEC A26)
             yield "across the floor within the tolerance", size * (1 + 4e-6), size * (1 - 4e-6), floor, TOLERANCE, None
+        for after in near(10 * size):
+            # the side before within the floor: ten times is a ratio, more is from zero
+            yield "across the floor at ten times", size, after, size, TOLERANCE, None
         for after in near(-size):
             yield "a sign crossing", size, after, 0.0, TOLERANCE, None
             yield "a sign crossing within the floor", size, after, size, TOLERANCE, None
@@ -106,6 +111,11 @@ class Boundaries(unittest.TestCase):
     def test_the_fixture_is_what_the_rule_gives(self):
         self.assertEqual(json.loads(FIXTURE.read_text(encoding="utf-8")), json.loads(json.dumps(fixture())))
 
+    def test_within_ten_times_the_floor_changes_no_class(self):
+        # a pair of one sign within ten times is classed by its ratio, wherever the floor lies
+        found = {(c["class"], c["band"]) for c in cases() if c["why"] == "the floor before, within ten times"}
+        self.assertEqual({k for k, _ in found}, {rule.DIFFERS})
+
     def test_every_class_and_every_band_is_reached(self):
         found = cases()
         self.assertEqual({c["class"] for c in found}, set(rule.CLASSES))
@@ -117,7 +127,7 @@ class Boundaries(unittest.TestCase):
         for c in cases():
             by_edge.setdefault(c["why"], set()).add((c["class"], c["band"]))
         for why in ("the tolerance", "the noise", "the band edge at 1.1", "the band edge at 1.25", "the band edge at 2.0",
-                    "the band edge at 10.0", "the floor before", "the floor on both sides",
+                    "the band edge at 10.0", "the floor before", "the floor on both sides", "across the floor at ten times",
                     "the noise, exactly", "the tolerance, exactly"):  # fmt: skip
             with self.subTest(why):
                 self.assertGreater(len(by_edge[why]), 1, why)

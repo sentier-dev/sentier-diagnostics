@@ -37,15 +37,15 @@
   var STRENGTH = { '1-1.1': 0.25, '1.1-1.25': 0.45, '1.25-2': 0.65, '2-10': 0.85, 'over 10': 1 };
   // the ends of the bands, as rule.SIZE_STEPS: the distance (|log10| of the factor) at which each ends
   var SIZE_STEPS = [[Math.log10(1.1), '1-1.1'], [Math.log10(1.25), '1.1-1.25'], [Math.log10(2), '1.25-2'], [1, '2-10']];
-  var LOOK = ['off claim', 'not claimed', 'claimed, not moved'];
-  var LOOK_MARK = { 'off claim': '◐', 'not claimed': '■', 'claimed, not moved': '○' };
+  var LOOK = ['off claim', 'not claimed', 'claimed, not moved', 'claimed, not judged'];
+  var LOOK_MARK = { 'off claim': '◐', 'not claimed': '■', 'claimed, not moved': '○', 'claimed, not judged': '◇' };
   var SAID = {
     'agrees': 'the two results differ by no more than the tolerance',
     'within noise': 'they differ by no more than two builds of one state do',
     'differs': 'the results differ',
     'beyond 10x': 'one result is more than ten times the size of the other',
-    'zero reference': 'the result before is zero or within the floor; the result after is not',
-    'zero result': 'the result after is zero or within the floor; the result before is not',
+    'zero reference': 'the result before is zero or within the floor, the result after is not, and they are not of one sign within ten times',
+    'zero result': 'the result after is zero or within the floor, the result before is not, and they are not of one sign within ten times',
     'sign change': 'the two results have different signs',
     'near zero': 'both results are within their floor: their ratio says nothing',
     'missing': 'a side has no result; it is not read as zero',
@@ -64,7 +64,7 @@
   };
   var VERDICT_CODES = {
     'a': 'as claimed', 'o': 'off claim', 'n': 'not claimed', 'c': 'claimed, not moved',
-    '~': 'within noise', '=': 'unchanged', '?': 'not judged'
+    'j': 'claimed, not judged', '~': 'within noise', '=': 'unchanged', '?': 'not judged'
   };
   var NO_CLAIM = '.';
   // what a column's heading sorts by, in the words of its title (furthestKey)
@@ -102,9 +102,11 @@
   }
 
   // a step's share of the whole difference, signed; never "0.0 %" for a share that is not 0
+  // A share from 1e4 % on is printed as formatNumber prints a number, to four digits: one
+  // decimal of a percent would print more digits than a float holds (1e18 % as nineteen).
   function shareText(part) {
     var v = part * 100, size = Math.abs(v);
-    var text = size === 0 ? '0' : size < 0.1 ? size.toExponential(1) : size.toFixed(1);
+    var text = size === 0 ? '0' : size < 0.1 ? size.toExponential(1) : size < 1e4 ? size.toFixed(1) : formatNumber(size);
     return (v > 0 ? '' : v < 0 ? '−' : '') + text + ' %';
   }
 
@@ -165,39 +167,60 @@
   }
 
   // Steps whose differences add up to more than this many times the whole difference
-  // cancel: their shares would be large and of both signs, and in floating point the
-  // whole may be mostly rounding. The page says so instead of printing them.
+  // cancel: their shares are large and of both signs. The page prints them, and says so.
   var CANCEL = 10;
+  // what one rounding of a double takes off a number, at most, as a part of it
+  var ROUNDOFF = Math.pow(2, -53);
+  // half the last digit a sum of shares is printed to (0.1 %), as a share
+  var LAST_DIGIT = 5e-4;
 
   // how an item's whole difference splits among the steps (SPEC 7): `values` are its
   // results per state, `explained` says per step whether a cause explains it, `totalClass`
-  // is the class of the whole way. The split is exact up to rounding, so the page prints
-  // the sum of the shares it shows, never a fixed 100 %.
+  // is the class of the whole way.
+  //
+  // A share is one difference over the whole difference, each rounded once, so it is right
+  // to a few roundoffs of its own size, and is printed to the digits it holds. A sum of
+  // shares is not: adding them rounds off up to a few roundoffs of every share, and where
+  // the steps cancel that is far more than the sum. `bound` is that rounding, as a share:
+  // (steps + 2) roundoffs of the shares' sizes added up. A sum (all the shares, or those
+  // of the steps nothing explains) is printed only where `bound` stays under its last
+  // digit; all the shares are printed as what rounding left of 100 %, so the page never
+  // prints a fixed 100 %.
   function splitOf(values, explained, totalClass) {
     if (totalClass === 'missing') return { state: 'missing' };
     if (MOVES.indexOf(totalClass) < 0) return { state: 'still' };
     for (var i = 0; i < values.length; i++) if (values[i] === null) return { state: 'gap' };
     var whole = values[values.length - 1] - values[0];
+    if (!whole) return { state: 'level' };
     var diffs = [], gross = 0;
     for (var k = 0; k + 1 < values.length; k++) {
       diffs.push(values[k + 1] - values[k]);
       gross += Math.abs(values[k + 1] - values[k]);
     }
-    if (!whole || gross > CANCEL * Math.abs(whole)) return { state: 'cancel', factor: whole ? gross / Math.abs(whole) : Infinity };
     var shares = diffs.map(function (d) { return d / whole; });
-    var sum = 0, unexplained = 0;
-    shares.forEach(function (part, j) { sum += part; if (!explained[j]) unexplained += part; });
-    return { state: 'split', shares: shares, sum: sum, unexplained: unexplained };
+    var factor = gross / Math.abs(whole);
+    var sum = 0, unexplained = null;
+    shares.forEach(function (part, j) { sum += part; if (!explained[j]) unexplained = (unexplained || 0) + part; });
+    return { state: 'split', shares: shares, sum: sum, unexplained: unexplained, factor: factor,
+      bound: (shares.length + 2) * ROUNDOFF * factor };
   }
 
-  // what the whole way's row says of a split
+  // what the whole way's row says of a split: the shares added up, as what rounding left of
+  // 100 % ("100 % − 1.11e−14 %"), and the part of the steps nothing explains, each where
+  // rounding does not reach its last digit; and that the steps cancel, where they do
   function splitText(split) {
     switch (split.state) {
-      case 'split': return shareText(split.sum) + (split.unexplained ? ', of which nothing explains ' + shareText(split.unexplained) : '');
+      case 'split':
+        var cancel = split.factor > CANCEL ? 'the steps cancel: their differences add up to ' + formatNumber(split.factor) + ' times the whole difference' : '';
+        if (split.bound >= LAST_DIGIT) return 'the shares are not added up: rounding would reach the last digit; ' + cancel;
+        var left = split.sum - 1; // exact: the sum lies within a rounding of 1
+        var said = left === 0 ? '100 %' : '100 % ' + (left > 0 ? '+ ' : '− ') + formatNumber(Math.abs(left) * 100) + ' %';
+        if (split.unexplained !== null) said += ', of which nothing explains ' + shareText(split.unexplained);
+        return said + (cancel ? '; ' + cancel : '');
       case 'still': return 'not split: it did not move';
       case 'gap': return 'not split: missing in a state between';
-      case 'missing': return 'not split: missing in the first or the last state';
-      default: return 'not split: the steps cancel, their differences add up to ' + formatNumber(split.factor) + ' times the whole difference';
+      case 'level': return 'not split: its first and last results are the same';
+      default: return 'not split: missing in the first or the last state';
     }
   }
 
@@ -267,19 +290,28 @@
   // step of the run again and found the file's own class on every item. Held to the Python
   // rule by the shared cases and the boundaries the Python writes (tests/test_boundaries.py).
   var BEYOND_FACTOR = 10; // rule.BEYOND_FACTOR; the validator holds every file to it
+  // how far two results lie apart, relative to the larger, as rule.relative_difference: two
+  // near the largest float on either side of zero are halved first, exactly, not to overflow
+  function relativeDifference(before, after) {
+    var size = Math.max(Math.abs(before), Math.abs(after));
+    if (!size) return 0;
+    var gap = Math.abs(after - before);
+    return isFinite(gap) ? gap / size : Math.abs(after / 2 - before / 2) / (size / 2);
+  }
   function classify(before, after, floor, tolerance, noise) {
     if (before === null || after === null) return 'missing';
     var smallBefore = Math.abs(before) <= floor, smallAfter = Math.abs(after) <= floor;
     if (smallBefore && smallAfter) return 'near zero';
     var sameSign = (before > 0 && after > 0) || (before < 0 && after < 0);
     var size = Math.max(Math.abs(before), Math.abs(after));
-    var gap = size ? Math.abs(after - before) / size : 0;
+    var gap = relativeDifference(before, after);
     if (sameSign && gap <= tolerance) return 'agrees';
     if (sameSign && noise && gap <= noise) return 'within noise';
-    if (smallBefore) return 'zero reference';
-    if (smallAfter) return 'zero result';
+    var beyond = size > BEYOND_FACTOR * Math.min(Math.abs(before), Math.abs(after));
+    // across the floor: to or from zero only where there is no ratio within ten times
+    if ((smallBefore || smallAfter) && (beyond || !sameSign)) return smallBefore ? 'zero reference' : 'zero result';
     if (!sameSign) return 'sign change';
-    if (size > BEYOND_FACTOR * Math.min(Math.abs(before), Math.abs(after))) return 'beyond 10x';
+    if (beyond) return 'beyond 10x';
     return 'differs';
   }
   function judge(before, after, floor, tolerance, noise) {
@@ -417,8 +449,7 @@
     if (before !== 0 && after !== 0 && (before > 0) === (after > 0)) {
       magnitude = distance(before, after);
     } else {
-      var size = Math.max(Math.abs(before), Math.abs(after));
-      magnitude = size ? Math.abs(after - before) / size : 0;
+      magnitude = relativeDifference(before, after);
     }
     return [rank, -magnitude];
   }
@@ -1577,7 +1608,7 @@
       keys.forEach(function (k) {
         node.appendChild(el('span', { title: k[3] }, [el('span', { cls: 'key ' + k[0], style: '--s:0.7', text: k[1] }), k[2]]));
       });
-      node.appendChild(el('span', { title: 'verdicts worth a look' }, ['■ not claimed ◐ off claim ○ claimed, not moved']));
+      node.appendChild(el('span', { title: 'verdicts worth a look' }, ['■ not claimed ◐ off claim ○ claimed, not moved ◇ claimed, not judged']));
     }
 
     // the file's own word for an item, in the page's own sentences
@@ -2457,7 +2488,7 @@
 
     function renderSteps() {
       var table = clear(q('steps-table'));
-      var head = ['#', 'Step', 'Kind', 'Explained', 'Claim', 'Moved', 'Up', 'Down', 'As claimed', 'Off claim', 'Not claimed', 'Claimed, not moved', 'Within noise', 'Missing before', 'Missing after', 'Tolerance', 'Noise'];
+      var head = ['#', 'Step', 'Kind', 'Explained', 'Claim', 'Moved', 'Up', 'Down', 'As claimed', 'Off claim', 'Not claimed', 'Claimed, not moved', 'Claimed, not judged', 'Within noise', 'Missing before', 'Missing after', 'Tolerance', 'Noise'];
       table.appendChild(el('thead', null, [el('tr', null, head.map(function (h) { return el('th', { scope: 'col', text: h }); }))]));
       var body = el('tbody');
       D.steps.forEach(function (s, k) {
@@ -2484,6 +2515,7 @@
           el('td', { cls: 'num', text: verdict('off claim') }),
           el('td', { cls: 'num', text: verdict('not claimed') }),
           el('td', { cls: 'num', text: verdict('claimed, not moved') }),
+          el('td', { cls: 'num', text: verdict('claimed, not judged') }),
           el('td', { cls: 'num', text: verdict('within noise') }),
           el('td', { cls: 'num', text: n(sumOver(s.id, function (b) { return b.missing.before + b.missing.both; })) }),
           el('td', { cls: 'num', text: n(sumOver(s.id, function (b) { return b.missing.after + b.missing.both; })) }),
@@ -2512,7 +2544,7 @@
         });
         row.push(el('td', { cls: 'num', text: n(block.directions.up) }), el('td', { cls: 'num', text: n(block.directions.down) }));
         row.push(el('td', { cls: 'sd-wide', text: ranked.join(', ') || 'none' }));
-        row.push(el('td', { cls: 'num', text: n(att.spread), title: 'its total moved, and no single step moved it: small steps that add up' }));
+        row.push(el('td', { cls: 'num', text: n(att.spread), title: 'its total moved, and the step with its largest difference did not move it: only together do the steps move it' }));
         row.push(el('td', { cls: 'num', text: n(att.not_attributable), title: 'its total moved, and it has no result in a state between: its difference cannot be split' }));
         row.push(el('td', { cls: 'num', text: n(att.unexplained_moved), title: 'moved in a step that no cause explains' }));
         tbody.appendChild(el('tr', null, row));
@@ -2913,7 +2945,7 @@
 
     function renderRule() {
       var body = clear(q('rule-body'));
-      body.appendChild(el('p', null, ['Every value is put into one class by one rule, in this order: missing, near zero, agrees, within noise (both only where the two share a sign), zero reference, zero result, sign change, beyond 10x, differs. ' +
+      body.appendChild(el('p', null, ['Every value is put into one class by one rule, in this order: missing, near zero, agrees, within noise (both only where the two share a sign), zero reference, zero result, sign change, beyond 10x, differs. A pair of one sign that crosses the floor and stays within ten times is classed by its ratio: it did not go to or from zero. ' +
         'Direction is up where the result after is larger as a signed number, down otherwise; colour follows the direction only. ' +
         'Beyond 10x: one size more than ' + D.rule.beyond + ' times the other. The whole way is counted with a tolerance of ' + D.rule.total_tolerance + ', the largest of the steps, and noise ' + totalNoiseSaid() + '. ' +
         'Noise belongs to a state: how far two builds of it differ. A step, a run of steps and the whole way are compared with the sum of the noise of their two ends, since rebuilding both moves the difference by up to the sum; a state inside a run adds nothing, as the pair holds none of its results. The published results are exact. ' +
@@ -3011,7 +3043,7 @@
         el('td', { cls: 'num', text: formatNumber(last), title: String(last) }),
         valueCell(row, ind.id, D.steps.length, false),
         el('td', { text: '—' }),
-        el('td', { cls: 'num', text: splitText(split) })
+        el('td', { cls: 'num', text: splitText(split), title: split.state === 'split' ? 'the shares above, added up in floating point: what rounding left of 100 %' : null })
       ]));
       if (isSet(kNow()) && !fixesOn()) {
         var pair = pairOf(row, ind.id, SET);

@@ -8,12 +8,13 @@ import doctest
 import importlib
 import io
 import json
+import math
 import re
 import tempfile
 import unittest
 from pathlib import Path
 
-from sentier_diagnostics import breakdown, chain, claims, cli, example, fileformat, from_tables, page, rule, summary, tables
+from sentier_diagnostics import breakdown, chain, claims, cli, example, fileformat, from_tables, matrix, page, rule, summary, tables
 
 from . import helpers
 from .helpers import A, B
@@ -346,6 +347,54 @@ class Attribution(unittest.TestCase):
         self.assertEqual(fileformat.errors(data), [])
         self.assertIn("| Spread over steps |", summary.text(data))
 
+    def chain_items(self, values, noise):
+        """Several items along one chain: `values` maps each to its result in every state,
+        None where it has none; `noise` is that of each built state, as in `chain_of`."""
+        steps = [chain.step(f"s{k}", f"Step {k}", kind="fix") for k in range(len(noise))]
+        names = ["p"] + [f"b{k}" for k in range(len(noise))]
+        return chain.build(
+            "Attribution",
+            indicators=helpers.INDICATORS,
+            states=[chain.state("p", "Published", kind="published")]
+            + [chain.state(f"b{k}", f"Build {k}", noise=chain.noise(("x", "y"), {A: n}) if n else None)
+               for k, n in enumerate(noise)],  # fmt: skip
+            steps=steps,
+            values={name: {A: {i: v[at] for i, v in values.items() if v[at] is not None}} for at, name in enumerate(names)},
+            units={i: "kg" for i in values},
+        )
+
+    def test_the_largest_step_carries_it_only_where_it_moved_the_item(self):
+        # issue 8: the largest step, s2 (0.35), is within its noise; s0 moved by less (0.05)
+        # and is not named in its place: in the item view it is 8.3 % of the difference
+        data = self.chain_of([1.0, 1.05, 1.25, 1.6], [0.01, 0.3, 0.01])
+        self.assertEqual([data["items"][0]["classes"][A][k] for k in range(4)],
+                         [rule.DIFFERS, rule.WITHIN_NOISE, rule.WITHIN_NOISE, rule.DIFFERS])  # fmt: skip
+        self.assertEqual(data["attribution"][A]["dominant"], {"s0": 0, "s1": 0, "s2": 0})
+        self.assertEqual(data["attribution"][A]["spread"], 1)
+        self.assertEqual(fileformat.errors(data), [])
+
+    def test_the_summary_and_the_validator_count_the_spread(self):
+        data = self.chain_items({
+            "i": [1.0, 1.05, 1.25, 1.6],   # largest step within its noise, a smaller one moved: spread
+            "k": [1.0, 1.1, 1.3, 1.65],    # the same
+            "q": [1.0, 1.0, 1.25, 1.6],    # no step moved: spread
+            "j": [1.0, 1.0, 1.0, 2.0],     # carried by s2
+            "m": [1.0, 2.0, 2.0, 2.0],     # carried by s0
+            "n": [1.0, None, 2.0, 2.0],    # no result in Build 0: not attributable
+        }, [0.01, 0.3, 0.01])  # fmt: skip
+        said = data["attribution"][A]
+        self.assertEqual((said["dominant"], said["spread"], said["not_attributable"]), ({"s0": 1, "s1": 0, "s2": 1}, 3, 1))
+        self.assertEqual(fileformat.errors(data), [])
+        lines = summary.text(data).splitlines()
+        head = next(line for line in lines if "| Spread over steps |" in line)
+        row = lines[lines.index(head) + 2]
+        cells = dict(zip([c.strip() for c in head.strip("|").split("|")], [c.strip() for c in row.strip("|").split("|")]))
+        self.assertEqual((cells["Largest step"], cells["Spread over steps"], cells["Not attributable"]),
+                         ("Step 0 (1), Step 2 (1)", "3", "1"))  # fmt: skip
+        for change in (dict(spread=2), dict(spread=4), dict(dominant={"s0": 3, "s1": 0, "s2": 1}, spread=1)):
+            moved = helpers.mutated(data, lambda d, change=change: d["attribution"][A].update(change))
+            self.assertTrue(any("attribution" in e for e in fileformat.errors(moved)), change)
+
     def test_a_tie_goes_to_the_earlier_step(self):
         data = self.chain_of([1.0, 2.0, 3.0], [None, None])
         self.assertEqual(data["attribution"][A]["dominant"], {"s0": 1, "s1": 0})
@@ -599,6 +648,19 @@ class Summary(unittest.TestCase):
         row = next(line for line in summary.text(data).splitlines() if line.startswith("| 0. "))
         self.assertEqual(row.split(" | ")[4:6], ["1", "1"])
 
+    def test_each_verdict_worth_a_look_has_its_column(self):
+        # two pairs left open (one missing, one near zero), one not moved, none of the others
+        claim = helpers.claim_down({"p", "q", "z"})
+        data = helpers.two_states({A: {"p": None, "q": 1.0, "z": 0.0, "f": 1.0}, B: dict.fromkeys("pqzf", 1.0)},
+                                  {A: {"p": 1.0, "q": 1.0, "z": 0.0, "f": 1.0}, B: dict.fromkeys("pqzf", 1.0)},
+                                  claim=claim)  # fmt: skip
+        lines = summary.text(data).splitlines()
+        head = next(line for line in lines if line.startswith("| Step |")).strip("| ").split(" | ")
+        row = next(line for line in lines if line.startswith("| 0. ")).strip("| ").split(" | ")
+        said = dict(zip(head, row))
+        self.assertEqual([said[k] for k in ("As claimed", "Off claim", "Not claimed", "Claimed, not moved", "Claimed, not judged")],
+                         ["0", "0", "0", "1", "2"])  # fmt: skip
+
     def test_the_noise_says_its_size(self):
         said = summary.text(example.build())
         self.assertIn("Water 2.4 %", said)
@@ -651,15 +713,52 @@ class Verdicts(unittest.TestCase):
         way = rule.direction(before, after, kind)
         return claims.verdict(kind, before, after, way, entries)
 
-    def test_a_must_that_did_not_move_beyond_the_noise_or_the_floor_is_unmet(self):
+    def test_a_must_that_did_not_move_beyond_the_noise_is_unmet(self):
         must = claims.scope([A], {"p"}, "down", None, claims.MUST)
         may = claims.scope([A], {"p"}, "down", None, claims.MAY)
-        for kind in (rule.AGREES, rule.WITHIN_NOISE, rule.NEAR_ZERO):
+        for kind in (rule.AGREES, rule.WITHIN_NOISE):
             with self.subTest(kind):
                 self.assertEqual(self.verdict(kind, 1.0, 1.0, [must]), claims.NOT_MOVED)
+        self.assertEqual(self.verdict(rule.AGREES, 1.0, 1.0, [may]), claims.UNCHANGED)
         self.assertEqual(self.verdict(rule.WITHIN_NOISE, 1.0, 1.0, [may]), claims.NOISE)
-        self.assertEqual(self.verdict(rule.NEAR_ZERO, 0.0, 0.0, [may]), claims.NOT_JUDGED)
-        self.assertEqual(self.verdict(rule.MISSING, None, 1.0, [must]), claims.NOT_JUDGED)
+
+    def test_a_must_on_a_pair_that_cannot_be_judged_is_left_open(self):
+        # issue 3: 1e-9 -> 1e-12 below the floor did move; whether as claimed cannot be said
+        must = claims.scope([A], {"p"}, "down", None, claims.MUST)
+        may = claims.scope([A], {"p"}, "down", None, claims.MAY)
+        self.assertEqual(self.verdict(rule.NEAR_ZERO, 1e-9, 1e-12, [must]), claims.OPEN)
+        self.assertEqual(self.verdict(rule.MISSING, None, 1.0, [must]), claims.OPEN)
+        self.assertEqual(self.verdict(rule.MISSING, 1.0, None, [must, may]), claims.OPEN)
+        self.assertEqual(self.verdict(rule.NEAR_ZERO, 1e-9, 1e-12, [may]), claims.NOT_JUDGED)
+        self.assertEqual(self.verdict(rule.MISSING, None, 1.0, [may]), claims.NOT_JUDGED)
+        self.assertEqual(self.verdict(rule.MISSING, None, None, []), claims.NOT_JUDGED)
+        self.assertIn(claims.OPEN, claims.TO_LOOK_AT)
+
+    def test_several_must_entries_must_all_fit(self):
+        # issue 12: `must any` beside `must down, 10 % at most` does not let 1.0 -> 5.0 pass
+        anything = claims.scope("*", "*", "any", None, claims.MUST)
+        down_a_little = claims.scope([A], {"p"}, "down", 0.1, claims.MUST)
+        both = [anything, down_a_little]
+        self.assertEqual(self.verdict(rule.BEYOND, 1.0, 5.0, both), claims.OFF_CLAIM)
+        self.assertEqual(self.verdict(rule.DIFFERS, 1.0, 0.5, both), claims.OFF_CLAIM)
+        self.assertEqual(self.verdict(rule.DIFFERS, 1.0, 0.95, both), claims.AS_CLAIMED)
+        self.assertEqual(self.verdict(rule.DIFFERS, 1.0, 0.95, [*both, claims.scope([A], {"p"}, "up", None, claims.MUST)]),
+                         claims.OFF_CLAIM)  # fmt: skip
+        # `may` entries: one that fits is enough
+        mays = [claims.scope([A], {"p"}, "up"), claims.scope([A], {"p"}, "down", 0.1)]
+        self.assertEqual(self.verdict(rule.DIFFERS, 1.0, 0.95, mays), claims.AS_CLAIMED)
+        self.assertEqual(self.verdict(rule.DIFFERS, 1.0, 1.5, mays), claims.AS_CLAIMED)
+
+    def test_build_refuses_an_entry_whose_list_is_not_in_hand(self):
+        # issue 3: such an entry covers nothing, and a `must` would be met by default
+        for expect in (claims.MUST, claims.MAY):
+            with self.subTest(expect), self.assertRaisesRegex(ValueError, "no list of items in hand"):
+                helpers.two_states({A: {"p": 1.0}}, {A: {"p": 1.0}},
+                                   claim=claims.claim("t", [claims.scope([A], None, "down", None, expect)]))  # fmt: skip
+        # the list given and kept out of the file is the way to keep it private
+        data = helpers.two_states({A: {"p": 1.0}}, {A: {"p": 1.0}}, claim=helpers.claim_down({"p"}), claim_lists=False)
+        self.assertEqual(data["steps"][0]["claim"]["scope"][0]["items"], None)
+        self.assertEqual(data["counts"]["steps"][data["steps"][0]["id"]][A]["verdicts"][claims.NOT_MOVED], 1)
 
     def test_a_must_is_judged_on_its_own_where_entries_overlap(self):
         must_down = claims.scope([A], {"p"}, "down", None, claims.MUST)
@@ -679,11 +778,25 @@ class Verdicts(unittest.TestCase):
             helpers.two_states({A: {"p": 1.0}}, {A: {"p": 2.0}}, claim=helpers.claim_down({"p", "typo"}))
 
     def test_a_must_on_a_near_zero_pair_is_listed_and_valid(self):
-        data = helpers.two_states({A: {"p": 1.0, "q": 1.0, "z": 0.0}}, {A: {"p": 1.0, "q": 2.0, "z": 0.0}},
-                                  claim=helpers.claim_down({"z"}))  # fmt: skip
+        # z is near zero and quiet in both indicators: only its open claim makes it worth a look
+        before = {A: {"p": 1.0, "q": 1.0, "z": 0.0}, B: {"p": 1.0, "q": 1.0, "z": 1.0}}
+        after = {A: {"p": 1.0, "q": 2.0, "z": 0.0}, B: {"p": 1.0, "q": 1.0, "z": 1.0}}
+        data, full = chain.build_with_matrix(
+            "Two states", indicators=helpers.INDICATORS,
+            states=[chain.state("s0", "Before"), chain.state("s1", "After")],
+            steps=[chain.step("one", "One step", kind="fix", claim=helpers.claim_down({"z"}))],
+            values={"s0": before, "s1": after}, units=dict.fromkeys("pqz", "kg"),
+        )  # fmt: skip
         self.assertEqual(fileformat.errors(data), [])
+        self.assertEqual(matrix.against(full, data), [])
+        self.assertEqual([i["id"] for i in data["items"]], ["q", "z"], "p is quiet; z is listed for its claim alone")
         z = next(i for i in data["items"] if i["id"] == "z")
-        self.assertEqual(z["verdicts"][A], [claims.NOT_MOVED])
+        self.assertEqual(z["verdicts"][A], [claims.OPEN])
+        self.assertEqual(data["counts"]["steps"]["one"][A]["verdicts"][claims.OPEN], 1)
+        # the validator counts it from the listed items: a file that leaves it out of its counts is refused
+        hidden = helpers.mutated(data, lambda d: (d["counts"]["steps"]["one"][A]["verdicts"].__setitem__(claims.OPEN, 0),
+                                                  d["counts"]["steps"]["one"][A]["verdicts"].__setitem__(claims.NOT_JUDGED, 1)))
+        self.assertTrue(any("claimed, not judged" in e for e in fileformat.errors(hidden)), fileformat.errors(hidden))
 
     def test_reach_is_the_size_of_the_lists_beside_a_star(self):
         found = claims.published(claims.claim("t", [claims.scope([A], {"p", "q"}), claims.scope([B])]), keep_items=False)
@@ -715,6 +828,63 @@ class Chain(unittest.TestCase):
         with self.assertRaises(ValueError):
             claims.published(claims.claim("t", [claims.scope([A], {"p", "q"})], reach=4900))
         self.assertEqual(claims.published(claims.claim("t", [claims.scope([A], {"p", "q"})]))["reach"], 2)
+
+    def test_a_claim_that_lists_no_items_has_no_reach(self):
+        # issue 35: every entry takes "*", or there is none: a reach would count nothing
+        for entries in ([claims.scope([A])], [claims.scope([A]), claims.scope([B])], []):
+            with self.assertRaises(ValueError):
+                claims.published(claims.claim("t", entries, reach=7))
+            self.assertIsNone(claims.published(claims.claim("t", entries))["reach"])
+        # a list kept private is a list: its reach is the only trace of it, and stays
+        private = claims.published(claims.claim("t", [claims.scope([A], None), claims.scope([B])], reach=7))
+        self.assertEqual(private["reach"], 7)
+        data = helpers.two_states({A: {"p": 1.0}}, {A: {"p": 2.0}}, claim=claims.claim("t", [claims.scope([A])], by=claims.origin("person", "A")))
+        self.assertEqual(fileformat.errors(data), [])
+        for scope in ([{"indicators": "*", "items": "*", "direction": "any", "largest": None, "expect": "may"}], []):
+            given = helpers.mutated(data, lambda d, scope=scope: d["steps"][0]["claim"].update(reach=7, scope=scope))
+            self.assertTrue(any("no entry of it lists items" in e for e in fileformat.errors(given)), fileformat.errors(given))
+        kept = helpers.mutated(data, lambda d: d["steps"][0]["claim"].update(
+            reach=1, scope=[{"indicators": "*", "items": None, "direction": "any", "largest": None, "expect": "may"}]))
+        self.assertFalse(any("reach" in e for e in fileformat.errors(kept)), fileformat.errors(kept))
+
+    def test_a_claim_lists_as_many_items_as_its_chain_holds(self):
+        # issue 36: a chain may hold more items than a file lists, and a claim about all of
+        # them is still a list: the chain and the 12 MB bound it, not the 5,000 of a file
+        n = fileformat.MAX_ITEMS + 1
+        names = [f"p{i:05d}" for i in range(n)]
+        before = {A: dict.fromkeys(names, 1.0)}
+        after = {A: dict.fromkeys(names, 1.0) | {names[0]: 2.0}}
+        data = helpers.two_states(before, after, claim=claims.claim("t", [claims.scope([A], names)]))
+        said = data["steps"][0]["claim"]
+        self.assertEqual((said["reach"], len(said["scope"][0]["items"]), data["items_count"]["all"]), (n, n, n))
+        self.assertEqual(fileformat.errors(data), [])
+
+        def scope(d):
+            return d["steps"][0]["claim"]["scope"][0]
+
+        twice = helpers.mutated(data, lambda d: scope(d)["items"].append(names[0]))
+        self.assertTrue(any("not a list of distinct ids" in e for e in fileformat.errors(twice)), fileformat.errors(twice))
+        # a claim names items of its chain: neither its lists nor a private list's size reach further
+        beyond = helpers.mutated(data, lambda d: (scope(d)["items"].append("q"), d["steps"][0]["claim"].update(reach=n + 1)))
+        self.assertTrue(any(f"its claim reaches {n + 1} items, and the chain holds {n}" in e
+                            for e in fileformat.errors(beyond)), fileformat.errors(beyond))  # fmt: skip
+        for reach, refused in ((n, False), (n + 1, True)):
+            kept = helpers.mutated(data, lambda d, reach=reach: (scope(d).update(items=None), d["steps"][0]["claim"].update(reach=reach)))
+            self.assertEqual(any("the chain holds" in e for e in fileformat.errors(kept)), refused, fileformat.errors(kept))
+
+    def test_the_validator_looks_an_item_up_in_a_claim_without_reading_its_list(self):
+        # issue 36: a list may name 200,000 items, and every listed item is judged against it
+        # in every indicator and step; a scan of the list for each would take hours
+        class Unread(list):
+            def __contains__(self, item):
+                raise AssertionError("a claim's list was scanned for an item")
+
+        data = example.build()
+        for one in data["steps"]:
+            for entry in (one["claim"] or {}).get("scope", ()):
+                if isinstance(entry["items"], list):
+                    entry["items"] = Unread(entry["items"])
+        self.assertEqual(fileformat.errors(data), [])
 
     def test_a_lone_surrogate_is_not_a_text(self):
         data = example.build()
@@ -754,6 +924,45 @@ class Chain(unittest.TestCase):
             with contextlib.redirect_stdout(out):
                 self.assertEqual(cli.check([path]), 1)
             self.assertIn("bytes", out.getvalue())
+            self.assertIn("leave the claims' lists out", out.getvalue())  # the example's claims list items
+
+
+class FloorAndLargestFloats(unittest.TestCase):
+    """Issue 37: the floor's median held by tests of its own, not only a doctest; and two
+    results near the largest float, on either side of zero, lie a finite distance apart."""
+
+    def test_the_floor_is_the_factor_times_the_median_size(self):
+        factor = rule.FLOOR_FACTOR
+        for values, median, n in (
+            ([5.0, 1.0, 3.0], 3.0, 3),  # an odd count: the one in the middle, in any order
+            ([10.0, 1.0, 3.0, 2.0], 2.5, 4),  # an even count: halfway between the two in the middle
+            ([-4.0, 1.0, 2.0], 2.0, 3),  # by size: a negative result counts as large as it is
+            ([0.0, 0.0, 7.0, None], 7.0, 1),  # a zero and a missing result are no size
+            ([1e308, 1.6e308], 1.3e308, 2),  # near the largest float: halved before they are added
+        ):
+            with self.subTest(values=values):
+                floor, count = rule.floor_of(values)
+                self.assertEqual(count, n)
+                self.assertTrue(math.isclose(floor, factor * median, rel_tol=1e-15), (floor, factor * median))
+        self.assertEqual(rule.floor_of([0.0, None]), (0.0, 0))
+        self.assertEqual(rule.floor_of([2.0, 4.0], 0.5), (1.5, 2))
+        # one floor per indicator and unit, each the median of its own group
+        found = rule.floors_of({"x": {"a": 1.0, "b": 9.0, "c": 3.0, "t": 40.0}}, {"a": "kg", "b": "kg", "c": "kg", "t": "unit"})
+        self.assertEqual(found, {("x", "kg"): (factor * 3.0, 3), ("x", "unit"): (factor * 40.0, 1)})
+
+    def test_two_results_near_the_largest_float_lie_two_apart_not_infinitely(self):
+        self.assertEqual(rule.relative_difference(1e308, -1e308), 2.0)
+        self.assertEqual(rule.relative_difference(-1.7e308, 1.7e308), 2.0)
+        self.assertEqual(rule.change(1e308, -1e308), -2.0)
+        self.assertEqual(rule.change(-1e308, 1e308), 2.0)
+        # the noise of two builds of one state that far apart is 2, not infinite: an infinite
+        # noise would put every pair within it
+        self.assertEqual(chain.noise_of({"a": 1e308, "b": 1.0}, {"a": -1e308, "b": 1.0}, floor=0.0), 2.0)
+        # a claim of a change of up to 300 % holds a sign change from 1e308 to -1e308
+        entry = claims.scope([A], {"p"}, "any", 3.0, claims.MUST)
+        self.assertEqual(claims.verdict(rule.SIGN_CHANGE, 1e308, -1e308, "down", [entry]), claims.AS_CLAIMED)
+        # and the order from the worst sees them two apart
+        self.assertEqual(rule.severity(1e308, -1e308, rule.SIGN_CHANGE)[1], -2.0)
 
 
 class EachRuleOnItsOwn(unittest.TestCase):
@@ -858,6 +1067,11 @@ class EachRuleOnItsOwn(unittest.TestCase):
             finally:
                 fileformat.MAX_BYTES = original
         self.assertIn("a page holds 1000 at most", str(said.exception))
+        # issue 36: where claims list items, leaving their lists out is the other way down
+        self.assertIn("list fewer items (`listed`), or leave the claims' lists out (`claim_lists`)", str(said.exception))
+        bare = helpers.two_states({A: {"p": 1.0}}, {A: {"p": 2.0}})
+        self.assertEqual(fileformat.smaller_by(bare), "list fewer items (`listed`)")
+        self.assertEqual(fileformat.smaller_by(["not", "a", "file"]), "list fewer items (`listed`)")
 
 
 class SummaryCounts(unittest.TestCase):

@@ -31,8 +31,8 @@ Three rules from Manuel Klarmann (16 November 2026) frame it:
    start. It is never the target of a later step.
 2. The final view is **a chain of steps** from the published results to the current
    build. Each step's share of the whole difference is named, and so is what nothing
-   explains. The split is exact (up to the rounding of floating point, which the page
-   shows: section 7).
+   explains. The split is exact up to the rounding of floating point, which the page
+   shows, and where rounding could reach a printed digit it says so (section 7).
 3. The tool must be possible to trial, establish and maintain **without Laurenz**. The
    code is open; **no data goes into this repository**.
 
@@ -194,7 +194,7 @@ many were left out. A file that disagrees with its own rule is refused, not show
 
 It also **works the counts out again from the listed items.** Only a pair worth a look
 adds to the classes that moved, to missing (by side), to directions, bands, the verdicts
-"as claimed", "off claim", "not claimed" and "claimed, not moved", to `closer` and
+"as claimed", "off claim", "not claimed", "claimed, not moved" and "claimed, not judged", to `closer` and
 `further`, and to the attribution; and every item with such a pair is worth a look. So
 where nothing worth a look is left out (`not_listed` 0), these counts must equal what the
 listed items hold, and where some are left out, no count may be smaller than what the
@@ -209,11 +209,14 @@ published results and are null everywhere else.
 ### 4.4 Limits
 
 A page holds the whole file: 12 MB at most, which the writer reaches by listing fewer
-items (`listed`, 200 by default). Up to 100 indicators, 30 states, 5,000 listed items,
-500 explanations and 20 notes; a claim has up to 50 scope entries, and an entry may list as
-many items as a file may (5,000); a state's identity has up to 12 entries. Ids are up to
-100 characters, labels 80, texts 600 and an explanation's text 2,000. The limits are in
-`fileformat.py`, and a refusal names the limit it met.
+items (`listed`, 200 by default) or by leaving the claims' lists out (`claim_lists`). Up to
+100 indicators, 30 states, 5,000 listed items, 500 explanations and 20 notes; a claim has
+up to 50 scope entries; a state's identity has up to 12 entries. Ids are up to 100
+characters, labels 80, texts 600 and an explanation's text 2,000. A claim's list has no
+count of its own: it names distinct items of the chain, so a claim reaches no more items
+than the chain holds (`items_count.all`), and the 12 MB bound the rest. A chain may hold
+more items than a file lists, and a claim about all of them is still a list. The limits
+are in `fileformat.py`, and a refusal names the limit it met.
 
 Thirty states is 29 steps. A chain is the built states in order; hundreds of fixes, chosen
 in any set, are a file of fixes measured on one base (section 16), not hundreds of states.
@@ -246,8 +249,8 @@ matrix small. A `"="` that stands first in an indicator or after a missing resul
 refused. The class codes are `=` agrees, `~` within noise, `0` near zero, `-`
 missing, and for a pair that moved its class in upper case up and lower case down: `D`
 differs, `B` beyond 10x, `R` zero reference, `T` zero result, `S` sign change. The verdict
-codes are `a` as claimed, `o` off claim, `n` not claimed, `c` claimed, not moved, `~` within
-noise, `=` unchanged, `?` not judged. A matrix holds no band: it follows from the results.
+codes are `a` as claimed, `o` off claim, `n` not claimed, `c` claimed, not moved, `j`
+claimed, not judged, `~` within noise, `=` unchanged, `?` not judged. A matrix holds no band: it follows from the results.
 
 `matrix.errors(m)` checks the shape and never raises. `matrix.against(m, data)` works every
 code out again with the file's floors, tolerances and noise (and every verdict where the
@@ -272,8 +275,8 @@ class. The classes are tried in this order; the first that holds is the class:
 | near zero | both sides lie within the floor | no |
 | agrees | they share a sign and differ by no more than the tolerance, relative to the larger size | no |
 | within noise | they share a sign and differ by more, but by no more than the step's measured noise | no |
-| zero reference | the side before lies within the floor, the side after does not | yes |
-| zero result | the side after lies within the floor, the side before does not | yes |
+| zero reference | the side before lies within the floor, the side after does not, and they have no ratio within ten times (the side before is zero, of the other sign, or more than ten times smaller) | yes |
+| zero result | the side after lies within the floor, the side before does not, and they have no ratio within ten times | yes |
 | sign change | both lie beyond the floor and have different signs | yes |
 | beyond 10x | one size is more than ten times the other (exactly ten is not beyond) | yes |
 | differs | any other difference | yes |
@@ -284,8 +287,15 @@ by solver noise is not a change (A26). A pair beyond the floor on both sides is 
 before; only a pair that crosses the floor by no more than the tolerance or the noise is
 affected.
 
+A pair of one sign that crosses the floor and stays within ten times is classed by its
+ratio, as differs: 0.0101 and 0.0099 at a floor of 0.01 differ by 2 %, and neither went to
+zero (A31). Only where the two have no such ratio (a zero, another sign, or a side more than
+ten times smaller than the other) did the result go to or from zero. The edge is the edge of
+beyond 10x, so the classes meet there and nowhere else.
+
 No class blanks a value, sets it to zero or calls it agreement. Both results are always
-kept. A ratio is taken only where both sides lie beyond the floor and share a sign. How far
+kept. A ratio is taken only where both sides share a sign and, where one lies within the
+floor, the two lie within ten times of each other. How far
 two sizes lie apart is the |log10| of their factor; where the factor is too large or too
 small for a float (1e-300 and 1e300), the difference of their logarithms, in Python and on
 the page alike (A27).
@@ -386,12 +396,14 @@ A step may say what it moves. A claim is text, who wrote it (section 8), and a s
             "direction": "down", "largest": 0.3, "expect": "must"}]}
 ```
 
-- `indicators`: `"*"` or a list of ids. `items`: `"*"`, a list, or null where the list
-  stays with its writer. Every listed id is an item of the chain: `chain.build` refuses a
-  claim that names an item no state holds (a typo would otherwise be a claim about nothing).
+- `indicators`: `"*"` or a list of ids. `items`: `"*"`, a list of distinct ids, or null
+  where the list stays with its writer. Every listed id is an item of the chain:
+  `chain.build` refuses a claim that names an item no state holds (a typo would otherwise
+  be a claim about nothing), and the validator one whose `reach` is larger than the chain.
 - `reach`: how many items the claim's lists name together, `"*"` entries aside. Where every
   list is in the file the validator checks it; where a list stays private it is the only
-  trace of that list. It is null where no entry lists items.
+  trace of that list. It is null where no entry lists items (every entry takes `"*"`, or
+  there is none), and the validator refuses a reach there: it would count nothing.
 - `direction`: `up`, `down` or `any`. `largest`: the largest change relative to the result
   before, or null.
 - `expect`: `must` (each covered pair must move) or `may` (the default: it may move).
@@ -407,18 +419,29 @@ that holds is the verdict:
 
 | Verdict | When |
 |---|---|
-| not judged | it is missing: nothing can be said of it |
-| claimed, not moved | a `must` entry covers it, and it agrees, is within noise or is near zero: it did not move beyond the tolerance, the noise or the floor |
+| claimed, not judged | a `must` entry covers it, and it is missing or near zero: whether it moved cannot be said, and the claim stays open |
+| not judged | it is missing or near zero, and no `must` entry covers it |
+| claimed, not moved | a `must` entry covers it, and it agrees or is within noise: it did not move beyond the tolerance or the noise |
 | unchanged | it agrees |
 | within noise | it differs by no more than the noise |
-| not judged | it is near zero |
 | not claimed | it moved, and no entry covers it |
-| as claimed | it moved, and an entry it is held to fits its direction and size |
-| off claim | it moved, and no entry it is held to fits |
+| as claimed | it moved, and it fits every `must` entry that covers it; where none does, one of the `may` entries |
+| off claim | it moved, and it does not |
 
-A pair that moved is held to the `must` entries that cover it, and only where none does to
-the `may` entries. So a `may any` entry beside a `must down` entry cannot make a move up
-"as claimed": the `must` entry says which way the pair must go.
+A near-zero pair under `must` is not "not moved": 1e-9 → 1e-12 below the floor did move,
+by a ratio the floor says nothing about. It is "claimed, not judged", counted and marked
+on the page like the other verdicts worth a look, so that a `must` left open is never read
+as met.
+
+A pair that moved is held to the `must` entries that cover it, all of them, and only where
+none does to the `may` entries, any one of which is enough. Each `must` entry says what the
+pair must do, so a move up does not meet `must down` because a `must any` or a `may any`
+beside it allows it, and a move by a factor of five does not meet `must down, by 10 % at
+most` because `must any` allows any size.
+
+`chain.build` refuses an entry whose list of items is not in hand (`items: null`): it would
+cover nothing, and a `must` would be met by default. A list a writer may not publish is
+given to `build` and left out of the file with `claim_lists=False`.
 
 A claim's list may stay private (`claim_lists=False`): the verdicts are worked out by the
 writer, kept in the file and marked on the page as not checkable from the file.
@@ -430,13 +453,14 @@ differences: `last − first = Σ (state k+1 − state k)`. The split is exact b
 up to the rounding of floating point; it needs one build per state, which is what a chain
 is. Per indicator the file counts, among the items that moved over the whole way:
 
-- `dominant`: for each step, the items whose largest difference comes from that step,
-  among the steps in which the item moved. A step in which it agrees, is within noise or
-  is near zero carries none of it, however large its difference. Where two steps move it
-  by the same amount, the earlier one carries it;
-- `spread`: items that moved over the whole way while no single step moved them: each
-  step stayed within its tolerance, its noise or the floor, and only together do they
-  move it. No step carries such an item;
+- `dominant`: for each step, the items whose largest difference, over all the steps,
+  comes from that step, where that step moved the item. Where two steps differ by the same
+  amount, the earlier one is the largest;
+- `spread`: items that moved over the whole way while the step with their largest
+  difference did not move them: that step agrees, is within its noise or is near zero, so
+  that only together do the steps move the item. No step carries such an item, and a
+  smaller step that moved is not named in its place, as it carries less of the difference.
+  An item whose every step stayed within its tolerance, its noise or the floor is spread;
 - `not_attributable`: items that have no result in some state between. Their difference
   cannot be split, and the file says how many;
 - `unexplained_moved`: items that moved in a step marked `explained: false`, counted
@@ -446,13 +470,20 @@ So `dominant` over the steps, `spread` and `not_attributable` add up to the item
 moved over the whole way.
 
 The item view shows each step's share of the item's whole difference, signed, the share of
-the steps nothing explains, and the **sum of the shares it shows**: in floating point that
-sum may differ from 100 % in its last digits, and the page prints what it computed instead
-of a fixed 100 %. Where the steps' differences, taken by size, add up to more than ten
-times the whole difference, the steps **cancel**: their shares would be large, of both
-signs, and partly rounding. The page then prints no shares and says how many times the
-whole difference the steps add up to. It also says why it prints none for an item that
-did not move, that is missing in a state between, or that is missing at either end.
+the steps nothing explains, and the **shares added up**. A share is one difference over
+the whole difference, each rounded once, so it is right to a few roundoffs (2⁻⁵³) of its
+own size and is printed to the digits it holds: one decimal of a percent, four digits from
+1e4 % on. The shares added up are printed as what rounding left of 100 %
+(`100 % − 1.11e−14 %`), never as a fixed 100 %. Where the steps' differences, taken by
+size, add up to more than ten times the whole difference, the steps **cancel**: their
+shares are large and of both signs (`[1, 6, 1.5]`: +1000 % and −900 %, right to the last
+digit). The page prints them and says how many times the whole difference the steps add up
+to. Adding shares rounds off up to (steps + 2) roundoffs of their sizes added up; where
+that could reach the last digit of a sum (0.05 %), from about 10¹² times the whole
+difference, the page adds up neither all the shares nor those of the steps nothing
+explains, and says why. It also says why it prints no share for an item that did not move,
+that is missing in a state between, that is missing at either end, or whose first and last
+results are the same.
 
 A finer split inside a step (by link, by flow) is a breakdown (section 9). sentier-bafu-
 agribalyse can split step 2 by link exactly because LCA is linear, but the ecoinvent unit
@@ -779,6 +810,7 @@ the page script (`tests/js/page.test.js`), so the two cannot drift apart unnotic
 | A28 | A move within the noise of its step was counted as "differs" over the whole way, which judged without noise | sentier-agribalyse | `StateNoise` (a move within the noise of an end), node "the whole way and a run take the noise of their two ends" |
 | A29 | A run of steps judged by the page has the classes and counts of the Python reference, item by item, is refused where its steps disagree with the file, and steps apart are refused; the page's rule agrees with the Python's on every edge, to the last bit | review of PR 22 | `Together`, `Boundaries`, `tests/fixtures/together.json`, `tests/fixtures/boundaries.json`, node "a run judged by the page", "every edge of the rule", "refuses a run", "steps apart are refused" |
 | A30 | The noise of a state inside a run or the whole way, taken as the largest of any step, put 1,504 of 2,451 real differences "within noise"; a comparison now takes the sum of the noise of its two ends, never an inner state's | sentier-agribalyse | `StateNoise`, `Together` (sum of two measured ends), node "two states are compared with the sum of their noise", "a run is judged with the sum of the noise of its two ends" |
+| A31 | A pair of one sign across the floor was a zero result whatever its ratio: 0.0101 → 0.0099 at a floor of 0.01 (2 %) ranked above 1.0 → 50.0; it is now classed by its ratio where the two lie within ten times | issue #38 | cases A31-*, `Boundaries` ("across the floor at ten times") |
 
 Also tested: the validator refuses a class, direction or verdict that contradicts the
 values, items out of order, counts that do not add up, unknown keys and other formats

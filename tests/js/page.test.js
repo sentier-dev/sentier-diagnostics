@@ -112,26 +112,50 @@ test('one number style from 1e4 on, never the "e+" of toPrecision', () => {
   assert.equal(page.formatNumber(0.00042), '4.2e−4');
 });
 
-test('an item\'s whole difference is split by the steps, the sum of the shares shown (A18)', () => {
+test('an item\'s whole difference is split by the steps, and the shares added up are what rounding left of 100 % (A18, issue 9)', () => {
   const split = page.splitOf([1, 1.5, 1.75], [true, false], 'differs');
   assert.equal(split.state, 'split');
   assert.deepEqual(split.shares, [2 / 3, 1 / 3]);
-  assert.equal(page.splitText(split), '100.0 %, of which nothing explains 33.3 %');
-  // in floating point the shares need not add up to exactly 1: the page prints their sum
-  const rounded = page.splitOf([0.1, 0.2, 0.7], [true, true], 'differs');
-  assert.equal(page.splitText(rounded), page.shareText(rounded.shares[0] + rounded.shares[1]));
+  assert.equal(page.splitText(split), '100 %, of which nothing explains 33.3 %');
+  // in floating point the shares need not add up to exactly 1: the page prints what is left
+  const rounded = page.splitOf([3, 1.1, 2.2, 0.3], [true, true, true], 'differs');
+  assert.equal(rounded.sum, 0.9999999999999999);
+  assert.equal(page.splitText(rounded), '100 % − 1.11e−14 %');
+  // a step nothing explains is named even where its share is 0
+  assert.equal(page.splitText(page.splitOf([1, 1, 2], [false, true], 'differs')), '100 %, of which nothing explains 0 %');
 });
 
-test('steps that cancel are said to cancel, not split into large shares of both signs (A18)', () => {
+test('steps that cancel are printed, and said to cancel; a sum is withheld only where rounding reaches its last digit (A18, issue 9)', () => {
+  // correct to the last digit printed: +1000 % and −900 %
+  const nineteen = page.splitOf([1, 6, 1.5], [true, true], 'differs');
+  assert.deepEqual(nineteen.shares.map(page.shareText), ['1000.0 %', '−900.0 %']);
+  assert.equal(page.splitText(nineteen), '100 %; the steps cancel: their differences add up to 19 times the whole difference');
+  // under ten times the steps do not cancel, and nothing is said of it
+  assert.equal(page.splitText(page.splitOf([1, 3, 1.5], [true, true], 'differs')), '100 %');
+  // the rounding of the sum stays under its last digit at 4e9 times, and reaches it at 4e12
+  const far = page.splitOf([1, 1e9, 1.5], [true, true], 'differs');
+  assert.deepEqual(far.shares.map(page.shareText), ['2e11 %', '−2e11 %']);
+  assert.equal(page.splitText(far), '100 %; the steps cancel: their differences add up to 4e9 times the whole difference');
+  const farther = page.splitOf([1, 1e12, 1.5], [true, false], 'differs');
+  assert.equal(page.splitText(farther), 'the shares are not added up: rounding would reach the last digit; the steps cancel: their differences add up to 4e12 times the whole difference');
+  // each share is still one difference over the whole, right to the digits it is printed to
   const split = page.splitOf([1, 1e16, 1, 2], [true, true, true], 'differs');
-  assert.equal(split.state, 'cancel');
-  assert.match(page.splitText(split), /^not split: the steps cancel, their differences add up to 2e16 times/);
+  assert.equal(split.state, 'split');
+  assert.deepEqual(split.shares.map(page.shareText), ['1e18 %', '−1e18 %', '100.0 %']);
+  assert.match(page.splitText(split), /^the shares are not added up: rounding would reach the last digit; the steps cancel: their differences add up to 2e16 times/);
+  // a share is printed to four digits from 1e4 % on, never to more digits than a float holds
+  assert.deepEqual([page.shareText(99.99), page.shareText(123.45), page.shareText(-1e16)], ['9999.0 %', '1.235e4 %', '−1e18 %']);
 });
 
 test('an item missing in any state is not split, not even for the steps before the gap (A18)', () => {
   assert.equal(page.splitOf([1, 2, null, 4], [true, true, true], 'differs').state, 'gap');
   assert.equal(page.splitOf([null, 2, 4], [true, true], 'missing').state, 'missing');
   assert.equal(page.splitOf([1, 1, 1], [true, true], 'agrees').state, 'still');
+  // a file whose class says the whole way moved, with its first and last results equal, is
+  // one the validator refuses; the page divides by nothing all the same
+  const level = page.splitOf([1, 2, 1], [true, true], 'differs');
+  assert.equal(level.state, 'level');
+  assert.equal(page.splitText(level), 'not split: its first and last results are the same');
 });
 
 const dom = require('./dom.js');
@@ -155,16 +179,35 @@ test('the steps table prints the file\'s counts of what moved, never a recount f
   const data = example();
   const moves = ['differs', 'beyond 10x', 'zero reference', 'zero result', 'sign change'];
   const drawn = dom.page(data);
-  const rows = drawn.byId['steps-table'].all().filter((n) => n.tagName === 'TR').slice(1);
+  const all = drawn.byId['steps-table'].all().filter((n) => n.tagName === 'TR');
+  const head = all[0].childNodes.map((th) => th.textContent);
+  const rows = all.slice(1);
+  const cell = (row, name) => { assert.ok(head.includes(name), name); return row.childNodes[head.indexOf(name)].textContent; };
   data.steps.forEach((s, k) => {
     const said = Object.values(data.counts.steps[s.id]).reduce((a, b) => a + moves.reduce((m, c) => m + b.classes[c], 0), 0);
-    assert.equal(rows[k].childNodes[5].textContent, String(said), s.id);
+    assert.equal(cell(rows[k], 'Moved'), String(said), s.id);
     const side = (name) => Object.values(data.counts.steps[s.id]).reduce((a, b) => a + b.missing[name] + b.missing.both, 0);
-    assert.equal(rows[k].childNodes[13].textContent, String(side('before')), s.id + ': missing before');
-    assert.equal(rows[k].childNodes[14].textContent, String(side('after')), s.id + ': missing after');
+    assert.equal(cell(rows[k], 'Missing before'), String(side('before')), s.id + ': missing before');
+    assert.equal(cell(rows[k], 'Missing after'), String(side('after')), s.id + ': missing after');
+    // every verdict worth a look has its column, with the file's count (issue 3: "claimed, not judged")
+    for (const v of ['as claimed', 'off claim', 'not claimed', 'claimed, not moved', 'claimed, not judged', 'within noise']) {
+      const name = v[0].toUpperCase() + v.slice(1);
+      const total = s.claim ? String(Object.values(data.counts.steps[s.id]).reduce((a, b) => a + b.verdicts[v], 0)) : '—';
+      assert.equal(cell(rows[k], name), total, s.id + ': ' + v);
+    }
   });
-  assert.notEqual(rows.map((r) => r.childNodes[13].textContent).join(), rows.map((r) => r.childNodes[14].textContent).join(),
+  assert.notEqual(rows.map((r) => cell(r, 'Missing before')).join(), rows.map((r) => cell(r, 'Missing after')).join(),
     'the example has a step with missing values on one side only');
+  assert.ok(rows.some((r) => !['0', '—'].includes(cell(r, 'Claimed, not judged'))), 'the example leaves a claim open');
+  // each verdict column reads its own count: the example has as many open as not moved, so
+  // one value is moved from unchanged to open in a copy
+  const apart = example();
+  const water = apart.counts.steps['mapping-2']['x:water'].verdicts;
+  water.unchanged -= 1; water['claimed, not judged'] += 1;
+  const at = apart.steps.findIndex((s) => s.id === 'mapping-2');
+  const apartRows = dom.page(apart).byId['steps-table'].all().filter((n) => n.tagName === 'TR').slice(1);
+  assert.equal(cell(apartRows[at], 'Claimed, not judged'), '2');
+  assert.equal(cell(apartRows[at], 'Claimed, not moved'), '1');
 });
 
 test('a share is signed against the whole difference, whichever way it goes (A18)', () => {
@@ -658,12 +701,25 @@ test('choosing a step says its claim and what the claim found, under the chips, 
   const said = drawn.byId['step-said'].textContent;
   assert.ok(said.includes(step.claim.text), said);
   // what the claim found, from the file's own counts
-  const look = ['off claim', 'not claimed', 'claimed, not moved'];
+  const look = ['off claim', 'not claimed', 'claimed, not moved', 'claimed, not judged'];
   const found = look.filter((v) => Object.values(data.counts.steps[step.id]).some((b) => b.verdicts[v]));
   if (found.length) found.forEach((v) => assert.ok(said.includes(v), v));
   else assert.match(said, /as claimed/);
   assert.equal(drawn.context.location.hash, 'sd.step=' + encodeURIComponent(step.id));
   assert.equal(chips(drawn)[k + 1].getAttribute('aria-pressed'), 'true');
+});
+
+test('a claim left open is marked in the grid and named in the legend (issue 3)', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  const k = data.steps.findIndex((s) => s.id === 'mapping-2');
+  chips(drawn)[k + 1].dispatch('click', {});
+  const marks = (id) => gridRows(drawn).find((tr) => tr.getAttribute('data-item') === id)
+    .all().filter((s) => /verdict-look/.test(s.className || '')).map((s) => s.title || s.getAttribute('title'));
+  assert.deepEqual(marks('p03'), ['claimed, not judged'], 'Barley, missing before the step its claim says must move it');
+  assert.deepEqual(marks('p02'), ['claimed, not moved']);
+  assert.match(drawn.text(), /◇ claimed, not judged/);
+  assert.match(drawn.byId['step-said'].textContent, /1 value claimed, not judged ◇/);
 });
 
 test('the matrix shows first the indicators in which the chosen comparison moved most', () => {
@@ -817,7 +873,7 @@ test('the claim line names every verdict on a move, "as claimed" first, in words
   chips(drawn)[k + 1].dispatch('click', {});
   const said = drawn.byId['step-said'].textContent;
   const total = (v) => Object.values(data.counts.steps[step.id]).reduce((a, b) => a + b.verdicts[v], 0);
-  for (const v of ['as claimed', 'off claim', 'not claimed', 'claimed, not moved']) {
+  for (const v of ['as claimed', 'off claim', 'not claimed', 'claimed, not moved', 'claimed, not judged']) {
     const word = v === 'as claimed' ? 'moved as claimed' : v;
     if (total(v)) assert.ok(said.includes(total(v) + ' value' + (total(v) === 1 ? '' : 's') + ' ' + word), v + ': ' + said);
     else assert.ok(!said.includes(word), v);
@@ -881,6 +937,12 @@ const pickRows = (drawn) => drawn.byId['pick-list'].querySelectorAll('button[dat
 const rowOf = (drawn, k) => pickRows(drawn).find((b) => b.getAttribute('data-pick') === String(k));
 const chosenRows = (drawn) => pickRows(drawn).filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => +b.getAttribute('data-pick'));
 const together = () => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'together.json'), 'utf8')).runs;
+test('two results near the largest float on either side of zero lie two apart, as the Python says, not infinitely (issue 37)', () => {
+  assert.deepEqual(page.severityKey(1e308, -1e308, 'sign change'), [page.RANK['sign change'], -2]);
+  assert.deepEqual(page.severityKey(-1.7e308, 1.7e308, 'sign change'), [page.RANK['sign change'], -2]);
+  assert.equal(page.judge(1e308, -1e308, 0, 0.01, null)[0], 'sign change');
+});
+
 const boundaries = () => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'boundaries.json'), 'utf8')).cases;
 const withMatrix = () => dom.page(local(), undefined, { globals: { SENTIER_DIAGNOSTICS_MATRIX: full() } });
 const tagged = (node, tag) => (node.tagName === tag ? [node] : []).concat(...(node.childNodes || []).map((c) => tagged(c, tag)));
@@ -2183,6 +2245,19 @@ test('a matrix the host put in its page under another query is taken where it is
   assert.match(refused.byId['matrix-said'].textContent, /its results or classes differ/);
   // a script of the same name elsewhere is another page's
   assert.ok(handed([{ src: 'other/matrix.js?v=3', matrix: full() }]).head.querySelector('script[src]'));
+});
+
+test('the whole way names each count of the attribution in its own column (issue 8)', () => {
+  const data = example();
+  const water = data.indicators.find((i) => i.id === 'x:water');
+  data.attribution['x:water'] = { ...data.attribution['x:water'], spread: 4, not_attributable: 1, unexplained_moved: 2 };
+  const drawn = dom.page(data);
+  const rows = drawn.byId['total-table'].all().filter((n) => n.tagName === 'TR');
+  const head = rows[0].childNodes.map((c) => c.textContent);
+  const row = rows.find((r) => r.childNodes[0].textContent.startsWith(water.name));
+  const cell = (name) => row.childNodes[head.indexOf(name)].textContent;
+  assert.deepEqual([cell('Spread over steps'), cell('Not attributable'), cell('Moved by what nothing explains')], ['4', '1', '2']);
+  assert.match(row.childNodes[head.indexOf('Spread over steps')].getAttribute('title'), /the step with its largest difference did not move it/);
 });
 
 test('an item the file does not list is said to carry no explanation, never "none given" (issue 31)', () => {

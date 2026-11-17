@@ -267,10 +267,17 @@ def _build(
     items = sorted({item for s in order for i in ids for item in table[s][i]})
     for item in items:
         units.setdefault(item, None)
-    # a claim names items of this chain: an id no state holds is a mistake, not a claim
+    # a claim names items of this chain: an id no state holds is a mistake, not a claim; and
+    # it is judged here, so each list is in hand (`claim_lists=False` leaves them out of the file)
     for one in steps:
         for entry in (one.get("claim") or {}).get("scope", ()):
-            if entry["items"] not in ("*", None):
+            if entry["items"] is None:
+                raise ValueError(
+                    f"step {one['id']!r}: an entry of its claim has no list of items in hand, so it would "
+                    "cover nothing and a `must` would be met by default; give the list, and build with "
+                    "claim_lists=False to keep it out of the file"
+                )
+            if entry["items"] != "*":
                 unknown = set(entry["items"]) - set(items)
                 if unknown:
                     shown = ", ".join(sorted(unknown)[:5]) + (", ..." if len(unknown) > 5 else "")
@@ -417,7 +424,7 @@ def _build(
         for indicator in ids:
             for k in [*range(len(out_steps)), None]:
                 _, _, kind, _, _, said = found[(k, indicator, item)]
-                if kind not in rule.QUIET or said == claims.NOT_MOVED:
+                if kind not in rule.QUIET or said in claims.TO_LOOK_AT:
                     return True
         return False
 
@@ -538,7 +545,7 @@ def write(data: Mapping, path: Path) -> Path:
     if size > fileformat.MAX_BYTES:
         raise ValueError(
             f"the file would be {size} bytes, and a page holds {fileformat.MAX_BYTES} at most: "
-            "list fewer items (`listed`)"
+            + fileformat.smaller_by(data)
         )
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)

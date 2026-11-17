@@ -11,16 +11,20 @@ and after. It gets exactly one class:
                      relative to the larger
     within noise     they share a sign and differ by more, but by no more than two builds
                      of one state do
-    zero reference   the side before lies within the floor, the side after does not
-    zero result      the side after lies within the floor, the side before does not
+    zero reference   the side before lies within the floor, the side after does not, and
+                     they have no ratio: the side before is zero, of the other sign, or
+                     more than ten times smaller
+    zero result      the same, the other way round: the side after went to zero
     sign change      both sides lie beyond the floor and have different signs
     beyond 10x       one side is more than ten times the size of the other
     differs          any other difference
 
 The classes are tried in this order; the first that holds is the class. So a pair on
 both sides of the floor that agrees is "agrees": crossing the floor by solver noise is not
-a change. No class blanks a value, sets it to zero or calls it agreement: the two results
-are always kept.
+a change. A pair of one sign that crosses the floor and stays within ten times is classed
+by its ratio like any other pair: 0.0101 and 0.0099 at a floor of 0.01 differ by 2 %, they
+did not go to zero. No class blanks a value, sets it to zero or calls it agreement: the two
+results are always kept.
 
 **Direction** has one rule: a pair that moved (`MOVES`) went up where the result after
 is larger than the result before, as signed numbers, and down otherwise. Two results
@@ -123,22 +127,36 @@ def is_value(value) -> bool:
 
 def relative_difference(before: float, after: float) -> float:
     """How far two results lie apart, relative to the larger of the two; 0 where both are 0.
+    Two results near the largest float on either side of zero are halved before they are
+    subtracted, which is exact there: their difference would overflow to infinity.
 
     >>> relative_difference(2.0, 1.0), relative_difference(0.0, 0.0), relative_difference(1.0, -1.0)
     (0.5, 0.0, 2.0)
+    >>> relative_difference(1e308, -1e308)
+    2.0
     """
     size = max(abs(before), abs(after))
-    return abs(after - before) / size if size else 0.0
+    if not size:
+        return 0.0
+    gap = abs(after - before)
+    if math.isinf(gap):
+        return abs(after / 2 - before / 2) / (size / 2)
+    return gap / size
 
 
 def change(before: float, after: float) -> float | None:
     """The change relative to the size of the result before, signed as the direction is:
     -0.5 is "50 % lower". None where the result before is zero.
 
-    >>> change(2.0, 1.0), change(-2.0, -4.0), change(4.0, 6.0), change(0.0, 1.0)
-    (-0.5, -1.0, 0.5, None)
+    >>> change(2.0, 1.0), change(-2.0, -4.0), change(4.0, 6.0), change(0.0, 1.0), change(1e308, -1e308)
+    (-0.5, -1.0, 0.5, None, -2.0)
     """
-    return (after - before) / abs(before) if before else None
+    if not before:
+        return None
+    moved = after - before
+    if math.isinf(moved):  # as in relative_difference: halved, exactly, so that it does not overflow
+        return (after / 2 - before / 2) / (abs(before) / 2)
+    return moved / abs(before)
 
 
 def size_ratio(before: float, after: float) -> float | None:
@@ -187,8 +205,10 @@ def classify(
     ('zero result', 'sign change', 'agrees')
     >>> classify(1.0, 1.02, noise=0.05), classify(1.0, 20.0), classify(-2.0, -4.0)
     ('within noise', 'beyond 10x', 'differs')
-    >>> classify(0.010000001, 0.009999999, floor=0.01), classify(0.02, 0.005, floor=0.01)
-    ('agrees', 'zero result')
+    >>> classify(0.010000001, 0.009999999, floor=0.01), classify(0.0101, 0.0099, floor=0.01)
+    ('agrees', 'differs')
+    >>> classify(0.2, 0.005, floor=0.01), classify(-0.2, 0.005, floor=0.01)
+    ('zero result', 'zero result')
     """
     if before is None or after is None:
         return MISSING
@@ -201,14 +221,14 @@ def classify(
         return AGREES
     if same_sign and noise and gap <= noise:
         return WITHIN_NOISE
-    if small_before:
-        return ZERO_REFERENCE
-    if small_after:
-        return ZERO_RESULT
+    larger, smaller = max(abs(before), abs(after)), min(abs(before), abs(after))
+    beyond = larger > BEYOND_FACTOR * smaller
+    # across the floor: to or from zero only where there is no ratio within ten times
+    if (small_before or small_after) and (beyond or not same_sign):
+        return ZERO_REFERENCE if small_before else ZERO_RESULT
     if not same_sign:
         return SIGN_CHANGE
-    larger, smaller = max(abs(before), abs(after)), min(abs(before), abs(after))
-    if larger > BEYOND_FACTOR * smaller:
+    if beyond:
         return BEYOND
     return DIFFERS
 
@@ -268,19 +288,24 @@ def severity(before: float | None, after: float | None, kind: str) -> tuple[int,
 
 
 def largest_step(series: list[float], kinds: list[str]) -> int | None:
-    """The step that carries an item's whole difference along a chain: of the steps whose
-    pair moved, the one with the largest difference, the earlier one where two are equal.
-    None where no step moved: the whole way moved by small steps that add up ("spread").
+    """The step that carries an item's whole difference along a chain: the step with the
+    largest difference, the earlier one where two are equal, where that step moved the item.
+    None where it did not (it agrees, is within its noise or near zero): the whole way moved,
+    and the step that moved it most is one that, judged alone, did not ("spread"). A
+    smaller step that moved is never named in its place: it carries less of the difference
+    than the one that did not.
 
     >>> largest_step([1.0, 2.0, 3.0], [DIFFERS, DIFFERS]), largest_step([1.0, 1.04, 1.08], [WITHIN_NOISE] * 2)
     (0, None)
-    >>> largest_step([1.0, 1.045, 1.075], [WITHIN_NOISE, DIFFERS])
+    >>> largest_step([1.0, 1.045, 1.15], [WITHIN_NOISE, DIFFERS])
     1
+    >>> largest_step([1.0, 1.05, 1.25, 1.6], [DIFFERS, WITHIN_NOISE, WITHIN_NOISE]) is None
+    True
     """
-    moved = [k for k, kind in enumerate(kinds) if kind in MOVES]
-    if not moved:
+    if not kinds:
         return None
-    return max(moved, key=lambda k: (abs(series[k + 1] - series[k]), -k))
+    k = max(range(len(kinds)), key=lambda k: (abs(series[k + 1] - series[k]), -k))
+    return k if kinds[k] in MOVES else None
 
 
 def floor_of(values: Iterable[float | None], factor: float = FLOOR_FACTOR) -> tuple[float, int]:

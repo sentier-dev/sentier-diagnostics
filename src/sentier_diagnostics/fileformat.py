@@ -44,9 +44,9 @@ OPTIONAL_KEYS = {"matrix", "indicator"}
 
 #: The largest file a page reads: it holds the whole file.
 MAX_BYTES = 12 * 1024 * 1024
+#: A claim's lists are bounded by the chain they name (`items_count.all`) and by MAX_BYTES,
+#: not by a count of their own: a chain may hold more items than a file lists.
 MAX_INDICATORS, MAX_STATES, MAX_ITEMS, MAX_SCOPE = 100, 30, 5000, 50
-#: An entry of a claim may list as many items as a file may.
-MAX_SCOPE_ITEMS = MAX_ITEMS
 MAX_EXPLANATIONS, MAX_NOTES, MAX_IDENTITY = 500, 20, 12
 MAX_ID, MAX_LABEL, MAX_WORD, MAX_TEXT, MAX_LONG = 100, 80, 40, 600, 2000
 FILE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.json")
@@ -80,8 +80,8 @@ EXPLANATION_KEYS = {"about", "finding", "text", "by", "source", "not_checked"}
 
 #: The verdicts a pair of each class can have.
 ALLOWED_VERDICTS = {
-    rule.MISSING: {claims.NOT_JUDGED},
-    rule.NEAR_ZERO: {claims.NOT_JUDGED, claims.NOT_MOVED},
+    rule.MISSING: {claims.NOT_JUDGED, claims.OPEN},
+    rule.NEAR_ZERO: {claims.NOT_JUDGED, claims.OPEN},
     rule.AGREES: {claims.UNCHANGED, claims.NOT_MOVED},
     rule.WITHIN_NOISE: {claims.NOISE, claims.NOT_MOVED},
     **{kind: {claims.AS_CLAIMED, claims.OFF_CLAIM, claims.NOT_CLAIMED} for kind in rule.MOVES},
@@ -291,6 +291,8 @@ def claim_errors(found_claim, where, indicators, tier) -> list[str]:
     size = claims.reach_of(found_claim["scope"])
     if size is not None and found_claim["reach"] != size:
         found.append(f"{where}: the reach of a claim is {found_claim['reach']}, and its lists name {size} items")
+    if found_claim["reach"] is not None and claims.lists_nothing(found_claim["scope"]):
+        found.append(f"{where}: the reach of a claim is {found_claim['reach']}, and no entry of it lists items")
     return found
 
 
@@ -321,10 +323,10 @@ def _claim_shape(found_claim, where, indicators, tier) -> list[str]:
                 found.append(f"{where}: a file of counts lists no item in a claim")
             elif not (
                 isinstance(items, list)
-                and len(items) <= MAX_SCOPE_ITEMS
                 and all(is_text(i, MAX_ID) for i in items)
+                and len(set(items)) == len(items)
             ):
-                found.append(f"{where}: the items of a scope are not at most {MAX_SCOPE_ITEMS} ids")
+                found.append(f"{where}: the items of a scope are not a list of distinct ids")
         if entry["direction"] not in claims.WAYS:
             found.append(f"{where}: a scope's direction is not one of {', '.join(claims.WAYS)}")
         if entry["largest"] is not None and not is_share(entry["largest"]):
@@ -674,7 +676,7 @@ def _items(data, found, indicators, states, steps, floors, tier, blocks):
         found.append("a file of counts holds no item")
         return []
     nsteps = len(steps)
-    claims_by_step = [s["claim"] for s in steps]
+    claims_by_step = [_in_hand(s["claim"]) for s in steps]
     any_claim = any(claims_by_step)
     published_first = data["states"][0]["kind"] == "published"
     seen, previous_key = set(), None
@@ -782,7 +784,7 @@ def _items(data, found, indicators, states, steps, floors, tier, blocks):
                 if not isinstance(said_verdict, str) or said_verdict not in ALLOWED_VERDICTS[kinds[at]]:
                     found.append(f"{where}, {indicator}, {name}: {kinds[at]!r} cannot be {said_verdict!r}")
                     return []
-                worth = worth or said_verdict == claims.NOT_MOVED
+                worth = worth or said_verdict in claims.TO_LOOK_AT
                 if claims.judgeable(step_claim):
                     covering = [
                         e for e in claims.entries_for(step_claim, indicator)
@@ -853,7 +855,7 @@ def _items(data, found, indicators, states, steps, floors, tier, blocks):
 
 
 #: The verdicts only a pair worth a look can have.
-_LOUD_VERDICTS = frozenset({claims.AS_CLAIMED, claims.OFF_CLAIM, claims.NOT_CLAIMED, claims.NOT_MOVED})
+_LOUD_VERDICTS = frozenset({claims.AS_CLAIMED, *claims.TO_LOOK_AT})
 
 
 def _add(tally: dict, key: tuple) -> None:
@@ -970,6 +972,7 @@ def _errors(data, found: list[str]) -> list[str]:
     floors = _rule(data, found, indicators, states, steps)
     count = data["items_count"]
     total_pairs = count.get("all") if isinstance(count, dict) else None
+    _reach(found, steps, total_pairs)
     blocks = _counts(data, found, indicators, steps, total_pairs)
     if floors is None or not blocks:
         return found
@@ -978,6 +981,41 @@ def _errors(data, found: list[str]) -> list[str]:
     _explanations(data, found, indicators, steps, set(items), tier)
     _matrix(data, found)
     return found
+
+
+def _reach(found, steps, total) -> None:
+    """A claim names items of its chain, so it reaches no more items than the chain holds:
+    this bounds its lists, and where they stay private, the size it says they have."""
+    if not is_count(total):
+        return  # `_items` says why the count cannot be read
+    for one in steps:
+        reach = (one["claim"] or {}).get("reach")
+        if is_count(reach) and reach > total:
+            found.append(f"step {one['id']!r}: its claim reaches {reach} items, and the chain holds {total}")
+
+
+def smaller_by(data) -> str:
+    """What makes a file smaller: fewer listed items and, where a claim lists items, leaving
+    its lists out. Reads a file that may not be well formed."""
+    steps = data.get("steps") if isinstance(data, Mapping) else None
+    listing = any(
+        isinstance(entry, Mapping) and isinstance(entry.get("items"), list)
+        for one in (steps if isinstance(steps, list) else ())
+        if isinstance(one, Mapping) and isinstance(one.get("claim"), Mapping)
+        for entry in (one["claim"].get("scope") if isinstance(one["claim"].get("scope"), list) else ())
+    )
+    return "list fewer items (`listed`)" + (", or leave the claims' lists out (`claim_lists`)" if listing else "")
+
+
+def _in_hand(found_claim):
+    """A claim with each of its lists as a set, so that whether an entry covers an item is
+    one look-up: a list may name as many items as the chain holds."""
+    if not found_claim:
+        return found_claim
+    return found_claim | {"scope": [
+        entry | {"items": frozenset(entry["items"])} if isinstance(entry["items"], list) else entry
+        for entry in found_claim["scope"]
+    ]}  # fmt: skip
 
 
 def _matrix(data, found) -> None:
