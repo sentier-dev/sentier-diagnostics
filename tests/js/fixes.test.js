@@ -210,27 +210,109 @@ test('the grid shows a set\'s result over the base: a built set as built', () =>
   assert.doesNotMatch(d.byId['grid-said'].textContent, /^Estimated/);
 });
 
-test('every summed value of an estimated set is marked, and its counts are said to be estimated', () => {
+const marked = (node) => node.all().some((n) => n.textContent === '≈');
+// every set a reader can choose on a page: closed, each once
+function setsOf(p) {
+  const ids = p.fixes.fixes.map((f) => f.id), seen = new Map();
+  for (let mask = 1; mask < (1 << ids.length); mask++) {
+    const names = page.fixChosen(p.fixes, ids.filter((_, i) => mask & (1 << i))).names;
+    seen.set(names.join(','), names);
+  }
+  return [...seen.values()];
+}
+// the value cells of the grid, each with its item and indicator
+function valueCells(d) {
+  const cols = columnsOf(d);
+  return gridRows(d).flatMap((r) => r.childNodes.filter((n) => n.tagName === 'TD').slice(1, 1 + cols.length)
+    .map((td, i) => ({ item: r.getAttribute('data-item'), ind: cols[i], td })));
+}
+
+test('an estimated set says so in its line and before its counts; one fix alone is its build', () => {
   const d = drawn('an estimated sum', 'set=a,b');
   assert.match(d.byId['step-said'].textContent, /^2 fixes together\. estimated/);
-  assert.match(d.byId['step-said'].textContent, /Whether fixes interact was not checked/);
+  assert.match(d.byId['step-said'].textContent, /Whether fixes interact was not checked, so a set that was not built is an estimate, and every value it has is marked ≈/);
   assert.match(d.byId['grid-said'].textContent, /^Estimated: /);
   assert.match(d.byId['worst-said'].textContent, /^Estimated: /);
-  // a and b both move p1: its value is their sum, marked; p3, which neither moves, is not
-  const p1 = cell(d, 'p1', 0);
-  assert.ok(p1.all().some((n) => n.textContent === '≈'), p1.textContent);
-  assert.ok(!cell(d, 'p3', 0).all().some((n) => n.textContent === '≈'));
   assert.match(d.byId['dist-said'].textContent, /^Estimated: /);
-  // one fix alone is its build, never marked
   const alone = drawn('an estimated sum', 'set=a');
   assert.match(alone.byId['step-said'].textContent, /^Fix A\. built/);
-  assert.ok(!cell(alone, 'p1', 0).all().some((n) => n.textContent === '≈'));
+  assert.ok(!gridRows(alone).some(marked));
   assert.doesNotMatch(alone.byId['dist-said'].textContent, /^Estimated/);
-  // in an estimated set, a value taken from one fix's build is not a sum, and is not marked
-  const three = drawn('an estimated sum', 'set=a,b,c');
-  const ind = pageOf('an estimated sum').fixes.indicators[0].id;
-  assert.ok(cellOf(three, 'p1', ind).all().some((n) => n.textContent === '≈'));
-  assert.ok(!cellOf(three, 'p3', ind).all().some((n) => n.textContent === '≈'), 'c alone moves p3');
+});
+
+test('a pair the set holds marks every value it may move: a sum, and a value from the base or a build without the whole pair', () => {
+  const p = pageOf('a pair inside a build');
+  const [A, B] = p.fixes.indicators.map((i) => i.id);
+  const d = drawn('a pair inside a build', 'set=a,b,c,d');
+  assert.match(d.byId['step-said'].textContent, /^Every fix \(4\)\. estimated/);
+  assert.match(d.byId['step-said'].textContent, /A value is marked ≈ wherever a pair may move it: every sum, and every value taken from the base or from a build that does not hold both fixes of each pair\./);
+  // p1 stands on the build of a and b, which holds the pair: not marked
+  assert.ok(!marked(cellOf(d, 'p1', A)), cellOf(d, 'p1', A).textContent);
+  // p2 stands on a's build, and b, the pair's other fix, lies outside it
+  assert.ok(marked(cellOf(d, 'p2', A)));
+  assert.match(cellOf(d, 'p2', A).getAttribute('title'), /^Estimated: the result of a build of only some of these fixes, which the others may move by interacting with them\. /);
+  // p3 on c's build and p4 in B on d's, which hold neither fix of the pair
+  assert.ok(marked(cellOf(d, 'p3', A)));
+  assert.ok(marked(cellOf(d, 'p4', B)));
+  // a value no fix changes on its own stands on the base, which holds neither: a and b may
+  // still move it together
+  for (const [item, ind] of [['p4', A], ['p1', B], ['p2', B], ['p3', B]]) assert.ok(marked(cellOf(d, item, ind)), item + ' ' + ind);
+  assert.match(cellOf(d, 'p4', A).getAttribute('title'), /^Estimated: no fix of the set changes it on its own, and two of them may change it together\. /);
+  // the set of c and d holds no pair: exact, and nothing is marked
+  const cd = drawn('a pair inside a build', 'set=c,d');
+  assert.match(cd.byId['step-said'].textContent, /exact/);
+  assert.ok(!gridRows(cd).some(marked));
+});
+
+test('the drawer of an estimated set says which values are estimated, and why a base value is', () => {
+  const p1 = drawn('a pair inside a build', 'set=a,b,c,d&item=p1').byId['item-body'].textContent;
+  assert.match(p1, /This setthe build of Fix a and Fix b[^,]/);
+  const p2 = drawn('a pair inside a build', 'set=a,b,c,d&item=p2').byId['item-body'].textContent;
+  assert.match(p2, /This setthat build, estimated/);
+  const p4 = drawn('a pair inside a build', 'set=a,b,c,d&item=p4').byId['item-body'].textContent;
+  assert.match(p4, /In the other 1 indicator no fix of this set changes it on its own\. Two fixes of a listed pair the set holds may change it together, so it is marked ≈\./);
+  const none = drawn('an estimated sum', 'set=a,b&item=p3').byId['item-body'].textContent;
+  assert.match(none, /No fix of this set changes this \w+ on its own: each result is the base's\. Whether these fixes interact was not checked, so it is marked ≈\./);
+  // in an exact set, nothing is said
+  const exact = drawn('a pair inside a build', 'set=c,d&item=p1').byId['item-body'].textContent;
+  assert.match(exact, /No fix of this set changes this \w+ on its own: each result is the base's\.Along the chain/);
+});
+
+test('a built or exact set marks no value, on every page and every set', () => {
+  let sets = 0;
+  for (const name of Object.keys(FIXTURE.pages)) {
+    const p = pageOf(name);
+    for (const names of setsOf(p)) {
+      if (page.fixCompose(p.fixes, names).label === 'estimated') continue;
+      const d = drawn(name, 'set=' + names.join(','));
+      for (const c of valueCells(d)) assert.ok(!marked(c.td), name + ': ' + names + ', ' + c.item + ' ' + c.ind + ' ' + c.td.textContent);
+      sets += 1;
+    }
+  }
+  assert.ok(sets >= 30, sets + ' sets');
+  // where three fixes move one item, the set of two is exact: its sum is not marked
+  const p = pageOf('three fixes at one item');
+  const xy = drawn('three fixes at one item', 'set=x,y');
+  assert.match(xy.byId['step-said'].textContent, /exact/);
+  assert.ok(!marked(cellOf(xy, 'p4', p.fixes.indicators[0].id)));
+});
+
+test('where interactions were not checked, every value of an estimated set is marked but no sum', () => {
+  let sets = 0;
+  for (const name of Object.keys(FIXTURE.pages)) {
+    const p = pageOf(name);
+    if (p.fixes.interactions.checked) continue;
+    for (const names of setsOf(p)) {
+      if (page.fixCompose(p.fixes, names).label !== 'estimated') continue;
+      const d = drawn(name, 'set=' + names.join(','));
+      for (const c of valueCells(d)) {
+        if (c.td.getAttribute('data-class') === 'no sum') assert.ok(!marked(c.td));
+        else assert.ok(marked(c.td), name + ': ' + names + ', ' + c.item + ' ' + c.ind);
+      }
+      sets += 1;
+    }
+  }
+  assert.ok(sets >= 2, sets + ' sets');
 });
 
 test('the drawer splits an item into each fix\'s effect, and the set\'s value is the sum', () => {
@@ -283,6 +365,45 @@ test('a file of fixes beside the page loads after it is drawn, and takes the ent
     assert.deepEqual(ticked(again), ['a', 'd', 'e'], list.map((e) => e.src).join(' then '));
     assert.match(again.byId['fixes-said'].textContent, /^5 fixes/);
   }
+});
+
+// a page that names fixes.json, served over http with `bytes` (a Buffer) or a status
+async function fetched(bytes, status) {
+  const p = pageOf('fixes that need others'), asked = [];
+  const fetch = (url) => {
+    asked.push(url);
+    const buffer = bytes ? bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length) : null;
+    return Promise.resolve({ ok: !status, status: status || 200, arrayBuffer: () => Promise.resolve(buffer) });
+  };
+  const d = dom.page(p.data, undefined, { standalone: true, hash: 'set=e', protocol: 'https:', fetch,
+    attributes: { 'data-sd-fixes': 'fixes.json', 'data-sd-base': 'runs/1/' }, globals: { SENTIER_DIAGNOSTICS_MATRIX: p.matrix } });
+  await new Promise((done) => setImmediate(done));
+  return { d, asked, said: d.byId['fixes-said'].textContent };
+}
+
+test('a file of fixes named fixes.json is fetched over http, held to the file shown, and drawn', async () => {
+  const { d, asked, said } = await fetched(Buffer.from(JSON.stringify(pageOf('fixes that need others').fixes)));
+  assert.deepEqual(asked, ['runs/1/fixes.json']);
+  assert.match(said, /^5 fixes/);
+  assert.deepEqual(ticked(d), ['a', 'd', 'e']);
+  // one of another chain is refused as one from a script is
+  const other = pageOf('fixes that need others').fixes;
+  other.of.title = 'Another chain';
+  assert.match((await fetched(Buffer.from(JSON.stringify(other)))).said, /^The file of fixes was not loaded: it belongs to "Another chain"/);
+});
+
+test('fixes.json over http is refused when larger than a page loads in bytes, not JSON, not UTF-8, or not served', async () => {
+  // 2-byte characters: the text is half as long as the file, so only its size in bytes is over
+  const max = 64 * 1024 * 1024, large = Buffer.alloc(max + 2, 'é');
+  assert.equal(large.toString('utf8').length, max / 2 + 1);
+  assert.match((await fetched(large)).said, /^The file of fixes was not loaded: fixes\.json is larger than 67\D108\D864 bytes/);
+  assert.match((await fetched(Buffer.from('{"format": '))).said, /^The file of fixes was not loaded: fixes\.json is not JSON/);
+  assert.match((await fetched(Buffer.from([0x7b, 0xff, 0x7d]))).said, /^The file of fixes was not loaded: fixes\.json is not UTF-8 text/);
+  assert.match((await fetched(null, 404)).said, /^The file of fixes was not loaded: fixes\.json could not be read \(404\)/);
+  // from the disk, a page reads no JSON beside it
+  const p = pageOf('fixes that need others');
+  const local = dom.page(p.data, undefined, { standalone: true, attributes: { 'data-sd-fixes': 'fixes.json' }, globals: { SENTIER_DIAGNOSTICS_MATRIX: p.matrix } });
+  assert.match(local.byId['fixes-said'].textContent, /fixes\.json is read over http only/);
 });
 
 test('a page whose key is refused loads no file of fixes, and keeps saying why', () => {

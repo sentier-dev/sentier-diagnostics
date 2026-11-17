@@ -43993,6 +43993,5414 @@ null,
 ]
 }
 ]
+},
+{
+"file": {
+"about": null,
+"base": {
+"x:a": [
+3.0,
+1.0,
+2.0,
+0.0
+],
+"x:b": [
+7.0,
+3.0,
+5.0,
+1.0
+]
+},
+"built": [
+{
+"fixes": [
+"a",
+"b"
+],
+"id": "ab",
+"label": "A and B",
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"results": {
+"x:a": [
+[
+1,
+1.5
+],
+[
+2,
+2.2
+]
+],
+"x:b": []
+},
+"state": null
+}
+],
+"fixes": [
+{
+"about": null,
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 1,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 1,
+"beyond 10x": 0,
+"differs": 2,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 2
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"effect": {
+"x:a": [
+[
+1,
+1.2
+],
+[
+2,
+2.2
+]
+],
+"x:b": []
+},
+"explained": true,
+"id": "a",
+"kind": "amount",
+"label": "Fix a",
+"link": null,
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"requires": [],
+"tolerance": {
+"basis": "default",
+"note": "one order of magnitude above the solver noise of two builds",
+"value": 1e-05
+}
+},
+{
+"about": null,
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"effect": {
+"x:a": [
+[
+1,
+1.3
+]
+],
+"x:b": []
+},
+"explained": true,
+"id": "b",
+"kind": "amount",
+"label": "Fix b",
+"link": null,
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"requires": [],
+"tolerance": {
+"basis": "default",
+"note": "one order of magnitude above the solver noise of two builds",
+"value": 1e-05
+}
+},
+{
+"about": null,
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"effect": {
+"x:a": [
+[
+0,
+3.3
+]
+],
+"x:b": []
+},
+"explained": true,
+"id": "c",
+"kind": "amount",
+"label": "Fix c",
+"link": null,
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"requires": [],
+"tolerance": {
+"basis": "default",
+"note": "one order of magnitude above the solver noise of two builds",
+"value": 1e-05
+}
+},
+{
+"about": null,
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"effect": {
+"x:a": [],
+"x:b": [
+[
+3,
+1.5
+]
+]
+},
+"explained": true,
+"id": "d",
+"kind": "amount",
+"label": "Fix d",
+"link": null,
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"requires": [],
+"tolerance": {
+"basis": "default",
+"note": "one order of magnitude above the solver noise of two builds",
+"value": 1e-05
+}
+}
+],
+"format": "sentier-diagnostics-fixes/1",
+"indicators": [
+{
+"id": "x:a",
+"name": "Indicator A",
+"short": "A",
+"unit": "kg CO2 eq"
+},
+{
+"id": "x:b",
+"name": "Indicator B",
+"short": "B",
+"unit": "m3"
+}
+],
+"interactions": {
+"by": {
+"kind": "code",
+"model": null,
+"name": "pair check",
+"run_by": null
+},
+"checked": true,
+"method": "Compared what each fix changes in the model.",
+"pairs": [
+{
+"fixes": [
+"a",
+"b"
+],
+"kind": "technosphere",
+"largest": 0.1,
+"reach": null
+}
+]
+},
+"item": {
+"many": "items",
+"one": "item"
+},
+"items": [
+[
+"p3",
+"p3",
+null,
+null,
+"kg"
+],
+[
+"p1",
+"p1",
+null,
+null,
+"kg"
+],
+[
+"p2",
+"p2",
+null,
+null,
+"kg"
+],
+[
+"p4",
+"p4",
+null,
+null,
+"kg"
+]
+],
+"made_by": "sentier-diagnostics 0.1.0",
+"notes": [],
+"of": {
+"base": "s1",
+"base_noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"file": "diagnostics.json",
+"title": "Two states"
+},
+"rule": {
+"beyond": 10.0,
+"floor_factor": 0.01,
+"floors": [
+{
+"basis": "declared",
+"indicator": "x:a",
+"n": 0,
+"unit": "kg",
+"value": 0.01
+},
+{
+"basis": "declared",
+"indicator": "x:b",
+"n": 0,
+"unit": "kg",
+"value": 0.01
+}
+],
+"floors_from": "s0"
+},
+"title": "A pair inside a build"
+},
+"name": "a pair inside a build",
+"sets": [
+{
+"compose": {
+"added": [],
+"cannot_add": {
+"x:a": [],
+"x:b": []
+},
+"fixes": [
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 1,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 1,
+"beyond 10x": 0,
+"differs": 2,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 2
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "a",
+"label": "Fix a",
+"requires": []
+}
+],
+"item_noise": {
+"x:a": {
+"1": null,
+"2": null
+},
+"x:b": {}
+},
+"label": "built",
+"noise": {
+"x:a": {
+"builds": 2,
+"known": 0,
+"value": null
+},
+"x:b": {
+"builds": 0,
+"known": 0,
+"value": null
+}
+},
+"pair_terms": {
+"measured": 0,
+"no_size": 0,
+"pairs": 0,
+"value": 0.0
+},
+"pairs": [],
+"results": {
+"x:a": [
+3.0,
+1.2,
+2.2,
+0.0
+],
+"x:b": [
+7.0,
+3.0,
+5.0,
+1.0
+]
+},
+"tolerance": 1e-05
+},
+"counts": {
+"by": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 1,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 1,
+"beyond 10x": 0,
+"differs": 2,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 2
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"label": "built"
+},
+"ids": [
+"a"
+]
+},
+{
+"compose": {
+"added": [],
+"cannot_add": {
+"x:a": [],
+"x:b": []
+},
+"fixes": [
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "b",
+"label": "Fix b",
+"requires": []
+}
+],
+"item_noise": {
+"x:a": {
+"1": null
+},
+"x:b": {}
+},
+"label": "built",
+"noise": {
+"x:a": {
+"builds": 2,
+"known": 0,
+"value": null
+},
+"x:b": {
+"builds": 0,
+"known": 0,
+"value": null
+}
+},
+"pair_terms": {
+"measured": 0,
+"no_size": 0,
+"pairs": 0,
+"value": 0.0
+},
+"pairs": [],
+"results": {
+"x:a": [
+3.0,
+1.3,
+2.0,
+0.0
+],
+"x:b": [
+7.0,
+3.0,
+5.0,
+1.0
+]
+},
+"tolerance": 1e-05
+},
+"counts": {
+"by": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"label": "built"
+},
+"ids": [
+"b"
+]
+},
+{
+"compose": {
+"added": [],
+"cannot_add": {
+"x:a": [],
+"x:b": []
+},
+"fixes": [
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "c",
+"label": "Fix c",
+"requires": []
+}
+],
+"item_noise": {
+"x:a": {
+"0": null
+},
+"x:b": {}
+},
+"label": "built",
+"noise": {
+"x:a": {
+"builds": 2,
+"known": 0,
+"value": null
+},
+"x:b": {
+"builds": 0,
+"known": 0,
+"value": null
+}
+},
+"pair_terms": {
+"measured": 0,
+"no_size": 0,
+"pairs": 0,
+"value": 0.0
+},
+"pairs": [],
+"results": {
+"x:a": [
+3.3,
+1.0,
+2.0,
+0.0
+],
+"x:b": [
+7.0,
+3.0,
+5.0,
+1.0
+]
+},
+"tolerance": 1e-05
+},
+"counts": {
+"by": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"label": "built"
+},
+"ids": [
+"c"
+]
+},
+{
+"compose": {
+"added": [],
+"cannot_add": {
+"x:a": [],
+"x:b": []
+},
+"fixes": [
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "d",
+"label": "Fix d",
+"requires": []
+}
+],
+"item_noise": {
+"x:a": {},
+"x:b": {
+"3": null
+}
+},
+"label": "built",
+"noise": {
+"x:a": {
+"builds": 0,
+"known": 0,
+"value": null
+},
+"x:b": {
+"builds": 2,
+"known": 0,
+"value": null
+}
+},
+"pair_terms": {
+"measured": 0,
+"no_size": 0,
+"pairs": 0,
+"value": 0.0
+},
+"pairs": [],
+"results": {
+"x:a": [
+3.0,
+1.0,
+2.0,
+0.0
+],
+"x:b": [
+7.0,
+3.0,
+5.0,
+1.5
+]
+},
+"tolerance": 1e-05
+},
+"counts": {
+"by": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"label": "built"
+},
+"ids": [
+"d"
+]
+},
+{
+"compose": {
+"added": [],
+"cannot_add": {
+"x:a": [],
+"x:b": []
+},
+"fixes": [
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 1,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 1,
+"beyond 10x": 0,
+"differs": 2,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 2
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "a",
+"label": "Fix a",
+"requires": []
+},
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "b",
+"label": "Fix b",
+"requires": []
+}
+],
+"item_noise": {
+"x:a": {
+"1": null,
+"2": null
+},
+"x:b": {}
+},
+"label": "built",
+"noise": {
+"x:a": {
+"builds": 2,
+"known": 0,
+"value": null
+},
+"x:b": {
+"builds": 0,
+"known": 0,
+"value": null
+}
+},
+"pair_terms": {
+"measured": 1,
+"no_size": 0,
+"pairs": 1,
+"value": 0.1
+},
+"pairs": [
+{
+"fixes": [
+"a",
+"b"
+],
+"kind": "technosphere",
+"largest": 0.1,
+"reach": null
+}
+],
+"results": {
+"x:a": [
+3.0,
+1.5,
+2.2,
+0.0
+],
+"x:b": [
+7.0,
+3.0,
+5.0,
+1.0
+]
+},
+"tolerance": 1e-05
+},
+"counts": {
+"by": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 1,
+"beyond 10x": 0,
+"differs": 2,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 2
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"label": "built"
+},
+"ids": [
+"a",
+"b"
+]
+},
+{
+"compose": {
+"added": [],
+"cannot_add": {
+"x:a": [],
+"x:b": []
+},
+"fixes": [
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 1,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 1,
+"beyond 10x": 0,
+"differs": 2,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 2
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "a",
+"label": "Fix a",
+"requires": []
+},
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "c",
+"label": "Fix c",
+"requires": []
+}
+],
+"item_noise": {
+"x:a": {
+"0": null,
+"1": null,
+"2": null
+},
+"x:b": {}
+},
+"label": "exact",
+"noise": {
+"x:a": {
+"builds": 3,
+"known": 0,
+"value": null
+},
+"x:b": {
+"builds": 0,
+"known": 0,
+"value": null
+}
+},
+"pair_terms": {
+"measured": 0,
+"no_size": 0,
+"pairs": 0,
+"value": 0.0
+},
+"pairs": [],
+"results": {
+"x:a": [
+3.3,
+1.2,
+2.2,
+0.0
+],
+"x:b": [
+7.0,
+3.0,
+5.0,
+1.0
+]
+},
+"tolerance": 1e-05
+},
+"counts": {
+"by": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 2,
+"up, factor 1.1-1.25": 1,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 0,
+"beyond 10x": 0,
+"differs": 3,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 3
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"label": "exact"
+},
+"ids": [
+"a",
+"c"
+]
+},
+{
+"compose": {
+"added": [],
+"cannot_add": {
+"x:a": [],
+"x:b": []
+},
+"fixes": [
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 1,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 1,
+"beyond 10x": 0,
+"differs": 2,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 2
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "a",
+"label": "Fix a",
+"requires": []
+},
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "d",
+"label": "Fix d",
+"requires": []
+}
+],
+"item_noise": {
+"x:a": {
+"1": null,
+"2": null
+},
+"x:b": {
+"3": null
+}
+},
+"label": "exact",
+"noise": {
+"x:a": {
+"builds": 2,
+"known": 0,
+"value": null
+},
+"x:b": {
+"builds": 2,
+"known": 0,
+"value": null
+}
+},
+"pair_terms": {
+"measured": 0,
+"no_size": 0,
+"pairs": 0,
+"value": 0.0
+},
+"pairs": [],
+"results": {
+"x:a": [
+3.0,
+1.2,
+2.2,
+0.0
+],
+"x:b": [
+7.0,
+3.0,
+5.0,
+1.5
+]
+},
+"tolerance": 1e-05
+},
+"counts": {
+"by": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 1,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 1,
+"beyond 10x": 0,
+"differs": 2,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 2
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"label": "exact"
+},
+"ids": [
+"a",
+"d"
+]
+},
+{
+"compose": {
+"added": [],
+"cannot_add": {
+"x:a": [],
+"x:b": []
+},
+"fixes": [
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "b",
+"label": "Fix b",
+"requires": []
+},
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "c",
+"label": "Fix c",
+"requires": []
+}
+],
+"item_noise": {
+"x:a": {
+"0": null,
+"1": null
+},
+"x:b": {}
+},
+"label": "exact",
+"noise": {
+"x:a": {
+"builds": 3,
+"known": 0,
+"value": null
+},
+"x:b": {
+"builds": 0,
+"known": 0,
+"value": null
+}
+},
+"pair_terms": {
+"measured": 0,
+"no_size": 0,
+"pairs": 0,
+"value": 0.0
+},
+"pairs": [],
+"results": {
+"x:a": [
+3.3,
+1.3,
+2.0,
+0.0
+],
+"x:b": [
+7.0,
+3.0,
+5.0,
+1.0
+]
+},
+"tolerance": 1e-05
+},
+"counts": {
+"by": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 1,
+"beyond 10x": 0,
+"differs": 2,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 2
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"label": "exact"
+},
+"ids": [
+"b",
+"c"
+]
+},
+{
+"compose": {
+"added": [],
+"cannot_add": {
+"x:a": [],
+"x:b": []
+},
+"fixes": [
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "b",
+"label": "Fix b",
+"requires": []
+},
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "d",
+"label": "Fix d",
+"requires": []
+}
+],
+"item_noise": {
+"x:a": {
+"1": null
+},
+"x:b": {
+"3": null
+}
+},
+"label": "exact",
+"noise": {
+"x:a": {
+"builds": 2,
+"known": 0,
+"value": null
+},
+"x:b": {
+"builds": 2,
+"known": 0,
+"value": null
+}
+},
+"pair_terms": {
+"measured": 0,
+"no_size": 0,
+"pairs": 0,
+"value": 0.0
+},
+"pairs": [],
+"results": {
+"x:a": [
+3.0,
+1.3,
+2.0,
+0.0
+],
+"x:b": [
+7.0,
+3.0,
+5.0,
+1.5
+]
+},
+"tolerance": 1e-05
+},
+"counts": {
+"by": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"label": "exact"
+},
+"ids": [
+"b",
+"d"
+]
+},
+{
+"compose": {
+"added": [],
+"cannot_add": {
+"x:a": [],
+"x:b": []
+},
+"fixes": [
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "c",
+"label": "Fix c",
+"requires": []
+},
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "d",
+"label": "Fix d",
+"requires": []
+}
+],
+"item_noise": {
+"x:a": {
+"0": null
+},
+"x:b": {
+"3": null
+}
+},
+"label": "exact",
+"noise": {
+"x:a": {
+"builds": 2,
+"known": 0,
+"value": null
+},
+"x:b": {
+"builds": 2,
+"known": 0,
+"value": null
+}
+},
+"pair_terms": {
+"measured": 0,
+"no_size": 0,
+"pairs": 0,
+"value": 0.0
+},
+"pairs": [],
+"results": {
+"x:a": [
+3.3,
+1.0,
+2.0,
+0.0
+],
+"x:b": [
+7.0,
+3.0,
+5.0,
+1.5
+]
+},
+"tolerance": 1e-05
+},
+"counts": {
+"by": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"label": "exact"
+},
+"ids": [
+"c",
+"d"
+]
+},
+{
+"compose": {
+"added": [],
+"cannot_add": {
+"x:a": [],
+"x:b": []
+},
+"fixes": [
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 1,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 1,
+"beyond 10x": 0,
+"differs": 2,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 2
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "a",
+"label": "Fix a",
+"requires": []
+},
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "b",
+"label": "Fix b",
+"requires": []
+},
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "c",
+"label": "Fix c",
+"requires": []
+}
+],
+"item_noise": {
+"x:a": {
+"0": null,
+"1": null,
+"2": null
+},
+"x:b": {}
+},
+"label": "estimated",
+"noise": {
+"x:a": {
+"builds": 4,
+"known": 0,
+"value": null
+},
+"x:b": {
+"builds": 0,
+"known": 0,
+"value": null
+}
+},
+"pair_terms": {
+"measured": 1,
+"no_size": 0,
+"pairs": 1,
+"value": 0.1
+},
+"pairs": [
+{
+"fixes": [
+"a",
+"b"
+],
+"kind": "technosphere",
+"largest": 0.1,
+"reach": null
+}
+],
+"results": {
+"x:a": [
+3.3,
+1.5,
+2.2,
+0.0
+],
+"x:b": [
+7.0,
+3.0,
+5.0,
+1.0
+]
+},
+"tolerance": 1e-05
+},
+"counts": {
+"by": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 2,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 0,
+"beyond 10x": 0,
+"differs": 3,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 3
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"label": "estimated"
+},
+"ids": [
+"a",
+"b",
+"c"
+]
+},
+{
+"compose": {
+"added": [],
+"cannot_add": {
+"x:a": [],
+"x:b": []
+},
+"fixes": [
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 1,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 1,
+"beyond 10x": 0,
+"differs": 2,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 2
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "a",
+"label": "Fix a",
+"requires": []
+},
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "b",
+"label": "Fix b",
+"requires": []
+},
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "d",
+"label": "Fix d",
+"requires": []
+}
+],
+"item_noise": {
+"x:a": {
+"1": null,
+"2": null
+},
+"x:b": {
+"3": null
+}
+},
+"label": "estimated",
+"noise": {
+"x:a": {
+"builds": 3,
+"known": 0,
+"value": null
+},
+"x:b": {
+"builds": 2,
+"known": 0,
+"value": null
+}
+},
+"pair_terms": {
+"measured": 1,
+"no_size": 0,
+"pairs": 1,
+"value": 0.1
+},
+"pairs": [
+{
+"fixes": [
+"a",
+"b"
+],
+"kind": "technosphere",
+"largest": 0.1,
+"reach": null
+}
+],
+"results": {
+"x:a": [
+3.0,
+1.5,
+2.2,
+0.0
+],
+"x:b": [
+7.0,
+3.0,
+5.0,
+1.5
+]
+},
+"tolerance": 1e-05
+},
+"counts": {
+"by": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 1,
+"beyond 10x": 0,
+"differs": 2,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 2
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"label": "estimated"
+},
+"ids": [
+"a",
+"b",
+"d"
+]
+},
+{
+"compose": {
+"added": [],
+"cannot_add": {
+"x:a": [],
+"x:b": []
+},
+"fixes": [
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 1,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 1,
+"beyond 10x": 0,
+"differs": 2,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 2
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "a",
+"label": "Fix a",
+"requires": []
+},
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "c",
+"label": "Fix c",
+"requires": []
+},
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "d",
+"label": "Fix d",
+"requires": []
+}
+],
+"item_noise": {
+"x:a": {
+"0": null,
+"1": null,
+"2": null
+},
+"x:b": {
+"3": null
+}
+},
+"label": "exact",
+"noise": {
+"x:a": {
+"builds": 3,
+"known": 0,
+"value": null
+},
+"x:b": {
+"builds": 2,
+"known": 0,
+"value": null
+}
+},
+"pair_terms": {
+"measured": 0,
+"no_size": 0,
+"pairs": 0,
+"value": 0.0
+},
+"pairs": [],
+"results": {
+"x:a": [
+3.3,
+1.2,
+2.2,
+0.0
+],
+"x:b": [
+7.0,
+3.0,
+5.0,
+1.5
+]
+},
+"tolerance": 1e-05
+},
+"counts": {
+"by": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 2,
+"up, factor 1.1-1.25": 1,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 0,
+"beyond 10x": 0,
+"differs": 3,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 3
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"label": "exact"
+},
+"ids": [
+"a",
+"c",
+"d"
+]
+},
+{
+"compose": {
+"added": [],
+"cannot_add": {
+"x:a": [],
+"x:b": []
+},
+"fixes": [
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "b",
+"label": "Fix b",
+"requires": []
+},
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "c",
+"label": "Fix c",
+"requires": []
+},
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "d",
+"label": "Fix d",
+"requires": []
+}
+],
+"item_noise": {
+"x:a": {
+"0": null,
+"1": null
+},
+"x:b": {
+"3": null
+}
+},
+"label": "exact",
+"noise": {
+"x:a": {
+"builds": 3,
+"known": 0,
+"value": null
+},
+"x:b": {
+"builds": 2,
+"known": 0,
+"value": null
+}
+},
+"pair_terms": {
+"measured": 0,
+"no_size": 0,
+"pairs": 0,
+"value": 0.0
+},
+"pairs": [],
+"results": {
+"x:a": [
+3.3,
+1.3,
+2.0,
+0.0
+],
+"x:b": [
+7.0,
+3.0,
+5.0,
+1.5
+]
+},
+"tolerance": 1e-05
+},
+"counts": {
+"by": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 1,
+"beyond 10x": 0,
+"differs": 2,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 2
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"label": "exact"
+},
+"ids": [
+"b",
+"c",
+"d"
+]
+},
+{
+"compose": {
+"added": [],
+"cannot_add": {
+"x:a": [],
+"x:b": []
+},
+"fixes": [
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 1,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 1,
+"beyond 10x": 0,
+"differs": 2,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 2
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "a",
+"label": "Fix a",
+"requires": []
+},
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "b",
+"label": "Fix b",
+"requires": []
+},
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "c",
+"label": "Fix c",
+"requires": []
+},
+{
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"id": "d",
+"label": "Fix d",
+"requires": []
+}
+],
+"item_noise": {
+"x:a": {
+"0": null,
+"1": null,
+"2": null
+},
+"x:b": {
+"3": null
+}
+},
+"label": "estimated",
+"noise": {
+"x:a": {
+"builds": 4,
+"known": 0,
+"value": null
+},
+"x:b": {
+"builds": 2,
+"known": 0,
+"value": null
+}
+},
+"pair_terms": {
+"measured": 1,
+"no_size": 0,
+"pairs": 1,
+"value": 0.1
+},
+"pairs": [
+{
+"fixes": [
+"a",
+"b"
+],
+"kind": "technosphere",
+"largest": 0.1,
+"reach": null
+}
+],
+"results": {
+"x:a": [
+3.3,
+1.5,
+2.2,
+0.0
+],
+"x:b": [
+7.0,
+3.0,
+5.0,
+1.5
+]
+},
+"tolerance": 1e-05
+},
+"counts": {
+"by": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 2,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 0,
+"beyond 10x": 0,
+"differs": 3,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 3
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"label": "estimated"
+},
+"ids": [
+"a",
+"b",
+"c",
+"d"
+]
+}
+]
 }
 ],
 "pages": {
@@ -45851,6 +51259,1016 @@ null,
 "floors_from": "s0"
 },
 "title": "A fix within its noise"
+},
+"matrix": {
+"classes": [
+"dd==",
+"====",
+"====",
+"00=="
+],
+"format": "sentier-diagnostics-matrix/1",
+"items": [
+[
+"p3",
+"p3",
+null,
+null,
+"kg"
+],
+[
+"p1",
+"p1",
+null,
+null,
+"kg"
+],
+[
+"p2",
+"p2",
+null,
+null,
+"kg"
+],
+[
+"p4",
+"p4",
+null,
+null,
+"kg"
+]
+],
+"of": {
+"indicators": [
+"x:a",
+"x:b"
+],
+"states": [
+"s0",
+"s1"
+],
+"steps": [
+"one"
+],
+"title": "Two states"
+},
+"values": [
+[
+4.0,
+3.0,
+7.0,
+"="
+],
+[
+1.0,
+"=",
+3.0,
+"="
+],
+[
+2.0,
+"=",
+5.0,
+"="
+],
+[
+0.0,
+"=",
+1.0,
+"="
+]
+],
+"verdicts": null
+}
+},
+"a pair inside a build": {
+"data": {
+"about": null,
+"attribution": {
+"x:a": {
+"dominant": {
+"one": 1
+},
+"not_attributable": 0,
+"spread": 0,
+"unexplained_moved": 0
+},
+"x:b": {
+"dominant": {
+"one": 0
+},
+"not_attributable": 0,
+"spread": 0,
+"unexplained_moved": 0
+}
+},
+"audience": "local",
+"counts": {
+"steps": {
+"one": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 1,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 1,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+}
+},
+"total": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 1,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 1,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+}
+},
+"explanations": [],
+"format": "sentier-diagnostics/1",
+"indicators": [
+{
+"id": "x:a",
+"name": "Indicator A",
+"short": "A",
+"unit": "kg CO2 eq"
+},
+{
+"id": "x:b",
+"name": "Indicator B",
+"short": "B",
+"unit": "m3"
+}
+],
+"item": {
+"many": "items",
+"one": "item"
+},
+"items": [
+{
+"bands": {
+"x:a": [
+"down, factor 1.25-2",
+"down, factor 1.25-2"
+],
+"x:b": [
+null,
+null
+]
+},
+"breakdowns": null,
+"classes": {
+"x:a": [
+"differs",
+"differs"
+],
+"x:b": [
+"agrees",
+"agrees"
+]
+},
+"directions": {
+"x:a": [
+"down",
+"down"
+],
+"x:b": [
+null,
+null
+]
+},
+"group": null,
+"id": "p3",
+"name": "p3",
+"place": null,
+"unit": "kg",
+"values": {
+"x:a": [
+4.0,
+3.0
+],
+"x:b": [
+7.0,
+7.0
+]
+},
+"verdicts": null
+}
+],
+"items_count": {
+"all": 4,
+"listed": 1,
+"not_listed": 0,
+"qualifying": 1
+},
+"made_by": "sentier-diagnostics 0.1.0",
+"matrix": {
+"file": "matrix.json",
+"items": 4
+},
+"notes": [],
+"rule": {
+"beyond": 10.0,
+"floor_factor": 0.01,
+"floors": [
+{
+"basis": "declared",
+"indicator": "x:a",
+"n": 0,
+"unit": "kg",
+"value": 0.01
+},
+{
+"basis": "declared",
+"indicator": "x:b",
+"n": 0,
+"unit": "kg",
+"value": 0.01
+}
+],
+"floors_from": "s0",
+"total_noise": {},
+"total_tolerance": 1e-05
+},
+"states": [
+{
+"about": null,
+"id": "s0",
+"identity": {},
+"join": null,
+"kind": "published",
+"label": "Before"
+},
+{
+"about": null,
+"id": "s1",
+"identity": {},
+"join": null,
+"kind": "build",
+"label": "After",
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+}
+}
+],
+"steps": [
+{
+"about": null,
+"claim": null,
+"explained": true,
+"from": "s0",
+"id": "one",
+"kind": "fix",
+"label": "One step",
+"link": null,
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"to": "s1",
+"tolerance": {
+"basis": "default",
+"note": "one order of magnitude above the solver noise of two builds",
+"value": 1e-05
+}
+}
+],
+"tier": "items",
+"title": "Two states"
+},
+"fixes": {
+"about": null,
+"base": {
+"x:a": [
+3.0,
+1.0,
+2.0,
+0.0
+],
+"x:b": [
+7.0,
+3.0,
+5.0,
+1.0
+]
+},
+"built": [
+{
+"fixes": [
+"a",
+"b"
+],
+"id": "ab",
+"label": "A and B",
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"results": {
+"x:a": [
+[
+1,
+1.5
+],
+[
+2,
+2.2
+]
+],
+"x:b": []
+},
+"state": null
+}
+],
+"fixes": [
+{
+"about": null,
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 1,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 1,
+"beyond 10x": 0,
+"differs": 2,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 2
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"effect": {
+"x:a": [
+[
+1,
+1.2
+],
+[
+2,
+2.2
+]
+],
+"x:b": []
+},
+"explained": true,
+"id": "a",
+"kind": "amount",
+"label": "Fix a",
+"link": null,
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"requires": [],
+"tolerance": {
+"basis": "default",
+"note": "one order of magnitude above the solver noise of two builds",
+"value": 1e-05
+}
+},
+{
+"about": null,
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"effect": {
+"x:a": [
+[
+1,
+1.3
+]
+],
+"x:b": []
+},
+"explained": true,
+"id": "b",
+"kind": "amount",
+"label": "Fix b",
+"link": null,
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"requires": [],
+"tolerance": {
+"basis": "default",
+"note": "one order of magnitude above the solver noise of two builds",
+"value": 1e-05
+}
+},
+{
+"about": null,
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"effect": {
+"x:a": [
+[
+0,
+3.3
+]
+],
+"x:b": []
+},
+"explained": true,
+"id": "c",
+"kind": "amount",
+"label": "Fix c",
+"link": null,
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"requires": [],
+"tolerance": {
+"basis": "default",
+"note": "one order of magnitude above the solver noise of two builds",
+"value": 1e-05
+}
+},
+{
+"about": null,
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"effect": {
+"x:a": [],
+"x:b": [
+[
+3,
+1.5
+]
+]
+},
+"explained": true,
+"id": "d",
+"kind": "amount",
+"label": "Fix d",
+"link": null,
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"requires": [],
+"tolerance": {
+"basis": "default",
+"note": "one order of magnitude above the solver noise of two builds",
+"value": 1e-05
+}
+}
+],
+"format": "sentier-diagnostics-fixes/1",
+"indicators": [
+{
+"id": "x:a",
+"name": "Indicator A",
+"short": "A",
+"unit": "kg CO2 eq"
+},
+{
+"id": "x:b",
+"name": "Indicator B",
+"short": "B",
+"unit": "m3"
+}
+],
+"interactions": {
+"by": {
+"kind": "code",
+"model": null,
+"name": "pair check",
+"run_by": null
+},
+"checked": true,
+"method": "Compared what each fix changes in the model.",
+"pairs": [
+{
+"fixes": [
+"a",
+"b"
+],
+"kind": "technosphere",
+"largest": 0.1,
+"reach": null
+}
+]
+},
+"item": {
+"many": "items",
+"one": "item"
+},
+"items": [
+[
+"p3",
+"p3",
+null,
+null,
+"kg"
+],
+[
+"p1",
+"p1",
+null,
+null,
+"kg"
+],
+[
+"p2",
+"p2",
+null,
+null,
+"kg"
+],
+[
+"p4",
+"p4",
+null,
+null,
+"kg"
+]
+],
+"made_by": "sentier-diagnostics 0.1.0",
+"notes": [],
+"of": {
+"base": "s1",
+"base_noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"file": "diagnostics.json",
+"title": "Two states"
+},
+"rule": {
+"beyond": 10.0,
+"floor_factor": 0.01,
+"floors": [
+{
+"basis": "declared",
+"indicator": "x:a",
+"n": 0,
+"unit": "kg",
+"value": 0.01
+},
+{
+"basis": "declared",
+"indicator": "x:b",
+"n": 0,
+"unit": "kg",
+"value": 0.01
+}
+],
+"floors_from": "s0"
+},
+"title": "A pair inside a build"
 },
 "matrix": {
 "classes": [

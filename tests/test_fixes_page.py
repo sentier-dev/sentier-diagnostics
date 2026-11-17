@@ -136,6 +136,23 @@ def within_noise():
     return f, data, full
 
 
+def a_pair_inside_a_build():
+    """A listed pair inside a built set, and fixes outside it (the marks of 16.8). a and b, a
+    pair, move p1 in A to 1.2 and 1.3, and a alone moves p2; the file holds their build. c moves
+    p3 in A, d moves p4 in B; neither is in a pair, so the set of c and d is exact. In the set of
+    all four, p1 stands on the build of a and b, which holds the pair; p2 on a's build, which
+    holds one fix of it; p3 and p4 on builds that hold neither; every other value on the base."""
+    data, full = chain_and_matrix()
+    f = fixes.build(
+        "A pair inside a build", data=data, full=full, base="s1",
+        fixes=[fixes.fix(x, f"Fix {x}", kind="amount") for x in ("a", "b", "c", "d")],
+        results={"a": {A: {"p1": 1.2, "p2": 2.2}}, "b": {A: {"p1": 1.3}}, "c": {A: {"p3": 3.3}}, "d": {B: {"p4": 1.5}}},
+        interactions=checked_pairs(pair("a", "b", largest=0.1)),
+        built=[fixes.built_set("ab", "A and B", ["a", "b"], {A: {"p1": 1.5, "p2": 2.2}})],
+    )  # fmt: skip
+    return f, data, full
+
+
 def files() -> dict[str, dict]:
     """The made-up files, each checked clean."""
     pair_and_built = made(noise_a=measured(1e-3), noise_b=measured(2e-3), release=True,
@@ -153,6 +170,7 @@ def files() -> dict[str, dict]:
         "sized pairs": sized_pairs()[0],
         "from the published results": from_published()[0],
         "a fix within its noise": within_noise()[0],
+        "a pair inside a build": a_pair_inside_a_build()[0],
     }
     for name, f in found.items():
         problems = fixes.errors(f)
@@ -166,7 +184,8 @@ def pages() -> dict[str, dict]:
     matrix and a file of fixes of it. Fixes that need others; two fixes at one item whose
     interactions were not checked and whose set was not built, so that their sum is estimated;
     a built set that is a state of the chain; and the files above that a page draws
-    differently: no sum, covers in order, sized pairs, a published base, a fix within its noise."""
+    differently: no sum, covers in order, sized pairs, a published base, a fix within its noise,
+    a pair inside a build."""
     found = {
         "fixes that need others": with_requires(),
         "an estimated sum": made(interactions="unchecked", built=False),
@@ -176,6 +195,7 @@ def pages() -> dict[str, dict]:
         "sized pairs": sized_pairs(),
         "from the published results": from_published(),
         "a fix within its noise": within_noise(),
+        "a pair inside a build": a_pair_inside_a_build(),
     }
     return {name: {"data": data, "matrix": full, "fixes": f} for name, (f, data, full) in found.items()}
 

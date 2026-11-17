@@ -919,6 +919,25 @@
     if (fixColumn(m, names) !== null) return BUILT;
     return m.f.interactions.checked && !heldPairs(m.f, names).length ? EXACT : ESTIMATED;
   }
+  // What a value of a set stands on that may lie off the build of the whole set, which the page
+  // marks ≈ (16.8): '' where it may not, else 'sum', 'build' or 'base'. Only an estimated set
+  // marks any: there every sum is marked, and a value taken from one build S (a fix with what
+  // it requires, a built set inside the set, or the base, where no fix changes the item) unless
+  // every listed pair the set holds lies wholly inside S, or, where interactions were not
+  // checked, unless S is the whole set. Two fixes outside S may still move it together: a factor
+  // fix on a flow whose factor was 0 and a fix that adds that flow move nothing alone. Pairs are
+  // listed per file, not per item, so this marks some values a pair never meets; the file
+  // cannot say which.
+  function fixEstimates(f, names, label) {
+    var held = heldPairs(f, names), checked = f.interactions.checked;
+    return function (stands) {
+      if (label !== ESTIMATED) return '';
+      if (stands && stands[0] === 'sum') return 'sum';
+      var inside = stands ? stands[1] : [];
+      var off = checked ? !held.every(function (p) { return holdsAll(inside, p.fixes); }) : inside.length < names.length;
+      return off ? (inside.length ? 'build' : 'base') : '';
+    };
+  }
   function pairTerms(f, names) {
     var held = heldPairs(f, names);
     var said = held.map(function (p) { return p.largest; }).filter(function (x) { return x !== null; });
@@ -1401,6 +1420,12 @@
         (c.not_listed ? '; ' + groupThousands(c.not_listed) + ' more worth a look are not in it' : '');
     }
 
+    // why a value of an estimated set is marked ≈ (fixEstimates)
+    var EST_SAID = {
+      sum: 'estimated: the sum of the fixes\' effects, not a build',
+      build: 'estimated: the result of a build of only some of these fixes, which the others may move by interacting with them',
+      base: 'estimated: no fix of the set changes it on its own, and two of them may change it together'
+    };
     function valueCell(row, indicator, k, ratio) {
       var pair = pairOf(row, indicator, k);
       var cls = clsAt(row, indicator, k);
@@ -1414,8 +1439,9 @@
       if (cls === NO_SUM) {
         td.className += ' sd-nosum';
       } else if (isSet(k) && row.together.est && row.together.est[indicator]) {
-        td.appendChild(el('span', { cls: 'mark sd-est', text: '≈', title: 'estimated: the sum of the fixes\' effects, not a build' }));
-        td.setAttribute('title', 'Estimated: the sum of the fixes\' effects, not a build. ' + title);
+        var est = EST_SAID[row.together.est[indicator]];
+        td.appendChild(el('span', { cls: 'mark sd-est', text: '≈', title: est }));
+        td.setAttribute('title', capital(est) + '. ' + title);
       }
       return td;
     }
@@ -1621,7 +1647,7 @@
     var LABEL_SAID = {
       built: 'built: these results were built with exactly these fixes, not added up',
       exact: 'exact: the sum of each fix\'s effect, measured on its own; the interactions were checked and no two of these fixes are a pair',
-      estimated: 'estimated: the sum of each fix\'s effect, which may lie off the build of these fixes; every summed value is marked ≈'
+      estimated: 'estimated: the sum of each fix\'s effect, which may lie off the build of these fixes; every value that may is marked ≈'
     };
     function labelBadge(label) { return el('span', { cls: 'badge sd-fixlabel sd-fixlabel-' + label, text: label, title: LABEL_SAID[label] }); }
     function estimated() { return fixesOn() && C && C.label === ESTIMATED && view.fixSet.length > 0; }
@@ -1660,7 +1686,7 @@
       } catch (error) {
         return 'This page could not compose ' + fixLabels(names) + ' (' + String(error && error.message || error).slice(0, 200) + '). Run sentier-diagnostics check on the file of fixes.';
       }
-      var m = modelOf(FX), ids = indicatorIds();
+      var m = modelOf(FX), ids = indicatorIds(), estOf = fixEstimates(FX, names, names.length ? got.label : BUILT);
       var cannot = {};
       ids.forEach(function (ind) { cannot[ind] = {}; got.cannot_add[ind].forEach(function (k) { cannot[ind][k] = 1; }); });
       FXROWS.forEach(function (row) {
@@ -1673,7 +1699,7 @@
           else if (stands) res = judge(before, after, m.floor[ind][k], got.tolerance, own(got.item_noise[ind], k) ? got.item_noise[ind][k] : null);
           else res = [classify(before, before, m.floor[ind][k], 0, null), null, null];
           t.pair[ind] = [before, after]; t.cls[ind] = res[0]; t.dir[ind] = res[1]; t.band[ind] = res[2];
-          t.est[ind] = !!(stands && stands[0] === 'sum' && got.label === ESTIMATED);
+          t.est[ind] = estOf(stands);
         });
         row.together = t;
       });
@@ -1837,13 +1863,13 @@
       } else if (C.label === EXACT) {
         label.push(' The sum of each fix\'s effect, measured on its own. The interactions were checked (' + FX.interactions.method + ') and no two of these fixes are a pair.');
       } else if (!FX.interactions.checked) {
-        label.push(' The sum of each fix\'s effect. Whether fixes interact was not checked, so a set that was not built is an estimate; every summed value is marked ≈.');
+        label.push(' The sum of each fix\'s effect. Whether fixes interact was not checked, so a set that was not built is an estimate, and every value it has is marked ≈.');
       } else {
         var terms = C.fixes.pair_terms;
         label.push(' The sum of each fix\'s effect, and ' + (C.fixes.pairs.length === 1 ? 'two of these fixes can interact: ' : C.fixes.pairs.length + ' pairs of these fixes can interact: ') +
           C.fixes.pairs.map(function (p) { return fixLabels(p.fixes) + ' (' + p.kind + (p.largest === null ? '' : p.largest === NO_SIZE ? ', no size' : ', up to ' + formatNumber(p.largest * 100) + ' %') + ')'; }).join('; ') + '. ' +
           (terms.value !== null ? 'Pair terms up to ' + formatNumber(terms.value * 100) + ' %. ' : 'Pair terms not known: ' + terms.measured + ' of ' + terms.pairs + ' measured' + (terms.no_size ? ', ' + terms.no_size + ' with no size' : '') + '. ') +
-          'Every summed value is marked ≈.');
+          'A value is marked ≈ wherever a pair may move it: every sum, and every value taken from the base or from a build that does not hold both fixes of each pair.');
       }
       node.appendChild(el('p', { cls: 'sd-claim' }, label));
       if (C.fixes.added.length) node.appendChild(el('p', { cls: 'sd-quiet', text: 'Chosen because a ticked fix requires them: ' + fixLabels(C.fixes.added) + '.' }));
@@ -1877,7 +1903,7 @@
       body.appendChild(el('p', { cls: 'sd-quiet', text: fixSetWords() + (names.length ? ' (' + C.label + ')' : '') + ', against ' + b.label + '.' }));
       var changedIn = D.indicators.filter(function (ind) { return got.stands[ind.id].has(k); });
       if (!changedIn.length) {
-        body.appendChild(el('p', { text: names.length ? 'No fix of this set changes this ' + D.item.one + ': each result is the base\'s.' : 'No fix is ticked.' }));
+        body.appendChild(el('p', { text: names.length ? 'No fix of this set changes this ' + D.item.one + ' on its own: each result is the base\'s.' + baseEstimated(row) : 'No fix is ticked.' }));
         return;
       }
       changedIn.sort(function (a, c) {
@@ -1919,7 +1945,7 @@
           ]));
         }
         tb.appendChild(el('tr', { cls: 'sd-in-run' }, [
-          el('th', { scope: 'row' }, ['This set', el('div', { cls: 'sd-quiet', text: stands[0] === 'sum' ? (C.label === ESTIMATED ? 'the sum, estimated' : 'the sum') : mine.length > 1 ? 'the build of ' + fixLabels(stands[1]) : 'that build' })]),
+          el('th', { scope: 'row' }, ['This set', el('div', { cls: 'sd-quiet', text: (stands[0] === 'sum' ? 'the sum' : mine.length > 1 ? 'the build of ' + fixLabels(stands[1]) : 'that build') + (row.together.est[ind.id] ? ', estimated' : '') })]),
           el('td', { cls: 'num', text: formatNumber(base), title: 'the base: ' + String(base) }),
           el('td', { cls: 'num', text: formatNumber(result), title: String(result) }),
           valueCell(row, ind.id, SET, false),
@@ -1930,7 +1956,14 @@
         body.appendChild(el('div', { cls: 'sd-wrap' }, [table]));
       });
       var still = D.indicators.length - changedIn.length;
-      if (still) body.appendChild(el('p', { cls: 'sd-quiet', text: 'In the other ' + still + ' ' + indWord(still !== 1) + ' no fix of this set changes it.' }));
+      if (still) body.appendChild(el('p', { cls: 'sd-quiet', text: 'In the other ' + still + ' ' + indWord(still !== 1) + ' no fix of this set changes it on its own.' + baseEstimated(row) }));
+    }
+    // where no fix of an estimated set changes an item on its own, why its base result is marked
+    function baseEstimated(row) {
+      var marked = indicatorIds().some(function (ind) { return row.together.est[ind] === 'base'; });
+      if (!marked) return '';
+      return FX.interactions.checked ? ' Two fixes of a listed pair the set holds may change it together, so it is marked ≈.'
+        : ' Whether these fixes interact was not checked, so it is marked ≈.';
     }
 
     // the file of fixes: handed over with the page, or the file the root names beside it
@@ -2004,12 +2037,15 @@
         return;
       }
       if (!/^https?:$/.test(win.location.protocol)) { refuseFixes(name + ' is read over http only; `sentier-diagnostics page --fixes` writes it beside the page as a script'); return; }
+      // held to its size in bytes, as `check` holds the file: a text's length counts UTF-16
+      // units, which a file written beyond ASCII outgrows
       win.fetch(base + name).then(function (r) {
         if (!r.ok) throw new Error(name + ' could not be read (' + r.status + ')');
-        return r.text();
-      }).then(function (text) {
-        if (text.length > FIXES_MAX_BYTES) throw new Error(name + ' is larger than ' + groupThousands(FIXES_MAX_BYTES) + ' bytes');
-        var fx;
+        return r.arrayBuffer();
+      }).then(function (bytes) {
+        if (bytes.byteLength > FIXES_MAX_BYTES) throw new Error(name + ' is larger than ' + groupThousands(FIXES_MAX_BYTES) + ' bytes');
+        var text, fx;
+        try { text = new win.TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch (error) { throw new Error(name + ' is not UTF-8 text'); }
         try { fx = JSON.parse(text); } catch (error) { throw new Error(name + ' is not JSON'); }
         takeFixes(fx);
       }).catch(function (error) { refuseFixes(error.message || (name + ' could not be read')); });

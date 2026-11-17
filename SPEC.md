@@ -1113,7 +1113,7 @@ Each set carries one of three labels, and the page shows it wherever the set is 
 |---|---|---|
 | built | the set is one fix with what it requires, or one of `built` | the built results |
 | exact | `interactions.checked` is true, and no two of its fixes are a listed pair | the sum, as a result |
-| estimated | otherwise | the sum, marked on every cell, in the line above the matrix and in every count ("estimated: 153 would differ"), with the listed pairs it holds, their kinds, and their pair terms where measured ("pair terms up to 0.003 %") |
+| estimated | otherwise | the sum, marked "≈" on every value that may lie off the set's build (16.8), in the line above the matrix and in every count ("estimated: 153 would differ"), with the listed pairs it holds, their kinds, and their pair terms where measured ("pair terms up to 0.003 %") |
 
 An estimated set is never drawn as a built one: the mark is on the cell, not only in a
 heading a reader may have scrolled past. Its **pair terms** are the sum of the measured
@@ -1241,8 +1241,16 @@ construction; the check of independence above is the one that can fail it.
 - In the drawer, an item's difference in a set splits into its fixes' effects, exactly
   where the set is exact, each fix's against what it was measured with. For a built set
   holding a listed pair, the rest is shown as the interaction, never spread over the fixes.
-- An estimated set says so wherever its numbers are: "≈" on every value that is a sum, and
-  "Estimated:" before its counts, the worst values and the distributions. A value no sum
+- An estimated set says so wherever its numbers are: "≈" on every value that may lie off the
+  build of the whole set, and "Estimated:" before its counts, the worst values and the
+  distributions. Those values are every sum, and every value taken from one build S (a fix
+  with what it requires, a built set inside the set, or the base, where no fix changes the
+  item on its own) unless every listed pair the set holds lies wholly inside S; where
+  interactions were not checked, unless S is the whole set, so that every value is marked.
+  Two fixes outside S can still move a value together: a fix of a factor that was 0 and a fix
+  that adds that flow upstream each move nothing alone. Pairs are listed per file, not per
+  item, so the mark falls on some values a pair never meets: the file cannot say which, and a
+  mark too many is the honest error. A built or exact set marks nothing. A value no sum
   can be formed for reads "no sum", never "missing", wherever the page names it: in its
   cell, in the counts of the distributions and the column titles, and in the Class filter,
   where it is a class of its own. `fixes.counts` counts it as missing (after, or on both
