@@ -28120,5 +28120,3190 @@ null,
 }
 ]
 }
+],
+"pages": {
+"a built set that is a state": {
+"data": {
+"about": null,
+"attribution": {
+"x:a": {
+"dominant": {
+"one": 1,
+"two": 1
+},
+"not_attributable": 0,
+"spread": 0,
+"unexplained_moved": 0
+},
+"x:b": {
+"dominant": {
+"one": 0,
+"two": 1
+},
+"not_attributable": 0,
+"spread": 0,
+"unexplained_moved": 0
+}
+},
+"audience": "local",
+"counts": {
+"steps": {
+"one": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 1,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 1,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"two": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 1,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 1,
+"beyond 10x": 0,
+"differs": 2,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": 0,
+"directions": {
+"down": 1,
+"up": 1
+},
+"further": 2,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 1,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": 0,
+"directions": {
+"down": 1,
+"up": 0
+},
+"further": 1,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+}
+},
+"total": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 1,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 1,
+"beyond 10x": 0,
+"differs": 2,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 1,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 1,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 1,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+}
+},
+"explanations": [],
+"format": "sentier-diagnostics/1",
+"indicators": [
+{
+"id": "x:a",
+"name": "Indicator A",
+"short": "A",
+"unit": "kg CO2 eq"
+},
+{
+"id": "x:b",
+"name": "Indicator B",
+"short": "B",
+"unit": "m3"
+}
+],
+"item": {
+"many": "items",
+"one": "item"
+},
+"items": [
+{
+"bands": {
+"x:a": [
+"down, factor 1.25-2",
+"down, factor 1.25-2",
+"down, factor 1.25-2"
+],
+"x:b": [
+null,
+"down, factor 1.1-1.25",
+"down, factor 1.1-1.25"
 ]
+},
+"breakdowns": null,
+"classes": {
+"x:a": [
+"differs",
+"differs",
+"differs"
+],
+"x:b": [
+"agrees",
+"differs",
+"differs"
+]
+},
+"directions": {
+"x:a": [
+"down",
+"down",
+"down"
+],
+"x:b": [
+null,
+"down",
+"down"
+]
+},
+"group": null,
+"id": "p3",
+"name": "p3",
+"place": null,
+"unit": "kg",
+"values": {
+"x:a": [
+4.0,
+3.0,
+2.0
+],
+"x:b": [
+7.0,
+7.0,
+6.0
+]
+},
+"verdicts": null
+},
+{
+"bands": {
+"x:a": [
+null,
+"up, factor 1-1.1",
+"up, factor 1-1.1"
+],
+"x:b": [
+null,
+null,
+null
+]
+},
+"breakdowns": null,
+"classes": {
+"x:a": [
+"agrees",
+"differs",
+"differs"
+],
+"x:b": [
+"agrees",
+"agrees",
+"agrees"
+]
+},
+"directions": {
+"x:a": [
+null,
+"up",
+"up"
+],
+"x:b": [
+null,
+null,
+null
+]
+},
+"group": null,
+"id": "p1",
+"name": "p1",
+"place": null,
+"unit": "kg",
+"values": {
+"x:a": [
+1.0,
+1.0,
+1.0013
+],
+"x:b": [
+3.0,
+3.0,
+3.0
+]
+},
+"verdicts": null
+}
+],
+"items_count": {
+"all": 4,
+"listed": 2,
+"not_listed": 0,
+"qualifying": 2
+},
+"made_by": "sentier-diagnostics 0.1.0",
+"matrix": {
+"file": "matrix.json",
+"items": 4
+},
+"notes": [],
+"rule": {
+"beyond": 10.0,
+"floor_factor": 0.01,
+"floors": [
+{
+"basis": "declared",
+"indicator": "x:a",
+"n": 0,
+"unit": "kg",
+"value": 0.01
+},
+{
+"basis": "declared",
+"indicator": "x:b",
+"n": 0,
+"unit": "kg",
+"value": 0.01
+}
+],
+"floors_from": "s0",
+"total_noise": {},
+"total_tolerance": 1e-05
+},
+"states": [
+{
+"about": null,
+"id": "s0",
+"identity": {},
+"join": null,
+"kind": "published",
+"label": "Before"
+},
+{
+"about": null,
+"id": "s1",
+"identity": {},
+"join": null,
+"kind": "build",
+"label": "After",
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+}
+},
+{
+"about": null,
+"id": "s2",
+"identity": {},
+"join": null,
+"kind": "build",
+"label": "Release",
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+}
+}
+],
+"steps": [
+{
+"about": null,
+"claim": null,
+"explained": true,
+"from": "s0",
+"id": "one",
+"kind": "fix",
+"label": "One step",
+"link": null,
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"to": "s1",
+"tolerance": {
+"basis": "default",
+"note": "one order of magnitude above the solver noise of two builds",
+"value": 1e-05
+}
+},
+{
+"about": null,
+"claim": null,
+"explained": true,
+"from": "s1",
+"id": "two",
+"kind": "fix",
+"label": "Every fix",
+"link": null,
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"to": "s2",
+"tolerance": {
+"basis": "default",
+"note": "one order of magnitude above the solver noise of two builds",
+"value": 1e-05
+}
+}
+],
+"tier": "items",
+"title": "Two states"
+},
+"fixes": {
+"about": null,
+"base": {
+"x:a": [
+3.0,
+1.0,
+2.0,
+0.0
+],
+"x:b": [
+7.0,
+3.0,
+5.0,
+1.0
+]
+},
+"built": [
+{
+"fixes": [
+"a",
+"b"
+],
+"id": "ab",
+"label": "A and B",
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"results": {
+"x:a": [
+[
+1,
+1.0013
+]
+],
+"x:b": []
+},
+"state": null
+},
+{
+"fixes": [
+"a",
+"b",
+"c"
+],
+"id": "all",
+"label": "Every fix",
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"results": {
+"x:a": [
+[
+0,
+2.0
+],
+[
+1,
+1.0013
+]
+],
+"x:b": [
+[
+0,
+6.0
+]
+]
+},
+"state": "s2"
+}
+],
+"fixes": [
+{
+"about": null,
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"effect": {
+"x:a": [
+[
+1,
+1.0006
+]
+],
+"x:b": []
+},
+"explained": true,
+"id": "a",
+"kind": "mapping",
+"label": "Fix A",
+"link": null,
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"requires": [],
+"tolerance": {
+"basis": "declared",
+"note": null,
+"value": 0.001
+}
+},
+{
+"about": null,
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"effect": {
+"x:a": [
+[
+1,
+1.0007
+]
+],
+"x:b": []
+},
+"explained": true,
+"id": "b",
+"kind": "mapping",
+"label": "Fix B",
+"link": null,
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"requires": [],
+"tolerance": {
+"basis": "declared",
+"note": null,
+"value": 0.001
+}
+},
+{
+"about": null,
+"claim": {
+"by": {
+"kind": "person",
+"model": null,
+"name": "A. Author",
+"run_by": null
+},
+"reach": 1,
+"scope": [
+{
+"direction": "down",
+"expect": "must",
+"indicators": [
+"x:a"
+],
+"items": [
+"p3"
+],
+"largest": 0.5
+}
+],
+"text": "p3 goes down."
+},
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 1,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 1,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": {
+"as claimed": 1,
+"claimed, not moved": 0,
+"not claimed": 0,
+"not judged": 1,
+"off claim": 0,
+"unchanged": 2,
+"within noise": 0
+}
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 1,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 1,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": {
+"as claimed": 0,
+"claimed, not moved": 0,
+"not claimed": 1,
+"not judged": 0,
+"off claim": 0,
+"unchanged": 3,
+"within noise": 0
+}
+}
+},
+"effect": {
+"x:a": [
+[
+0,
+2.0
+]
+],
+"x:b": [
+[
+0,
+6.0
+]
+]
+},
+"explained": true,
+"id": "c",
+"kind": "amount",
+"label": "Fix C",
+"link": null,
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"requires": [],
+"tolerance": {
+"basis": "default",
+"note": "one order of magnitude above the solver noise of two builds",
+"value": 1e-05
+}
+}
+],
+"format": "sentier-diagnostics-fixes/1",
+"indicators": [
+{
+"id": "x:a",
+"name": "Indicator A",
+"short": "A",
+"unit": "kg CO2 eq"
+},
+{
+"id": "x:b",
+"name": "Indicator B",
+"short": "B",
+"unit": "m3"
+}
+],
+"interactions": {
+"by": {
+"kind": "code",
+"model": null,
+"name": "pair check",
+"run_by": null
+},
+"checked": true,
+"method": "Compared what each fix changes in the model.",
+"pairs": [
+{
+"fixes": [
+"b",
+"c"
+],
+"kind": "technosphere",
+"largest": null,
+"reach": null
+}
+]
+},
+"item": {
+"many": "items",
+"one": "item"
+},
+"items": [
+[
+"p3",
+"p3",
+null,
+null,
+"kg"
+],
+[
+"p1",
+"p1",
+null,
+null,
+"kg"
+],
+[
+"p2",
+"p2",
+null,
+null,
+"kg"
+],
+[
+"p4",
+"p4",
+null,
+null,
+"kg"
+]
+],
+"made_by": "sentier-diagnostics 0.1.0",
+"notes": [],
+"of": {
+"base": "s1",
+"base_noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"file": "diagnostics.json",
+"title": "Two states"
+},
+"rule": {
+"beyond": 10.0,
+"floor_factor": 0.01,
+"floors": [
+{
+"basis": "declared",
+"indicator": "x:a",
+"n": 0,
+"unit": "kg",
+"value": 0.01
+},
+{
+"basis": "declared",
+"indicator": "x:b",
+"n": 0,
+"unit": "kg",
+"value": 0.01
+}
+],
+"floors_from": "s0"
+},
+"title": "Fixes of two states"
+},
+"matrix": {
+"classes": [
+"ddd=dd",
+"=DD===",
+"======",
+"000==="
+],
+"format": "sentier-diagnostics-matrix/1",
+"items": [
+[
+"p3",
+"p3",
+null,
+null,
+"kg"
+],
+[
+"p1",
+"p1",
+null,
+null,
+"kg"
+],
+[
+"p2",
+"p2",
+null,
+null,
+"kg"
+],
+[
+"p4",
+"p4",
+null,
+null,
+"kg"
+]
+],
+"of": {
+"indicators": [
+"x:a",
+"x:b"
+],
+"states": [
+"s0",
+"s1",
+"s2"
+],
+"steps": [
+"one",
+"two"
+],
+"title": "Two states"
+},
+"values": [
+[
+4.0,
+3.0,
+2.0,
+7.0,
+"=",
+6.0
+],
+[
+1.0,
+"=",
+1.0013,
+3.0,
+"=",
+"="
+],
+[
+2.0,
+"=",
+"=",
+5.0,
+"=",
+"="
+],
+[
+0.0,
+"=",
+"=",
+1.0,
+"=",
+"="
+]
+],
+"verdicts": null
+}
+},
+"an estimated sum": {
+"data": {
+"about": null,
+"attribution": {
+"x:a": {
+"dominant": {
+"one": 1
+},
+"not_attributable": 0,
+"spread": 0,
+"unexplained_moved": 0
+},
+"x:b": {
+"dominant": {
+"one": 0
+},
+"not_attributable": 0,
+"spread": 0,
+"unexplained_moved": 0
+}
+},
+"audience": "local",
+"counts": {
+"steps": {
+"one": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 1,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 1,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+}
+},
+"total": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 1,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 1,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+}
+},
+"explanations": [],
+"format": "sentier-diagnostics/1",
+"indicators": [
+{
+"id": "x:a",
+"name": "Indicator A",
+"short": "A",
+"unit": "kg CO2 eq"
+},
+{
+"id": "x:b",
+"name": "Indicator B",
+"short": "B",
+"unit": "m3"
+}
+],
+"item": {
+"many": "items",
+"one": "item"
+},
+"items": [
+{
+"bands": {
+"x:a": [
+"down, factor 1.25-2",
+"down, factor 1.25-2"
+],
+"x:b": [
+null,
+null
+]
+},
+"breakdowns": null,
+"classes": {
+"x:a": [
+"differs",
+"differs"
+],
+"x:b": [
+"agrees",
+"agrees"
+]
+},
+"directions": {
+"x:a": [
+"down",
+"down"
+],
+"x:b": [
+null,
+null
+]
+},
+"group": null,
+"id": "p3",
+"name": "p3",
+"place": null,
+"unit": "kg",
+"values": {
+"x:a": [
+4.0,
+3.0
+],
+"x:b": [
+7.0,
+7.0
+]
+},
+"verdicts": null
+}
+],
+"items_count": {
+"all": 4,
+"listed": 1,
+"not_listed": 0,
+"qualifying": 1
+},
+"made_by": "sentier-diagnostics 0.1.0",
+"matrix": {
+"file": "matrix.json",
+"items": 4
+},
+"notes": [],
+"rule": {
+"beyond": 10.0,
+"floor_factor": 0.01,
+"floors": [
+{
+"basis": "declared",
+"indicator": "x:a",
+"n": 0,
+"unit": "kg",
+"value": 0.01
+},
+{
+"basis": "declared",
+"indicator": "x:b",
+"n": 0,
+"unit": "kg",
+"value": 0.01
+}
+],
+"floors_from": "s0",
+"total_noise": {},
+"total_tolerance": 1e-05
+},
+"states": [
+{
+"about": null,
+"id": "s0",
+"identity": {},
+"join": null,
+"kind": "published",
+"label": "Before"
+},
+{
+"about": null,
+"id": "s1",
+"identity": {},
+"join": null,
+"kind": "build",
+"label": "After",
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+}
+}
+],
+"steps": [
+{
+"about": null,
+"claim": null,
+"explained": true,
+"from": "s0",
+"id": "one",
+"kind": "fix",
+"label": "One step",
+"link": null,
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"to": "s1",
+"tolerance": {
+"basis": "default",
+"note": "one order of magnitude above the solver noise of two builds",
+"value": 1e-05
+}
+}
+],
+"tier": "items",
+"title": "Two states"
+},
+"fixes": {
+"about": null,
+"base": {
+"x:a": [
+3.0,
+1.0,
+2.0,
+0.0
+],
+"x:b": [
+7.0,
+3.0,
+5.0,
+1.0
+]
+},
+"built": [],
+"fixes": [
+{
+"about": null,
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"effect": {
+"x:a": [
+[
+1,
+1.0006
+]
+],
+"x:b": []
+},
+"explained": true,
+"id": "a",
+"kind": "mapping",
+"label": "Fix A",
+"link": null,
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"requires": [],
+"tolerance": {
+"basis": "declared",
+"note": null,
+"value": 0.001
+}
+},
+{
+"about": null,
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"effect": {
+"x:a": [
+[
+1,
+1.0007
+]
+],
+"x:b": []
+},
+"explained": true,
+"id": "b",
+"kind": "mapping",
+"label": "Fix B",
+"link": null,
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"requires": [],
+"tolerance": {
+"basis": "declared",
+"note": null,
+"value": 0.001
+}
+},
+{
+"about": null,
+"claim": {
+"by": {
+"kind": "person",
+"model": null,
+"name": "A. Author",
+"run_by": null
+},
+"reach": 1,
+"scope": [
+{
+"direction": "down",
+"expect": "must",
+"indicators": [
+"x:a"
+],
+"items": [
+"p3"
+],
+"largest": 0.5
+}
+],
+"text": "p3 goes down."
+},
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 1,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 1,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": {
+"as claimed": 1,
+"claimed, not moved": 0,
+"not claimed": 0,
+"not judged": 1,
+"off claim": 0,
+"unchanged": 2,
+"within noise": 0
+}
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 1,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 1,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": {
+"as claimed": 0,
+"claimed, not moved": 0,
+"not claimed": 1,
+"not judged": 0,
+"off claim": 0,
+"unchanged": 3,
+"within noise": 0
+}
+}
+},
+"effect": {
+"x:a": [
+[
+0,
+2.0
+]
+],
+"x:b": [
+[
+0,
+6.0
+]
+]
+},
+"explained": true,
+"id": "c",
+"kind": "amount",
+"label": "Fix C",
+"link": null,
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"requires": [],
+"tolerance": {
+"basis": "default",
+"note": "one order of magnitude above the solver noise of two builds",
+"value": 1e-05
+}
+}
+],
+"format": "sentier-diagnostics-fixes/1",
+"indicators": [
+{
+"id": "x:a",
+"name": "Indicator A",
+"short": "A",
+"unit": "kg CO2 eq"
+},
+{
+"id": "x:b",
+"name": "Indicator B",
+"short": "B",
+"unit": "m3"
+}
+],
+"interactions": {
+"by": null,
+"checked": false,
+"method": null,
+"pairs": []
+},
+"item": {
+"many": "items",
+"one": "item"
+},
+"items": [
+[
+"p3",
+"p3",
+null,
+null,
+"kg"
+],
+[
+"p1",
+"p1",
+null,
+null,
+"kg"
+],
+[
+"p2",
+"p2",
+null,
+null,
+"kg"
+],
+[
+"p4",
+"p4",
+null,
+null,
+"kg"
+]
+],
+"made_by": "sentier-diagnostics 0.1.0",
+"notes": [],
+"of": {
+"base": "s1",
+"base_noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"file": "diagnostics.json",
+"title": "Two states"
+},
+"rule": {
+"beyond": 10.0,
+"floor_factor": 0.01,
+"floors": [
+{
+"basis": "declared",
+"indicator": "x:a",
+"n": 0,
+"unit": "kg",
+"value": 0.01
+},
+{
+"basis": "declared",
+"indicator": "x:b",
+"n": 0,
+"unit": "kg",
+"value": 0.01
+}
+],
+"floors_from": "s0"
+},
+"title": "Fixes of two states"
+},
+"matrix": {
+"classes": [
+"dd==",
+"====",
+"====",
+"00=="
+],
+"format": "sentier-diagnostics-matrix/1",
+"items": [
+[
+"p3",
+"p3",
+null,
+null,
+"kg"
+],
+[
+"p1",
+"p1",
+null,
+null,
+"kg"
+],
+[
+"p2",
+"p2",
+null,
+null,
+"kg"
+],
+[
+"p4",
+"p4",
+null,
+null,
+"kg"
+]
+],
+"of": {
+"indicators": [
+"x:a",
+"x:b"
+],
+"states": [
+"s0",
+"s1"
+],
+"steps": [
+"one"
+],
+"title": "Two states"
+},
+"values": [
+[
+4.0,
+3.0,
+7.0,
+"="
+],
+[
+1.0,
+"=",
+3.0,
+"="
+],
+[
+2.0,
+"=",
+5.0,
+"="
+],
+[
+0.0,
+"=",
+1.0,
+"="
+]
+],
+"verdicts": null
+}
+},
+"fixes that need others": {
+"data": {
+"about": null,
+"attribution": {
+"x:a": {
+"dominant": {
+"one": 1
+},
+"not_attributable": 0,
+"spread": 0,
+"unexplained_moved": 0
+},
+"x:b": {
+"dominant": {
+"one": 0
+},
+"not_attributable": 0,
+"spread": 0,
+"unexplained_moved": 0
+}
+},
+"audience": "local",
+"counts": {
+"steps": {
+"one": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 1,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 1,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+}
+},
+"total": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 1,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 1,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+}
+},
+"explanations": [],
+"format": "sentier-diagnostics/1",
+"indicators": [
+{
+"id": "x:a",
+"name": "Indicator A",
+"short": "A",
+"unit": "kg CO2 eq"
+},
+{
+"id": "x:b",
+"name": "Indicator B",
+"short": "B",
+"unit": "m3"
+}
+],
+"item": {
+"many": "items",
+"one": "item"
+},
+"items": [
+{
+"bands": {
+"x:a": [
+"down, factor 1.25-2",
+"down, factor 1.25-2"
+],
+"x:b": [
+null,
+null
+]
+},
+"breakdowns": null,
+"classes": {
+"x:a": [
+"differs",
+"differs"
+],
+"x:b": [
+"agrees",
+"agrees"
+]
+},
+"directions": {
+"x:a": [
+"down",
+"down"
+],
+"x:b": [
+null,
+null
+]
+},
+"group": null,
+"id": "p3",
+"name": "p3",
+"place": null,
+"unit": "kg",
+"values": {
+"x:a": [
+4.0,
+3.0
+],
+"x:b": [
+7.0,
+7.0
+]
+},
+"verdicts": null
+}
+],
+"items_count": {
+"all": 4,
+"listed": 1,
+"not_listed": 0,
+"qualifying": 1
+},
+"made_by": "sentier-diagnostics 0.1.0",
+"matrix": {
+"file": "matrix.json",
+"items": 4
+},
+"notes": [],
+"rule": {
+"beyond": 10.0,
+"floor_factor": 0.01,
+"floors": [
+{
+"basis": "declared",
+"indicator": "x:a",
+"n": 0,
+"unit": "kg",
+"value": 0.01
+},
+{
+"basis": "declared",
+"indicator": "x:b",
+"n": 0,
+"unit": "kg",
+"value": 0.01
+}
+],
+"floors_from": "s0",
+"total_noise": {},
+"total_tolerance": 1e-05
+},
+"states": [
+{
+"about": null,
+"id": "s0",
+"identity": {},
+"join": null,
+"kind": "published",
+"label": "Before"
+},
+{
+"about": null,
+"id": "s1",
+"identity": {},
+"join": null,
+"kind": "build",
+"label": "After",
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+}
+}
+],
+"steps": [
+{
+"about": null,
+"claim": null,
+"explained": true,
+"from": "s0",
+"id": "one",
+"kind": "fix",
+"label": "One step",
+"link": null,
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"to": "s1",
+"tolerance": {
+"basis": "default",
+"note": "one order of magnitude above the solver noise of two builds",
+"value": 1e-05
+}
+}
+],
+"tier": "items",
+"title": "Two states"
+},
+"fixes": {
+"about": null,
+"base": {
+"x:a": [
+3.0,
+1.0,
+2.0,
+0.0
+],
+"x:b": [
+7.0,
+3.0,
+5.0,
+1.0
+]
+},
+"built": [
+{
+"fixes": [
+"a",
+"b"
+],
+"id": "ab",
+"label": "A and B",
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"results": {
+"x:a": [
+[
+1,
+1.5
+]
+],
+"x:b": [
+[
+2,
+5.5
+]
+]
+},
+"state": null
+}
+],
+"fixes": [
+{
+"about": null,
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 1,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"effect": {
+"x:a": [
+[
+1,
+1.5
+]
+],
+"x:b": []
+},
+"explained": true,
+"id": "a",
+"kind": "mapping",
+"label": "Fix A",
+"link": null,
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"requires": [],
+"tolerance": {
+"basis": "default",
+"note": "one order of magnitude above the solver noise of two builds",
+"value": 1e-05
+}
+},
+{
+"about": null,
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 3,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"effect": {
+"x:a": [],
+"x:b": [
+[
+2,
+5.5
+]
+]
+},
+"explained": true,
+"id": "b",
+"kind": "mapping",
+"label": "Fix B",
+"link": null,
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"requires": [],
+"tolerance": {
+"basis": "default",
+"note": "one order of magnitude above the solver noise of two builds",
+"value": 1e-05
+}
+},
+{
+"about": null,
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 2,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 1,
+"beyond 10x": 0,
+"differs": 2,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 2
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"effect": {
+"x:a": [
+[
+1,
+1.8
+],
+[
+2,
+2.5
+]
+],
+"x:b": []
+},
+"explained": true,
+"id": "d",
+"kind": "amount",
+"label": "Fix D",
+"link": null,
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"requires": [
+"a"
+],
+"tolerance": {
+"basis": "default",
+"note": "one order of magnitude above the solver noise of two builds",
+"value": 1e-05
+}
+},
+{
+"about": null,
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 1,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 2,
+"beyond 10x": 0,
+"differs": 1,
+"missing": 0,
+"near zero": 1,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 1
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"effect": {
+"x:a": [
+[
+0,
+3.3
+]
+],
+"x:b": []
+},
+"explained": true,
+"id": "e",
+"kind": "amount",
+"label": "Fix E",
+"link": null,
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"requires": [
+"d"
+],
+"tolerance": {
+"basis": "default",
+"note": "one order of magnitude above the solver noise of two builds",
+"value": 1e-05
+}
+},
+{
+"about": null,
+"claim": null,
+"counts": {
+"x:a": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 2,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 1,
+"beyond 10x": 0,
+"differs": 2,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 1,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 3
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+},
+"x:b": {
+"bands": {
+"down, factor 1-1.1": 0,
+"down, factor 1.1-1.25": 0,
+"down, factor 1.25-2": 0,
+"down, factor 2-10": 0,
+"down, factor over 10": 0,
+"up, factor 1-1.1": 0,
+"up, factor 1.1-1.25": 0,
+"up, factor 1.25-2": 0,
+"up, factor 2-10": 0,
+"up, factor over 10": 0
+},
+"classes": {
+"agrees": 4,
+"beyond 10x": 0,
+"differs": 0,
+"missing": 0,
+"near zero": 0,
+"sign change": 0,
+"within noise": 0,
+"zero reference": 0,
+"zero result": 0
+},
+"closer": null,
+"directions": {
+"down": 0,
+"up": 0
+},
+"further": null,
+"missing": {
+"after": 0,
+"before": 0,
+"both": 0
+},
+"pairs": 4,
+"verdicts": null
+}
+},
+"effect": {
+"x:a": [
+[
+1,
+1.6
+],
+[
+2,
+2.2
+],
+[
+3,
+0.5
+]
+],
+"x:b": []
+},
+"explained": true,
+"id": "g",
+"kind": "amount",
+"label": "Fix G",
+"link": null,
+"noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"requires": [
+"a",
+"b"
+],
+"tolerance": {
+"basis": "default",
+"note": "one order of magnitude above the solver noise of two builds",
+"value": 1e-05
+}
+}
+],
+"format": "sentier-diagnostics-fixes/1",
+"indicators": [
+{
+"id": "x:a",
+"name": "Indicator A",
+"short": "A",
+"unit": "kg CO2 eq"
+},
+{
+"id": "x:b",
+"name": "Indicator B",
+"short": "B",
+"unit": "m3"
+}
+],
+"interactions": {
+"by": {
+"kind": "code",
+"model": null,
+"name": "pair check",
+"run_by": null
+},
+"checked": true,
+"method": "Compared what each fix changes in the model.",
+"pairs": []
+},
+"item": {
+"many": "items",
+"one": "item"
+},
+"items": [
+[
+"p3",
+"p3",
+null,
+null,
+"kg"
+],
+[
+"p1",
+"p1",
+null,
+null,
+"kg"
+],
+[
+"p2",
+"p2",
+null,
+null,
+"kg"
+],
+[
+"p4",
+"p4",
+null,
+null,
+"kg"
+]
+],
+"made_by": "sentier-diagnostics 0.1.0",
+"notes": [],
+"of": {
+"base": "s1",
+"base_noise": {
+"between": null,
+"by": null,
+"measured": false,
+"note": null
+},
+"file": "diagnostics.json",
+"title": "Two states"
+},
+"rule": {
+"beyond": 10.0,
+"floor_factor": 0.01,
+"floors": [
+{
+"basis": "declared",
+"indicator": "x:a",
+"n": 0,
+"unit": "kg",
+"value": 0.01
+},
+{
+"basis": "declared",
+"indicator": "x:b",
+"n": 0,
+"unit": "kg",
+"value": 0.01
+}
+],
+"floors_from": "s0"
+},
+"title": "Fixes that need others"
+},
+"matrix": {
+"classes": [
+"dd==",
+"====",
+"====",
+"00=="
+],
+"format": "sentier-diagnostics-matrix/1",
+"items": [
+[
+"p3",
+"p3",
+null,
+null,
+"kg"
+],
+[
+"p1",
+"p1",
+null,
+null,
+"kg"
+],
+[
+"p2",
+"p2",
+null,
+null,
+"kg"
+],
+[
+"p4",
+"p4",
+null,
+null,
+"kg"
+]
+],
+"of": {
+"indicators": [
+"x:a",
+"x:b"
+],
+"states": [
+"s0",
+"s1"
+],
+"steps": [
+"one"
+],
+"title": "Two states"
+},
+"values": [
+[
+4.0,
+3.0,
+7.0,
+"="
+],
+[
+1.0,
+"=",
+3.0,
+"="
+],
+[
+2.0,
+"=",
+5.0,
+"="
+],
+[
+0.0,
+"=",
+1.0,
+"="
+]
+],
+"verdicts": null
+}
+}
+}
 }

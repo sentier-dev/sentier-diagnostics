@@ -120,7 +120,9 @@ def body(
     names a file of fixes of this file (`fixes.json`, or a script as `fixes_script` writes
     it), which the page loads after it has drawn.
     """
-    return _body(data, breakdowns=breakdowns, base=base, title=title, matrix=matrix, fixes=fixes, standalone=False)
+    return _body(
+        data, breakdowns=breakdowns, base=base, title=title, matrix=matrix, fixes=fixes, standalone=False
+    )
 
 
 def _body(data, *, breakdowns, base, title, matrix, fixes=None, standalone) -> str:

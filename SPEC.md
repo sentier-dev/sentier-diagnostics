@@ -703,7 +703,9 @@ indicator, among the values that moved and have a ratio; then the items whose mo
 none (from or to zero, a sign change), by their worst value in the order of 10.4; then
 those that did not move. A heading sorts by how far the two lie apart in that indicator,
 the furthest first (the order of 10.4), or by name, and a second click goes back;
-filters by text, group, class and verdict; 300 rows at a time with "show more". The
+filters by text, group, class and verdict, the class filter also offering **every class that
+moved at once** (and saying how many values moved among the items shown, the count beside
+the comparison); 300 rows at a time with "show more". The
 reader's **size filter** ("size at least ×1.1 ... ×10") hides smaller changes here and in
 the worst list; zeros, sign changes and missing values always show, and the page says the
 filter changes no count.
@@ -1061,7 +1063,10 @@ is:
   taken;
 - otherwise the base plus each fix's difference against the result it was measured
   against. A fix measured on top of another adds only its own difference, so what both
-  build on is counted once.
+  build on is counted once. The differences are added left to right in the order of the
+  file, one at a time from 0 (`fixes.in_order`), and then to the base; so are the sizes of
+  a set's pair terms. Never a compensated sum: Python's `sum()` compensates from 3.12 on,
+  and a reader that rounds otherwise parts from the page in the last bit.
 
 Where one of those differences cannot be taken (a missing result with the fix or without
 it), the set has no result there, and the page says the sum cannot be formed, apart from a
@@ -1231,6 +1236,18 @@ construction; the check of independence above is the one that can fail it.
 - In the drawer, an item's difference in a set splits into its fixes' effects, exactly
   where the set is exact, each fix's against what it was measured with. For a built set
   holding a listed pair, the rest is shown as the interaction, never spread over the fixes.
+- An estimated set says so wherever its numbers are: "≈" on every value that is a sum, and
+  "Estimated:" before its counts, the worst values and the distributions. A value no sum
+  can be formed for reads "no sum", never "missing".
+- The page offers the choice between the steps of the chain and a set of fixes only where
+  a file of fixes came with it. `sentier-diagnostics page FILE --out FOLDER --fixes FIXES`
+  checks the file of fixes against the file and its matrix and writes it beside the page as
+  `fixes.js`, which adds `{src, fixes}` to `SENTIER_DIAGNOSTICS_FIXES_FILES`, as `matrix.js`
+  does; the root names it (`data-sd-fixes`) and the page takes the entry of that script
+  only. A host may name `fixes.json` instead (read over http), or set one file of fixes
+  for one page, `SENTIER_DIAGNOSTICS_FIXES`. A file of fixes that does not hang on the file
+  shown (its title, a base that is no state of it, other indicators, other items or base
+  results than the matrix's) is refused, and the page says why.
 
 ### 16.9 Checks
 

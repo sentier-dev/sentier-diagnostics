@@ -88,7 +88,7 @@ def main(argv=None) -> int:
     one = commands.add_parser("page", help="write the static page of a diagnostics file")
     one.add_argument("file", type=Path)
     one.add_argument("--out", type=Path, required=True)
-    one.add_argument("--fixes", type=Path, help="a file of fixes of this file: the page offers any set of them")
+    one.add_argument("--fixes", type=Path, help="a file of fixes of this file: the page offers any set")
     one = commands.add_parser("example", help="write the made-up example and its page")
     one.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)

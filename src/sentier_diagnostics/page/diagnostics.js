@@ -1777,7 +1777,11 @@
       if (view.mode === 'fixes') setMode('chain');
       fixesSaid();
       renderPicker();
+      askedAgain();
     }
+    // an address that asks for a set of fixes is read again when the file of fixes starts
+    // loading or is refused, so that what the page says of it is what is so now
+    function askedAgain() { if (D && hashParts().set !== undefined) route(); }
     function fixesSaid() {
       var node = q('fixes-said');
       if (!node) return;
@@ -1811,6 +1815,7 @@
       }
       fixfile = { state: 'loading', said: name };
       fixesSaid();
+      askedAgain();
       if (/\.js$/.test(name)) {
         var script = doc.createElement('script');
         script.setAttribute('src', base + name);
