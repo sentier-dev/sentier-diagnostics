@@ -447,7 +447,7 @@
         break;
       case NO_SUM:
         view.text = 'no sum'; view.tone = 'missing';
-        view.title = NO_SUM + ': ' + SAID[NO_SUM] + '. Before ' + (before === null ? 'none' : String(before)) + '.';
+        view.title = NO_SUM + ': ' + SAID[NO_SUM] + '. Before ' + (before === null ? 'none' : exactText(before)) + '.';
         break;
       case 'near zero':
         view.text = '≈ 0'; view.tone = 'near'; break;
@@ -2013,10 +2013,10 @@
           var v = cellView(before, after, j[0], j[1], j[2]);
           tb.appendChild(el('tr', null, [
             el('th', { scope: 'row' }, [fixById(y).label, m.closures[y].length ? el('div', { cls: 'sd-quiet', text: 'on ' + fixLabels(m.closures[y]) }) : null]),
-            el('td', { cls: 'num', text: formatNumber(before), title: String(before) }),
-            el('td', { cls: 'num', text: formatNumber(after), title: String(after) }),
+            el('td', { cls: 'num', text: formatNumber(before), title: exactText(before) }),
+            el('td', { cls: 'num', text: formatNumber(after), title: exactText(after) }),
             el('td', { cls: 'cell tone-' + v.tone, text: v.text, title: v.title, 'data-class': j[0] }),
-            el('td', { cls: 'num', text: diff === null ? 'none' : formatNumber(diff), title: diff === null ? 'a side has no result' : String(diff) })
+            el('td', { cls: 'num', text: diff === null ? 'none' : formatNumber(diff), title: diff === null ? 'a side has no result' : exactText(diff) })
           ]));
         });
         var total = base === null || result === null ? null : result - base;
@@ -2028,15 +2028,15 @@
             el('th', { scope: 'row', text: pairHeld ? 'The interaction' : 'The rest' }),
             el('td', { colspan: '3', cls: 'sd-quiet', text: pairHeld ? 'what these fixes do together, beyond the sum of their effects: the build of ' + fixLabels(stands[1]) + ' less the base and each effect'
               : 'the build of ' + fixLabels(stands[1]) + ' less the base and each effect; within the tolerance, which the check of the file holds it to' }),
-            el('td', { cls: 'num', text: formatNumber(rest), title: String(rest) })
+            el('td', { cls: 'num', text: formatNumber(rest), title: exactText(rest) })
           ]));
         }
         tb.appendChild(el('tr', { cls: 'sd-in-run' }, [
           el('th', { scope: 'row' }, ['This set', el('div', { cls: 'sd-quiet', text: (stands[0] === 'sum' ? 'the sum' : mine.length > 1 ? 'the build of ' + fixLabels(stands[1]) : 'that build') + (row.together.est[ind.id] ? ', estimated' : '') })]),
-          el('td', { cls: 'num', text: formatNumber(base), title: 'the base: ' + String(base) }),
-          el('td', { cls: 'num', text: formatNumber(result), title: String(result) }),
+          el('td', { cls: 'num', text: formatNumber(base), title: 'the base: ' + exactText(base) }),
+          el('td', { cls: 'num', text: formatNumber(result), title: exactText(result) }),
           valueCell(row, ind.id, SET, false),
-          el('td', { cls: 'num', text: total === null ? 'none' : formatNumber(total), title: total === null ? 'a side has no result' : String(total) })
+          el('td', { cls: 'num', text: total === null ? 'none' : formatNumber(total), title: total === null ? 'a side has no result' : exactText(total) })
         ]));
         table.appendChild(tb);
         body.appendChild(el('h4', { text: ind.name + (ind.unit ? ' (' + ind.unit + ' per ' + (row.unit || 'unit') + ')' : '') }));
