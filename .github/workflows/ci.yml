@@ -56,4 +56,4 @@ jobs:
         with:
           node-version: "22"
       - name: Acceptance cases against the script
-        run: node --test tests/js/page.test.js
+        run: node --test tests/js/page.test.js tests/js/fixes.test.js

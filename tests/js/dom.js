@@ -184,6 +184,7 @@ function page(data, breakdowns, options) {
     removeEventListener: (type, listener) => { const held = listeners[type] || []; if (held.indexOf(listener) >= 0) held.splice(held.indexOf(listener), 1); },
     URLSearchParams,
     WeakRef, // as a browser has it; a test takes it away to see the page without it
+    TextDecoder,
     FileReader: class {},
     fetch: options.fetch || (() => Promise.reject(new Error('no network'))),
     ...(options.globals || {}),

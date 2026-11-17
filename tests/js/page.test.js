@@ -361,7 +361,7 @@ test('a matrix beside the page is loaded as a script after the page is drawn', (
 });
 
 test('a matrix is fetched as JSON over http, and one of another file is not drawn', async () => {
-  const served = (m) => () => Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify(m)) });
+  const served = (m) => () => Promise.resolve({ ok: true, status: 200, arrayBuffer: () => Promise.resolve(bytesOf(Buffer.from(JSON.stringify(m)))) });
   const drawn = dom.page(local(), undefined, { protocol: 'https:', fetch: served(full()) });
   await new Promise((done) => setImmediate(done));
   assert.equal(gridRows(drawn).length, 10);
@@ -370,6 +370,25 @@ test('a matrix is fetched as JSON over http, and one of another file is not draw
   await new Promise((done) => setImmediate(done));
   assert.equal(gridRows(refused).length, 6);
   assert.match(refused.byId['matrix-said'].textContent, /not loaded: it is the matrix of another file/);
+});
+
+// a Buffer's own bytes, as a response's arrayBuffer() gives them
+const bytesOf = (buffer) => buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.length);
+
+test('a matrix over http is held to its size in bytes, and refused when it is not JSON, not UTF-8 or not served', async () => {
+  const fetched = async (bytes, status) => {
+    const drawn = dom.page(local(), undefined, { protocol: 'https:', fetch: () => Promise.resolve({ ok: !status, status: status || 200,
+      arrayBuffer: () => Promise.resolve(bytes ? bytesOf(bytes) : null) }) });
+    await new Promise((done) => setImmediate(done));
+    return drawn.byId['matrix-said'].textContent;
+  };
+  // 2-byte characters: the text is half as long as the file, so only its size in bytes is over
+  const max = 64 * 1024 * 1024, large = Buffer.alloc(max + 2, 'é');
+  assert.equal(large.toString('utf8').length, max / 2 + 1);
+  assert.match(await fetched(large), /matrix\.json is larger than 67\D108\D864 bytes/);
+  assert.match(await fetched(Buffer.from('{"format": ')), /matrix\.json is not JSON/);
+  assert.match(await fetched(Buffer.from([0x7b, 0xff, 0x7d])), /matrix\.json is not UTF-8 text/);
+  assert.match(await fetched(null, 404), /matrix\.json could not be read \(404\)/);
 });
 
 test('a grid cell is the ratio after ÷ before, coloured by its direction', () => {
@@ -2251,6 +2270,8 @@ const schemeReader = (lists) => () => {
   return list;
 };
 const listening = (lists) => lists.reduce((n, list) => n + list.held.length, 0);
+// a made-up page with its file of fixes (SPEC 16.8), as tests/test_fixes_page.py writes them
+const fixesPage = () => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'fixes_page.json'), 'utf8')).pages['fixes that need others'];
 
 test('a page a host removed without unmount() is let go once nothing holds it, and then nothing listens (issue 40)', async () => {
   const observers = [], lists = [];
@@ -2274,9 +2295,21 @@ test('a page a host removed without unmount() is let go once nothing holds it, a
     put({ data: example() }, { 'data-sd-key': 'left' }); // holds the key "left"
     const waiter = put({ data: example() }, { 'data-sd-key': 'left' }); // waits for it
     assert.match(waiter.querySelector('[data-sd="load-error"]').textContent, /Another page in the document has the key/);
+    // its file of fixes still coming, and one whose file came: fixes.js stays in the head too
+    const fp = fixesPage();
+    drawn.context.SENTIER_DIAGNOSTICS_MATRIX = fp.matrix;
+    put({ data: fp.data }, { 'data-sd-fixes': 'fixes.js' });
+    const fixed = put({ data: fp.data }, { 'data-sd-fixes': 'fixes.js' });
+    delete drawn.context.SENTIER_DIAGNOSTICS_MATRIX;
+    const fixScripts = drawn.head.querySelectorAll('script[src]').filter((script) => script.getAttribute('src') === 'fixes.js');
+    assert.equal(fixScripts.length, 2);
+    drawn.context.SENTIER_DIAGNOSTICS_FIXES_FILES = [{ src: 'fixes.js', fixes: fp.fixes }];
+    fixScripts[1].onload();
+    assert.match(fixed.querySelector('[data-sd="fixes-said"]').textContent, /^5 fixes/);
+    delete drawn.context.SENTIER_DIAGNOSTICS_FIXES_FILES;
     put({ data: local() }, { 'data-sd-matrix': 'matrix.js' }); // its matrix still coming
     put({ data: local() }, { 'data-sd-matrix': 'matrix.js' }); // its matrix come
-    const scripts = drawn.head.querySelectorAll('script[src]');
+    const scripts = drawn.head.querySelectorAll('script[src]').filter((script) => script.getAttribute('src') === 'matrix.js');
     assert.equal(scripts.length, 2);
     drawn.context.SENTIER_DIAGNOSTICS_MATRIX = full();
     scripts[1].onload();
