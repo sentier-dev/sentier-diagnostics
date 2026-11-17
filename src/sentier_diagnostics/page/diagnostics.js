@@ -527,25 +527,31 @@
     return a.length - b.length;
   }
 
-  // The relative luminance of a colour as CSS writes it (WCAG 2), or null where it cannot be
-  // read. Hex, rgb(), oklab() and oklch() are read here: the browser gives a host's colour in
-  // one of these where the host wrote it in sRGB or in OKLab (Tailwind 4 writes every colour
-  // in oklch). Any other form (lab(), color() ...) is drawn on a canvas of one pixel and read
-  // back. A canvas keeps its colour when it is given one it cannot read (light-dark(), a bare
-  // "0 0% 100%"): set over two different colours, such a text leaves two different colours,
-  // and is unknown, never black. A browser that hides what a canvas holds (against
-  // fingerprinting) gives back blank or altered pixels: a known colour that does not come
-  // back as it went says that nothing drawn can be read, and the colour is unknown.
-  function luminance(text, doc) {
+  // A colour as CSS writes it, read: its red, green and blue in sRGB (0 to 255) and its alpha
+  // (0 to 1), or null where it cannot be read. Hex, rgb(), oklab() and oklch() are read here:
+  // the browser gives a host's colour in one of these where the host wrote it in sRGB or in
+  // OKLab (Tailwind 4 writes every colour in oklch). Any other form (lab(), color() ...) is
+  // drawn on a canvas of one pixel and read back. A canvas keeps its colour when it is given
+  // one it cannot read (light-dark(), a bare "0 0% 100%"): set over two different colours,
+  // such a text leaves two different colours, and is unknown, never black. A browser that
+  // hides what a canvas holds (against fingerprinting) gives back blank or altered pixels: a
+  // known colour that does not come back as it went says that nothing drawn can be read, and
+  // the colour is unknown.
+  function colourOf(text, doc) {
     text = String(text || '').trim();
-    var rgb = null, m;
+    var rgb = null, alpha = 1, m;
     if ((m = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(text))) {
       var h = m[1].length <= 4 ? m[1].replace(/(.)/g, '$1$1') : m[1];
       rgb = [0, 2, 4].map(function (at) { return parseInt(h.slice(at, at + 2), 16); });
-    } else if ((m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(text))) {
+      if (h.length === 8) alpha = parseInt(h.slice(6), 16) / 255;
+    } else if ((m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:\s*[,\/]\s*([\d.]+%?))?/i.exec(text))) {
       rgb = [+m[1], +m[2], +m[3]];
+      alpha = alphaOf(m[4]);
     } else if ((m = OKLAB.exec(text))) {
-      return oklabLuminance(m);
+      var lin = oklabLinear(m);
+      // to sRGB as a canvas draws it, where a ground is laid over what is behind it
+      if (lin) rgb = lin.map(function (v) { return 255 * (v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055); });
+      alpha = alphaOf(m[5]);
     } else if (text && doc && doc.createElement) {
       try {
         var canvas = doc.createElement('canvas');
@@ -561,24 +567,52 @@
           context.fillStyle = fill;
           context.fillRect(0, 0, 1, 1);
           var d = context.getImageData(0, 0, 1, 1).data;
-          return [d[0], d[1], d[2]];
+          return [d[0], d[1], d[2], d[3]];
         };
-        if (drawn('#010203').join() !== '1,2,3') return null;
-        rgb = drawn(text);
+        if (drawn('#010203').join() !== '1,2,3,255') return null;
+        var pixel = drawn(text);
+        rgb = pixel.slice(0, 3);
+        alpha = pixel[3] / 255;
       } catch (error) { return null; }
     }
-    if (!rgb || rgb.some(function (v) { return !isFinite(v); })) return null;
-    var lin = rgb.map(function (v) { v = Math.min(255, v) / 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+    if (!rgb || !rgb.concat(alpha).every(isFinite)) return null;
+    return { rgb: rgb.map(function (v) { return Math.min(255, Math.max(0, v)); }), alpha: Math.min(1, Math.max(0, alpha)) };
+  }
+  // an alpha as CSS writes it after a colour: a number or a percentage, "none" as zero, and
+  // 1 where none is written
+  function alphaOf(text) {
+    if (text === undefined || text === '') return 1;
+    if (/^none$/i.test(text)) return 0;
+    return /%$/.test(text) ? parseFloat(text) / 100 : parseFloat(text);
+  }
+
+  // The relative luminance of a colour as CSS writes it (WCAG 2), or null where it cannot be
+  // read. Its alpha is left aside: a colour of none at all (alpha 0) is no colour, and null.
+  function luminance(text, doc) {
+    var c = colourOf(text, doc);
+    if (!c || c.alpha === 0) return null;
+    var lin = c.rgb.map(function (v) { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
     return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+  }
+
+  // Colours laid one over another, the first on top and the last opaque: the colour seen, as
+  // a browser composites a page (source over, in sRGB).
+  function seenThrough(coats) {
+    var out = coats[coats.length - 1].rgb.slice();
+    for (var i = coats.length - 2; i >= 0; i--) {
+      var top = coats[i];
+      out = out.map(function (v, k) { return top.rgb[k] * top.alpha + v * (1 - top.alpha); });
+    }
+    return 'rgb(' + out.join(', ') + ')';
   }
 
   // oklab(L a b) and oklch(L C H), as CSS Color 4 writes them: L a number or a percentage of
   // 1, a, b and C a number or a percentage of 0.4, H in degrees (or deg, grad, rad, turn),
-  // "none" as zero; an alpha after "/" is left aside, as rgb() leaves it
+  // "none" as zero; an alpha after "/". Given in linear sRGB, or null.
   var OKNUM = '(none|[+-]?(?:\\d+\\.?\\d*|\\.\\d+)(?:e[+-]?\\d+)?(?:%|deg|grad|rad|turn)?)';
-  var OKLAB = new RegExp('^okl(ab|ch)\\(\\s*' + OKNUM + '\\s+' + OKNUM + '\\s+' + OKNUM + '\\s*(?:\\/[^)]*)?\\)$', 'i');
+  var OKLAB = new RegExp('^okl(ab|ch)\\(\\s*' + OKNUM + '\\s+' + OKNUM + '\\s+' + OKNUM + '\\s*(?:\\/\\s*' + OKNUM + '\\s*)?\\)$', 'i');
   var TURN = { deg: 1, grad: 0.9, rad: 180 / Math.PI, turn: 360 };
-  function oklabLuminance(m) {
+  function oklabLinear(m) {
     function part(t, whole) {
       if (/^none$/i.test(t)) return 0;
       var unit = /[a-z%]+$/i.exec(t), v = parseFloat(t);
@@ -604,7 +638,7 @@
       -1.2684380046 * l + 2.6097574011 * mm - 0.3413193965 * s,
       -0.0041960863 * l - 0.7034186147 * mm + 1.7076147010 * s,
     ].map(function (v) { return Math.min(1, Math.max(0, v)); });
-    return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+    return lin;
   }
 
   // Whether the host's tokens make a dark page: a light ink (whatever its ground), or a dark
@@ -3879,7 +3913,8 @@
     // not set, so that the host's ink is never set on the page's white. A host that sets a
     // dark ground and no ink gets the light ink. A host that sets neither keeps the light
     // colours, the ground set with the ink. Read again when the reader's colour scheme
-    // changes, as a host's tokens may follow it.
+    // changes, as a host's tokens may follow it. A ground with alpha is read as it is seen
+    // (groundSeen).
     // The page's own mark sets only its own tokens (`--sd-*`), never `--ink`, `--surface` or
     // `color-scheme`, so the host's are read with the mark in place, and the mark is changed
     // only where the answer changed: a host that watches the page sees nothing for a reading
@@ -3887,7 +3922,7 @@
     function matchScheme() {
       var style = win.getComputedStyle ? win.getComputedStyle(root) : null;
       if (!style || !style.getPropertyValue) return;
-      var dark = schemeIsDark(tokenColour(style, '--ink'), tokenColour(style, '--surface'), function (text) {
+      var dark = schemeIsDark(tokenColour(style, '--ink'), groundSeen(tokenColour(style, '--surface')), function (text) {
         return luminance(text, doc);
       });
       if (dark === (root.getAttribute('data-sd-scheme') === 'dark')) return;
@@ -3895,17 +3930,76 @@
       else root.removeAttribute('data-sd-scheme');
     }
 
+    // The host's ground as a reader sees it. A ground with alpha below 1 (a faint tint, a
+    // dark theme's raised surface, `transparent`) shows what is behind the page through it:
+    // the backgrounds of the elements around the page, out to the first opaque one, and
+    // behind them all the document's canvas. Read as their composite, as a browser draws it.
+    // Where a background behind it cannot be read, the ground is unknown. Background images
+    // are not read. An opaque ground, or one that cannot be read, is given as it is.
+    function groundSeen(surface) {
+      var top = surface ? colourOf(surface, doc) : null;
+      if (!top || top.alpha >= 1) return surface;
+      var coats = [top];
+      for (var node = around(root); node; node = around(node)) {
+        var said = backgroundOf(node), behind = said ? colourOf(said, doc) : null;
+        if (said && !behind) return null;
+        if (!behind || behind.alpha === 0) continue;
+        coats.push(behind);
+        if (behind.alpha >= 1) return seenThrough(coats);
+      }
+      coats.push(canvasIsDark() ? { rgb: [18, 18, 18], alpha: 1 } : { rgb: [255, 255, 255], alpha: 1 });
+      return seenThrough(coats);
+    }
+    // the element a node is drawn in: its slot where it is slotted, its parent, or the host
+    // of the shadow root it is the top of; none above the document's root element
+    function around(node) {
+      var up = node.assignedSlot || node.parentNode;
+      if (!up) return null;
+      if (up.host) return up.host;
+      return up.nodeType === 9 || up.nodeType === 11 ? null : up;
+    }
+    function backgroundOf(node) {
+      var style = win.getComputedStyle ? win.getComputedStyle(node) : null;
+      return style && style.getPropertyValue ? String(style.getPropertyValue('background-color') || '').trim() : '';
+    }
+    // The canvas behind the document, which a browser paints with the colour scheme of the
+    // root element: dark where its `color-scheme` (or the document's
+    // `<meta name="color-scheme">`, where the root's says nothing) allows only dark, or both
+    // with the reader's dark. Browsers paint a dark canvas a little apart (#121212 in
+    // Chrome); any of them is dark.
+    function canvasScheme() {
+      var top = doc.documentElement, said = '';
+      try {
+        var style = top && win.getComputedStyle ? win.getComputedStyle(top) : null;
+        said = style && style.getPropertyValue ? String(style.getPropertyValue('color-scheme') || '') : '';
+        var meta = !/\b(light|dark)\b/i.test(said) && doc.querySelector ? doc.querySelector('meta[name="color-scheme"]') : null;
+        if (meta) said = String(meta.getAttribute('content') || '');
+      } catch (error) { said = ''; }
+      return said.toLowerCase();
+    }
+    function canvasIsDark() {
+      var words = canvasScheme().split(/\s+/);
+      if (words.indexOf('dark') < 0) return false;
+      if (words.indexOf('light') < 0) return true;
+      var reader = win.matchMedia ? win.matchMedia(DARK_READER) : null;
+      return !!(reader && reader.matches);
+    }
+
     // What the scheme is read from, read without changing anything: the host's two tokens as
     // the browser computes them (another var() in them already put in), the colour scheme
-    // they may resolve by (light-dark(), a system colour), and the reader's. Null for a page
-    // out of the document, which has no host to read.
+    // they may resolve by (light-dark(), a system colour), the reader's, and what a ground
+    // with alpha shows through: the backgrounds around the page and the canvas's scheme. Null
+    // for a page out of the document, which has no host to read.
     function schemeSign() {
       if (root.isConnected === false || !win.getComputedStyle) return null;
       var style = win.getComputedStyle(root);
       if (!style || !style.getPropertyValue) return null;
       var reader = win.matchMedia ? win.matchMedia(DARK_READER) : null;
+      var behind = [];
+      for (var node = around(root); node; node = around(node)) behind.push(backgroundOf(node));
       return [style.getPropertyValue('--ink'), style.getPropertyValue('--surface'),
-        style.getPropertyValue('color-scheme'), reader && reader.matches ? 'dark' : 'light'].join('\n');
+        style.getPropertyValue('color-scheme'), reader && reader.matches ? 'dark' : 'light',
+        behind.join(';'), canvasScheme()].join('\n');
     }
 
     // A host's colour token as the browser resolves it, set on a probe in the page, so that
@@ -4152,7 +4246,7 @@
     bandStep: bandStep, bandOf: bandOf, readJSON: readJSON, checkShape: checkShape, checkMatrix: checkMatrix, matrixRows: matrixRows,
     safeLink: safeLink, safeName: safeName, splitOf: splitOf, splitText: splitText, distance: distance, quantileTexts: quantileTexts, RANK: RANK,
     judge: judge, runsOf: runsOf, runPair: runPair, noiseOfStates: noiseOfStates, endsKnown: endsKnown, statesCarryNoise: statesCarryNoise,
-    luminance: luminance, schemeIsDark: schemeIsDark,
+    colourOf: colourOf, luminance: luminance, seenThrough: seenThrough, schemeIsDark: schemeIsDark,
     fixChosen: fixChosen, fixCompose: fixCompose, fixCounts: fixCounts, fixOwnCounts: fixOwnCounts, fixCountsDiffer: fixCountsDiffer, checkFixes: checkFixes,
     fixesAgainst: fixesAgainst, fixesProblem: fixesProblem, fixPageBlocks: fixPageBlocks, inOrder: inOrder,
     mount: mount, mountAll: mountAll };

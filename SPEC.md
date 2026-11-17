@@ -563,12 +563,17 @@ on the page's white. It reads the tokens as the browser resolves them (`light-da
 another `var()`), and a token it cannot read as a colour is unknown, never black. A colour
 the browser gives in sRGB, `oklab()` or `oklch()` is read as written; any other is drawn on
 a canvas of one pixel and read back, and where the browser hides what a canvas holds (a
-known colour does not come back as it went) it is unknown as well. It looks
+known colour does not come back as it went) it is unknown as well. A ground with alpha
+below 1 (`transparent`, a faint tint, a dark theme's raised surface) is read as it is seen:
+laid over the backgrounds of the elements around the page, out to the first opaque one,
+and over the document's canvas, which is dark where the root's `color-scheme` (or the
+document's `<meta name="color-scheme">`) and the reader make it so. A background behind it
+that cannot be read leaves the ground unknown; background images are not read. It looks
 again when the reader's colour scheme changes, when anything changes in the document or in
 a shadow root the page sits in, and when a stylesheet loads: once a frame at most, and it
-reads the tokens again only where they, the computed `color-scheme` or the reader's
-scheme changed, so that a host's observer that answers the page's reading sets off no
-other. A rule a site changes through the CSS object model alone changes nothing the page
+reads the tokens again only where they, the computed `color-scheme`, the reader's scheme or
+what a translucent ground shows changed, so that a host's observer that answers the page's
+reading sets off no other. A rule a site changes through the CSS object model alone changes nothing the page
 can see.
 
 **A host lets the body be wide.** The matrix needs the page's width, and a site that caps

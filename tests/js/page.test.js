@@ -2062,6 +2062,133 @@ test('the page reads the host\'s tokens as the browser resolves them, and follow
   assert.equal(moved.loads.length, 1);
 });
 
+// A host page in a browser's styles: the page's tokens and the probes set to them, as
+// browserStyles gives them, with a ground of alpha below 1 resolved as a browser writes it; the
+// background of each element around the page (main, body, html); and the root element's
+// colour scheme. Every value here is made up.
+const SEEN = { transparent: 'rgba(0, 0, 0, 0)', 'rgba(0,0,0,.04)': 'rgba(0, 0, 0, 0.04)', 'rgb(255 255 255 / .05)': 'rgba(255, 255, 255, 0.05)', '#111': 'rgb(17, 17, 17)', '#fff': 'rgb(255, 255, 255)' };
+const inHost = (vars, grounds, options = {}) => {
+  const reader = { matches: !!options.readerDark, heard: [], addEventListener(type, react) { if (type === 'change') this.heard.push(react); } };
+  const scheme = { value: options.scheme || 'normal', meta: options.meta || null };
+  const observers = [];
+  class Observer {
+    constructor(react) { this.react = react; observers.push(this); }
+    observe() {}
+    disconnect() {}
+  }
+  const styles = {
+    getComputedStyle: (node) => {
+      const color = node.style ? node.style.getPropertyValue('color') : '';
+      if (color.startsWith('var(')) {
+        const said = vars[color.slice(4, -1)];
+        return { color: SEEN[said] || RESOLVED[said] || node.parentNode.style.getPropertyValue('color') };
+      }
+      return { getPropertyValue: (name) => (name === 'background-color' ? node.bg || '' : name === 'color-scheme' ? (node.isRoot ? scheme.value : '') : vars[name] || '') };
+    },
+  };
+  const first = dom.page(example(), undefined, { globals: { ...styles, matchMedia: () => reader, MutationObserver: Observer } });
+  const html = new dom.FakeNode('html'), body = new dom.FakeNode('body'), main = new dom.FakeNode('main');
+  html.isRoot = true;
+  [html.bg, body.bg, main.bg] = [grounds.html, grounds.body, grounds.main];
+  html.appendChild(body);
+  body.appendChild(main);
+  first.document.nodeType = 9;
+  html.parentNode = first.document;
+  first.document.documentElement = html;
+  first.document.querySelector = (selector) => (selector === 'meta[name="color-scheme"]' && scheme.meta !== null
+    ? { getAttribute: () => scheme.meta } : null);
+  const themed = dom.body({ data: example() });
+  themed.ownerDocument = first.document;
+  main.appendChild(themed);
+  first.context.SentierDiagnostics.mount(themed);
+  const look = () => observers[observers.length - 1].react([]);
+  return { themed, html, body, main, reader, scheme, vars, look, dark: () => themed.getAttribute('data-sd-scheme') === 'dark' };
+};
+
+test('a ground with alpha is read as it is seen, through what is behind the page (issue 45)', () => {
+  // a colour's alpha, as CSS and the browser write it
+  assert.equal(page.colourOf('rgba(0, 0, 0, 0.04)').alpha, 0.04);
+  assert.equal(page.colourOf('rgb(255 255 255 / 5%)').alpha, 0.05);
+  assert.equal(page.colourOf('#ffffff80').alpha, 128 / 255);
+  assert.equal(page.colourOf('#fff8').alpha, 136 / 255);
+  assert.equal(page.colourOf('oklch(0.5 0.1 200 / 0.5)').alpha, 0.5);
+  assert.equal(page.colourOf('oklch(0.5 0.1 200 / none)').alpha, 0);
+  assert.equal(page.colourOf('rgb(29, 35, 42)').alpha, 1);
+  assert.deepEqual(page.colourOf('rgba(0, 0, 0, 0)'), { rgb: [0, 0, 0], alpha: 0 });
+  assert.equal(page.colourOf('color(srgb 1 1 1 / 0.5)', canvasOf()).alpha, 128 / 255, 'read back from a canvas');
+  assert.equal(page.luminance('rgba(0, 0, 0, 0)'), null, 'a colour of nothing at all is no colour, and not black');
+  // a faint white over a dark veil over white: 255 × 0.05 + (255 × 0.2) × 0.95 = 61.2
+  const seen = page.seenThrough([{ rgb: [255, 255, 255], alpha: 0.05 }, { rgb: [0, 0, 0], alpha: 0.8 }, { rgb: [255, 255, 255], alpha: 1 }]);
+  assert.match(seen, /^rgb\((61\.\d+), \1, \1\)$/);
+  assert.ok(Math.abs(parseFloat(seen.slice(4)) - 61.2) < 1e-9, seen);
+
+  // the three hosts of the issue, with no ink: the page is light on a light host, dark on a dark one
+  assert.equal(inHost({ '--surface': 'transparent' }, { body: 'rgb(255, 255, 255)' }).dark(), false, 'transparent on white');
+  assert.equal(inHost({ '--surface': 'rgba(0,0,0,.04)' }, { body: 'rgb(255, 255, 255)' }).dark(), false, 'a faint tint on white');
+  assert.equal(inHost({ '--surface': 'rgb(255 255 255 / .05)' }, { body: 'rgb(17, 17, 17)' }).dark(), true, 'a raised surface on #111');
+  // an opaque ground is read as it is, whatever is behind it
+  assert.equal(inHost({ '--surface': '#111' }, { body: 'rgb(255, 255, 255)' }).dark(), true);
+  // each background is laid over the next: a dark veil on white, under a faint white, is dark;
+  // a light one is not
+  assert.equal(inHost({ '--surface': 'rgb(255 255 255 / .05)' }, { main: 'rgba(0, 0, 0, 0.8)', body: 'rgb(255, 255, 255)' }).dark(), true);
+  assert.equal(inHost({ '--surface': 'rgb(255 255 255 / .05)' }, { main: 'rgba(0, 0, 0, 0.3)', body: 'rgb(255, 255, 255)' }).dark(), false);
+  // the first opaque background ends the walk: html's is not seen through body's, nor read
+  assert.equal(inHost({ '--surface': 'transparent' }, { body: 'rgb(255, 255, 255)', html: 'rgb(17, 17, 17)' }).dark(), false);
+  assert.equal(inHost({ '--surface': 'transparent' }, { body: 'rgb(17, 17, 17)', html: 'color(display-p3 0 0 0)' }).dark(), true);
+  // behind every element the canvas, painted with the root's colour scheme, or the
+  // document's meta where the root says nothing
+  const bare = (options) => inHost({ '--surface': 'transparent' }, {}, options).dark();
+  assert.equal(bare({}), false);
+  assert.equal(bare({ scheme: 'dark' }), true);
+  assert.equal(bare({ scheme: 'light dark' }), false);
+  assert.equal(bare({ scheme: 'light dark', readerDark: true }), true);
+  assert.equal(bare({ scheme: 'only light', readerDark: true }), false);
+  assert.equal(bare({ meta: 'dark' }), true);
+  assert.equal(bare({ scheme: 'light', meta: 'dark' }), false, 'the root\'s own scheme before the meta');
+  // a background behind the ground that cannot be read leaves the ground unknown: the page
+  // keeps its light colours, never reading past it to the dark canvas
+  assert.equal(inHost({ '--surface': 'transparent' }, { body: 'color(display-p3 0 0 0)' }, { scheme: 'dark' }).dark(), false);
+  // where the ink says something, the ink decides, as before
+  assert.equal(inHost({ '--ink': '#1d232a', '--surface': 'rgb(255 255 255 / .05)' }, { body: 'rgb(17, 17, 17)' }).dark(), false);
+});
+
+test('a host that switches what is behind a translucent ground is followed, its tokens unchanged (issue 45)', () => {
+  const host = inHost({ '--surface': 'rgb(255 255 255 / .05)' }, { body: 'rgb(255, 255, 255)' });
+  assert.equal(host.dark(), false);
+  host.body.bg = 'rgb(17, 17, 17)'; // a class on body switched its background
+  host.look();
+  assert.equal(host.dark(), true);
+  host.body.bg = 'rgb(255, 255, 255)';
+  host.look();
+  assert.equal(host.dark(), false);
+  // a page in a shadow root: what is behind it is its host's, and on; a page slotted into
+  // a host is drawn in the slot, inside the host's own shadow tree
+  const shaded = inHost({ '--surface': 'rgb(255 255 255 / .05)' }, { body: 'rgb(255, 255, 255)' });
+  const panel = new dom.FakeNode('x-panel');
+  panel.bg = 'rgb(17, 17, 17)';
+  shaded.main.appendChild(panel);
+  shaded.main.removeChild(shaded.themed);
+  shaded.themed.parentNode = { host: panel, nodeType: 11 };
+  shaded.look();
+  assert.equal(shaded.dark(), true, 'in a shadow root of a dark host');
+  const slotted = inHost({ '--surface': 'rgb(255 255 255 / .05)' }, { body: 'rgb(255, 255, 255)' });
+  const card = new dom.FakeNode('x-card'), frame = new dom.FakeNode('div'), slot = new dom.FakeNode('slot');
+  frame.bg = 'rgb(17, 17, 17)'; // the card's own dark frame, inside its shadow tree
+  frame.appendChild(slot);
+  frame.parentNode = { host: card, nodeType: 11 };
+  slotted.main.appendChild(card);
+  card.appendChild(slotted.themed);
+  slotted.themed.assignedSlot = slot;
+  slotted.look();
+  assert.equal(slotted.dark(), true, 'slotted into a card whose frame is dark');
+  // and the canvas: the root's colour scheme switched, with nothing behind the page
+  const bare = inHost({ '--surface': 'transparent' }, {});
+  assert.equal(bare.dark(), false);
+  bare.scheme.value = 'dark';
+  bare.look();
+  assert.equal(bare.dark(), true);
+});
+
 test('a key the host names is a plain word, neither the page\'s own nor another page\'s (review of issue 27)', () => {
   for (const [key, why] of [['a&b', /is not a plain word/], ['left.item', /is not a plain word/], ['', /is not a plain word/],
     ['x'.repeat(41), /is not a plain word/], ['sd', /is one the page gives/], ['SD2', /is one the page gives/]]) {
