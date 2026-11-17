@@ -1097,6 +1097,23 @@ class Chain(unittest.TestCase):
                     entry["items"] = Unread(entry["items"])
         self.assertEqual(fileformat.errors(data), [])
 
+    def test_a_fault_of_a_listed_item_is_said_once(self):
+        """An item whose place, group or unit is wrong is still listed: the explanations about
+        the items are not also said to be about an item the file does not list (they were,
+        where the check of the items stopped). One about an item that is not listed still is."""
+        for field, value in (("place", "x" * 61), ("group", ["g"]), ("unit", 5)):
+            with self.subTest(field):
+                data = helpers.mutated(example.build(), lambda d, f=field, v=value: next(
+                    i for i in d["items"] if i["id"] == "p01").update({f: v}))
+                found = fileformat.errors(data)
+                self.assertEqual(len(found), 1, found)
+                self.assertTrue(found[0].startswith(f"item 'p01': `{field}` "), found)
+        stopped = helpers.mutated(example.build(), lambda d: (
+            next(i for i in d["items"] if i["id"] == "p01").update(unit=5),
+            next(e for e in d["explanations"] if e["about"]["item"] == "p05")["about"].update(item="p99")))
+        self.assertEqual(sorted(e.split(":")[-1] for e in fileformat.errors(stopped)),
+                         [" `unit` is not a text", " about an item the file does not list"])
+
     def test_a_lone_surrogate_is_not_a_text(self):
         data = example.build()
         data["title"] = "half \ud800 a character"

@@ -733,21 +733,34 @@ def _attribution(data, found, indicators, steps, blocks):
                 found.append(f"{where}: does not account for every item whose total moved")
 
 
+def _ids_of(listed) -> list:
+    """The ids that can be read from listed items whose check stopped: what an explanation
+    says about one of them is then not also said to be about an item the file does not list,
+    while one about an item that is not there still is.
+
+    >>> _ids_of([{"id": "a"}, {"id": 5}, None, {"id": "b"}]), _ids_of(None)
+    (['a', 'b'], [])
+    """
+    if not isinstance(listed, list):
+        return []
+    return [i["id"] for i in listed if isinstance(i, dict) and isinstance(i.get("id"), str)]
+
+
 def _items(data, found, indicators, states, steps, floors, tier, blocks):
     listed = data.get("items")
     said = data.get("items_count")
     if not (isinstance(said, dict) and set(said) == COUNT_KEYS and all(map(is_count, said.values()))):
         found.append("`items_count` is not {all, qualifying, listed, not_listed} in counts")
-        return []
+        return _ids_of(listed)
     if said["qualifying"] != said["listed"] + said["not_listed"] or said["qualifying"] > said["all"]:
         found.append("`items_count`: the items listed and not listed are not those worth a look")
     if not isinstance(listed, list) or len(listed) > MAX_ITEMS or len(listed) != said["listed"]:
         found.append(f"`items` is not a list of the {said['listed']} items said to be listed, "
                      f"and of at most {MAX_ITEMS}")  # fmt: skip
-        return []
+        return _ids_of(listed)
     if tier == "counts" and listed:
         found.append("a file of counts holds no item")
-        return []
+        return _ids_of(listed)
     nsteps = len(steps)
     claims_by_step = [_in_hand(s["claim"]) for s in steps]
     any_claim = any(claims_by_step)
@@ -764,28 +777,29 @@ def _items(data, found, indicators, states, steps, floors, tier, blocks):
     for item in listed:
         if not isinstance(item, dict) or set(item) != ITEM_KEYS:
             found.append(f"an item is not {{{', '.join(sorted(ITEM_KEYS))}}}")
-            return []
+            return _ids_of(listed)
         if text_fault(item["id"], MAX_ID):
             found.append(f"an item's `id` {text_fault(item['id'], MAX_ID)}")
-            return []
+            return _ids_of(listed)
         where = f"item {item['id']!r}"
         if item["id"] in seen:
             found.append(f"{where} is listed twice")
         seen.add(item["id"])
         found += text_errors(where, item, {"name": 300})
-        texts = text_errors(where, item, {"place": 60, "group": MAX_LABEL, "unit": MAX_WORD}, {"place", "group", "unit"})
-        if texts:
-            found += texts
-            return []
+        found += text_errors(where, item, {"place": 60, "group": MAX_LABEL}, {"place", "group"})
+        unit = text_errors(where, item, {"unit": MAX_WORD}, {"unit"})
+        if unit:  # the floors are found by it
+            found += unit
+            return _ids_of(listed)
         tables = [item[k] for k in ("values", "classes", "directions", "bands")]
         if not all(isinstance(t, dict) and set(t) == set(indicators) for t in tables):
             found.append(f"{where}: results, classes, directions and bands are given for every indicator")
-            return []
+            return _ids_of(listed)
         if any_claim != isinstance(item["verdicts"], dict) or (
             any_claim and set(item["verdicts"]) != set(indicators)
         ):
             found.append(f"{where}: verdicts are given for every indicator where, and only where, a step has a claim")
-            return []
+            return _ids_of(listed)
         breakdowns = item["breakdowns"]
         if breakdowns is not None and not (
             isinstance(breakdowns, dict)
@@ -800,18 +814,18 @@ def _items(data, found, indicators, states, steps, floors, tier, blocks):
             if not (isinstance(values, list) and len(values) == len(states)
                     and all(v is None or rule.is_value(v) for v in values)):  # fmt: skip
                 found.append(f"{where}, {indicator}: the results are not one finite number or null per state")
-                return []
+                return _ids_of(listed)
             if not all(isinstance(x, list) and len(x) == nsteps + 1 for x in (kinds, ways, bands)):
                 found.append(f"{where}, {indicator}: classes, directions and bands are one per step and the total")
-                return []
+                return _ids_of(listed)
             floor = floors.get((indicator, item["unit"]))
             if floor is None:
                 found.append(f"{where}, {indicator}: the file holds no floor for unit {item['unit']!r}")
-                return []
+                return _ids_of(listed)
             verdicts = item["verdicts"][indicator] if any_claim else None
             if any_claim and not (isinstance(verdicts, list) and len(verdicts) == nsteps):
                 found.append(f"{where}, {indicator}: verdicts are one per step")
-                return []
+                return _ids_of(listed)
             for k in [*range(nsteps), None]:
                 at = nsteps if k is None else k
                 name = TOTAL if k is None else steps[k]["id"]
@@ -828,7 +842,7 @@ def _items(data, found, indicators, states, steps, floors, tier, blocks):
                         f"{where}, {indicator}, {name}: written as {kinds[at]!r}/{ways[at]!r}/"
                         f"{bands[at]!r}, the rule gives {expected[0]!r}/{expected[1]!r}/{expected[2]!r}"
                     )
-                    return []
+                    return _ids_of(listed)
                 one = tally.setdefault((name, indicator), {})
                 kind = kinds[at]
                 if kind not in rule.QUIET:
@@ -858,7 +872,7 @@ def _items(data, found, indicators, states, steps, floors, tier, blocks):
                     continue
                 if not isinstance(said_verdict, str) or said_verdict not in ALLOWED_VERDICTS[kinds[at]]:
                     found.append(f"{where}, {indicator}, {name}: {kinds[at]!r} cannot be {said_verdict!r}")
-                    return []
+                    return _ids_of(listed)
                 worth = worth or said_verdict in claims.TO_LOOK_AT
                 if claims.judgeable(step_claim):
                     covering = [
@@ -868,7 +882,7 @@ def _items(data, found, indicators, states, steps, floors, tier, blocks):
                     again = claims.verdict(kinds[at], before, after, ways[at], covering)
                     if again != said_verdict:
                         found.append(f"{where}, {indicator}, {name}: written {said_verdict!r}, the claim gives {again!r}")
-                        return []
+                        return _ids_of(listed)
                 if said_verdict in _LOUD_VERDICTS:
                     _add(one, ("verdicts", said_verdict))
             # attribution of this item in this indicator, as `chain.build` makes it
