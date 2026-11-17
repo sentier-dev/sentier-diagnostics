@@ -712,7 +712,9 @@ Every number on the page is written in one style. From 1e4 on, and where it roun
 a number is a power of ten (`1.235e4`, `4.2e−4`, `1.23e3` where three digits are all a
 line holds), never the `e+4` that JavaScript writes of its own accord. Each style is chosen
 by the number as it is written, so that one that rounds across a threshold reads as the
-numbers beyond it do (99.96 % as `+100 %`, 999.6 % as `+1 000 %`).
+numbers beyond it do (99.96 % as `+100 %`, 999.6 % as `+1 000 %`). A number said to be
+above a bound (a large noise, steps that cancel) reads above it: at five or six digits where
+four round it onto the bound (`1.00001 %`), and as "just over 1 %" where six still do.
 
 A card's title sorts the matrix by its indicator; a heading of the matrix marks its card.
 

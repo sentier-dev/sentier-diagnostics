@@ -199,6 +199,20 @@
     return [0, 1, 2].map(function (i) { return i in words ? words[i] : one(values[i], d); });
   }
 
+  // a number said to be above a bound (a noise called large, steps that cancel), written so
+  // that it reads above it: in the page's style where four digits do, at five or six where
+  // four round it onto the bound, and as "just over" the bound where six still do. A word
+  // that says "above" beside a number that reads as the bound would contradict itself.
+  // `lead` goes before a number, not before "just over".
+  function overText(v, bound, lead) {
+    if (Number(v.toPrecision(4)) > bound) return lead + formatNumber(v);
+    for (var d = 5; d <= 6; d++) {
+      var s = v.toPrecision(d);
+      if (Number(s) > bound) return lead + s.replace(/0+$/, '');
+    }
+    return 'just over ' + formatNumber(bound);
+  }
+
   // Steps whose differences add up to more than this many times the whole difference
   // cancel: their shares are large and of both signs. The page prints them, and says so.
   var CANCEL = 10;
@@ -244,7 +258,7 @@
   function splitText(split) {
     switch (split.state) {
       case 'split':
-        var cancel = split.factor > CANCEL ? 'the steps cancel: their differences add up to ' + formatNumber(split.factor) + ' times the whole difference' : '';
+        var cancel = split.factor > CANCEL ? 'the steps cancel: their differences add up to ' + overText(split.factor, CANCEL, '') + ' times the whole difference' : '';
         if (split.bound >= LAST_DIGIT) return 'the shares are not added up: rounding would reach the last digit; ' + cancel;
         var left = split.sum - 1; // exact: the sum lies within a rounding of 1
         var said = left === 0 ? '100 %' : '100 % ' + (left > 0 ? '+ ' : '− ') + formatNumber(Math.abs(left) * 100) + ' %';
@@ -276,7 +290,7 @@
     var part = absent ? ', for ' + keys.length + ' of ' + all.length + ' ' + (many || 'indicators') : '';
     var largest = Math.max.apply(null, keys.map(function (k) { return by[k]; }));
     if (largest === 0) return 'identical' + between + part;
-    return 'measured' + between + part + (largest > LARGE_NOISE ? '; large: up to ' + formatNumber(largest * 100) + ' %' : '');
+    return 'measured' + between + part + (largest > LARGE_NOISE ? '; large: ' + overText(largest * 100, LARGE_NOISE * 100, 'up to ') + ' %' : '');
   }
 
   // a link a file may hold: an https address, or nothing. A page never makes any other
@@ -1265,7 +1279,7 @@
       var largest = Math.max.apply(null, keys.map(function (k) { return by[k]; }));
       return head + (known < 2 ? ', measured at ' + known + ' of 2 ends' : '') +
         (keys.length < all ? ', for ' + keys.length + ' of ' + all + ' ' + indWord(true) + ' (not measured for the others)' : '') +
-        (largest === 0 ? ': identical builds' : largest > LARGE_NOISE ? '; large: up to ' + formatNumber(largest * 100) + ' %' : '');
+        (largest === 0 ? ': identical builds' : largest > LARGE_NOISE ? '; large: ' + overText(largest * 100, LARGE_NOISE * 100, 'up to ') + ' %' : '');
     }
     function totalNoiseSaid() {
       if (!('total_noise' in D.rule)) return 'none: this file was made before noise belonged to a state';

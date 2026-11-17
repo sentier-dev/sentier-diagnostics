@@ -450,7 +450,11 @@ test('the page takes each edge it shares with the Python where the Python does: 
   // a noise of exactly 1 % is not large (chain.LARGE_NOISE)
   const noise = (size) => page.noiseText({ measured: true, between: ['a', 'b'], by: { x: size }, note: null }, ['x']);
   assert.ok(!noise(0.01).includes('large'), noise(0.01));
-  assert.match(noise(0.010000000000000002), /large: up to 1 %/);
+  // a noise called large never reads as 1 % itself: it takes the digits that show it is
+  // over, and where six do not, it is "just over 1 %" (review of 9a11c09)
+  assert.match(noise(0.010000000000000002), /large: just over 1 %$/);
+  assert.match(noise(0.0100001), /large: up to 1\.00001 %$/);
+  assert.match(noise(0.0104), /large: up to 1\.04 %$/);
   // and where a step's noise is the sum of its two states'
   const said = (sizes) => {
     const d = example();
@@ -462,6 +466,13 @@ test('the page takes each edge it shares with the Python where the Python does: 
   assert.match(said([0.005, 0.005]), /the sum of its two ends'/);
   assert.ok(!said([0.005, 0.005]).includes('large'), said([0.005, 0.005]));
   assert.match(said([0.005, 0.0051]), /large: up to 1\.01 %/);
+  assert.match(said([0.005, 0.0050001]), /large: up to 1\.00001 %\./);
+  assert.match(said([0.005, 0.0050000001]), /large: just over 1 %\./);
+  // steps said to cancel never add up to "10 times", the bound itself
+  const cancel = (factor) => page.splitText({ state: 'split', shares: [1], sum: 1, unexplained: null, factor, bound: 0 });
+  assert.match(cancel(10.001), /add up to 10\.001 times/);
+  assert.match(cancel(10.0000001), /add up to just over 10 times/);
+  assert.ok(!cancel(10).includes('cancel'), cancel(10));
 });
 
 
