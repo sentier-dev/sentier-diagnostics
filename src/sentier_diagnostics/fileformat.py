@@ -190,7 +190,7 @@ APPROVAL_STEMS = re.compile(
 SIGN_OFF = re.compile(r"sign(ed)?off")
 APPROVAL_WORDS = frozenset(
     {"ok", "okay", "lgtm", "qa", "pass", "passed", "passes", "ack", "acked", "checked", "signed", "agreed", "pending",
-     "ratified", "vet"}  # fmt: skip
+     "ratified", "vet", "cosigned", "countersigned", "okayed"}  # fmt: skip
 )
 
 

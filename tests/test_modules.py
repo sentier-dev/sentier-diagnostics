@@ -1208,7 +1208,9 @@ class Chain(unittest.TestCase):
                    # and what the review of the fix found still let through
                    "authorized_by", "authorised", "vetted_by", "acknowledged_by", "attested", "cleared_by", "sanctioned",
                    "signature", "verdict", "decision", "decided_by", "granted", "ratified", "vet", "vetting",
-                   "peerVetted", "unCleared")  # fmt: skip
+                   "peerVetted", "unCleared",
+                   # and the review of 2d0d545: a sign-off across two words, and three more words
+                   "presigned_off", "cosigned", "countersigned", "okayed")  # fmt: skip
         said = lambda key: fileformat.errors(  # noqa: E731
             helpers.mutated(example.build(), lambda d: d["states"][1]["identity"].update({key: "yes"})))
         for key in refused:
@@ -1218,7 +1220,7 @@ class Chain(unittest.TestCase):
                     "stratified", "authority", "signal", "nuclear_share", "decimals", "event",
                     # a stem is not looked for across two words (review of 9a11c09)
                     "stat_test", "format_test", "at_test", "design_at", "clear_edge", "grant_edge",
-                    "designation", "designator", "designate"):  # fmt: skip
+                    "designation", "designator", "designate", "presigned_url"):  # fmt: skip
             with self.subTest(key):
                 self.assertEqual(said(key), [])
 
