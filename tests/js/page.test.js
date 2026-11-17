@@ -700,11 +700,14 @@ test('a median of after ÷ before only from every item, never from the listed on
   assert.ok(Math.abs(shown - median) <= 5e-3 * Math.abs(median), shown + ' vs ' + median);
 });
 
-test('percentiles get the digits that keep apart the ones that differ', () => {
+test('percentiles share one precision: the fewest digits that keep apart the ones that differ', () => {
   // a spread only the fifth digit shows
   const text = page.quantileTexts({ p10: 0.99981, median: 1.0, p90: 1.00042 });
   assert.notEqual(text[0], text[2]);
-  assert.deepEqual(text, ['0.9998', '1.0000', '1.0004']); // each only as wide as its neighbour needs
+  assert.deepEqual(text, ['0.99981', '1.0000', '1.0004']);
+  // never mixed: a 10th percentile that reads as exactly 1 beside a six-digit median
+  assert.deepEqual(page.quantileTexts({ p10: 1.00004, median: 1.00005, p90: 1.00006 }), ['1.00004', '1.00005', '1.00006']);
+  assert.deepEqual(page.quantileTexts({ p10: 0.999, median: 1, p90: 1.0001 }), ['0.99900', '1.0000', '1.0001']);
   assert.deepEqual(page.quantileTexts({ p10: 0.5, median: 1, p90: 2 }), ['0.500', '1.00', '2.00']);
   assert.deepEqual(page.quantileTexts({ p10: 1, median: 1, p90: 1 }), ['1.00', '1.00', '1.00']);
 });
@@ -795,6 +798,7 @@ test('two percentiles that six digits cannot part are said to lie just under or 
   assert.equal(t[0], 'just under the median');
   assert.notEqual(t[2], t[1]);
   assert.equal(t[2], '5.95'); // the pair (median, 90th) never blurred
+  assert.equal(t[1], '1.00'); // the words took the place of the six digits: the rest go back to three
   // only the pair that blurs is widened: 5.94545 needs no six digits beside 1
   assert.equal(page.quantileTexts({ p10: 0.5, median: 1, p90: 1 + 1e-9 })[0], '0.500');
   assert.equal(page.quantileTexts({ p10: 0.5, median: 1, p90: 1 + 1e-9 })[2], 'just over the median');
