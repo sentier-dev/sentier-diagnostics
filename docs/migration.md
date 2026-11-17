@@ -31,7 +31,7 @@ A package, never a copied file. Standard library only, Python 3.10 or later.
 - A site copies the page's files from `sentier_diagnostics.page.assets()` and writes the
   data with `page.as_script("SENTIER_DIAGNOSTICS", data)`, or calls `page.write`.
 
-The first tag, `v0.1.0`, is made by a person after the first pull request is merged.
+The first tag is `v0.1.0`.
 
 ## 1. The trial dashboard (sentier-bafu-agribalyse)
 
@@ -103,8 +103,9 @@ change.
 3. Measure noise: keep the scores of an earlier build of the same state, or build one
    state twice in a run, and pass them as the step's noise. Until then the file says "not
    measured", as now.
-4. `build_site.py` copies `page.assets()` into the site and writes `data.js` beside them.
-   The page keeps its own tokens until a frame-less body exists (SPEC section 14).
+4. `build_site.py` copies `page.assets()` into the site, writes `data.js` beside them and
+   puts `page.body()` in the site's own frame. The page takes the site's tokens (`--ink`,
+   `--surface` and the others SPEC section 10 lists) where the site sets them.
 5. **Parity.** For build 22, put the version 2 file and the new file side by side: the
    same pairs, with each class of version 2 mapped to its class here. List every pair that
    changes class and why (the floor per unit, `must`/`may`, missing counted).
