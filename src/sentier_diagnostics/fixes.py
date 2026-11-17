@@ -565,6 +565,20 @@ def _columns(sparse: Mapping) -> dict[str, dict[int, float | None]]:
     return {ind: {k: v for k, v in entries} for ind, entries in sparse.items()}
 
 
+def in_order(values: Iterable[float]) -> float:
+    """Numbers added one at a time from 0.0, in the order given, as the page's port adds them.
+    Not `sum()`: from Python 3.12 on it compensates its rounding (Neumaier), so three numbers
+    or more can end a bit apart from what Python 3.10 and 3.11, and the page, give.
+
+    >>> in_order([0.1, 0.2, 0.3]), in_order([])
+    (0.6000000000000001, 0.0)
+    """
+    total = 0.0
+    for value in values:
+        total += value
+    return total
+
+
 def _sum(before: float | None, changes: list[tuple[float | None, float | None]]) -> tuple[float | None, bool]:
     """The base plus the effects `(result, what it was measured against)` of several fixes at
     one item, and whether a sum could be formed: a side without a result has no difference to add.
@@ -576,7 +590,7 @@ def _sum(before: float | None, changes: list[tuple[float | None, float | None]])
     """
     if before is None or any(a is None or b is None for a, b in changes):
         return None, False
-    return before + sum(a - b for a, b in changes), True
+    return before + in_order(a - b for a, b in changes), True
 
 
 def _level(ends: Iterable[Mapping], indicator: str) -> float | None:
@@ -748,7 +762,7 @@ def pair_terms(f: Mapping, ids: Iterable[str]) -> dict:
     held = held_pairs(f, ids)
     said = [p["largest"] for p in held if p["largest"] is not None]
     sizes = [x for x in said if x != NO_SIZE]
-    value = sum(sizes) if len(sizes) == len(held) else None
+    value = in_order(sizes) if len(sizes) == len(held) else None
     return {"value": value, "measured": len(said), "no_size": len(said) - len(sizes), "pairs": len(held)}
 
 
