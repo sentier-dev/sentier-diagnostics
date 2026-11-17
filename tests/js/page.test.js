@@ -253,6 +253,42 @@ test('a file the page cannot draw draws nothing', () => {
   assert.equal(drawn.byId.title.textContent, '');
 });
 
+test('a host page never offers to open a file; a page of its own does', () => {
+  const host = dom.page(undefined);
+  assert.equal(host.byId.load.hidden, false);
+  assert.equal(host.byId['load-choose'].hidden, true);
+  assert.match(host.byId['load-error'].textContent, /No diagnostics file came with this page/);
+  const broken = example(); broken.counts.total = null;
+  assert.equal(dom.page(broken).byId['load-choose'].hidden, true);
+  const own = dom.page(undefined, undefined, { standalone: true });
+  assert.equal(own.byId['load-choose'].hidden, false);
+  assert.equal(own.byId['load-error'].textContent, '');
+});
+
+test('chips choose the comparison: the whole way first, then each step with what moved in it', () => {
+  const data = example();
+  const drawn = dom.page(data);
+  const chips = () => drawn.byId.comparison.querySelectorAll('button[data-comp]');
+  assert.deepEqual(chips().map((c) => c.getAttribute('data-comp')), ['total'].concat(data.steps.map((s) => s.id)));
+  assert.deepEqual(chips().map((c) => c.getAttribute('aria-pressed')), ['true'].concat(data.steps.map(() => 'false')));
+  const moved = (comp) => Object.values(comp === 'total' ? data.counts.total : data.counts.steps[comp])
+    .reduce((sum, b) => sum + ['differs', 'beyond 10x', 'zero reference', 'zero result', 'sign change'].reduce((a, k) => a + b.classes[k], 0), 0);
+  chips().forEach((chip) => assert.ok(chip.textContent.includes(moved(chip.getAttribute('data-comp')) + ' moved'), chip.textContent));
+  // the unexplained step is flagged, the verdicts worth a look are marked
+  const rebuilt = data.steps.findIndex((s) => !s.explained);
+  assert.ok(rebuilt >= 0);
+  assert.ok(chips()[rebuilt + 1].textContent.includes('!'));
+  assert.match(chips()[rebuilt + 1].getAttribute('title'), /nothing explains it/);
+  const claimed = data.steps.findIndex((s) => s.claim && Object.values(data.counts.steps[s.id]).some((b) => b.verdicts['not claimed']));
+  assert.ok(chips()[claimed + 1].textContent.includes('■'), chips()[claimed + 1].textContent);
+  // a click on a step's label chooses it, and the grid follows
+  const label = chips()[2].childNodes[1]; // the label inside the chip: the click reaches the chip
+  label.dispatch('click', {});
+  assert.deepEqual(chips().map((c) => c.getAttribute('aria-pressed')), ['false', 'false', 'true'].concat(data.steps.slice(2).map(() => 'false')));
+  assert.ok(drawn.byId['grid-region'].getAttribute('aria-label').endsWith(': Step 1: ' + data.steps[1].label + ', the furthest apart first'),
+    drawn.byId['grid-region'].getAttribute('aria-label'));
+});
+
 // ------------------------------------------------------------------ the matrix and the drawer
 
 const local = () => JSON.parse(fs.readFileSync(path.join(EXAMPLE, 'local', 'diagnostics.json'), 'utf8'));
@@ -411,10 +447,10 @@ test('the grid opens with the items that lie furthest apart, and a second click 
   const first = order();
   for (let k = 1; k < first.length; k++) assert.ok(page.compareKeys(worst(first[k - 1]), worst(first[k])) <= 0, first.join());
   assert.notDeepEqual(first, data.items.map((i) => i.id), 'the example is not already in that order');
-  assert.match(drawn.byId['grid-said'].textContent, /The furthest apart first\./);
+  assert.match(drawn.byId['grid-region'].getAttribute('aria-label'), /, the furthest apart first$/);
   const button = () => drawn.byId['grid-table'].querySelectorAll('th[scope="col"]')[0].querySelector('button[type="button"]');
   button().dispatch('click', {});
-  assert.doesNotMatch(drawn.byId['grid-said'].textContent, /furthest apart first/);
+  assert.doesNotMatch(drawn.byId['grid-region'].getAttribute('aria-label'), /furthest apart first/);
   button().dispatch('click', {});
   assert.deepEqual(order(), first);
 });
@@ -502,7 +538,7 @@ test('the page\'s own sentences say the file\'s word for an item', () => {
   assert.ok(items.length >= 4);
   for (const span of items) assert.equal(span.textContent, span.getAttribute('data-sd-word') === 'many' ? 'datasets' : 'dataset');
   assert.equal(drawn.byId['item-close'].getAttribute('aria-label'), 'Close the dataset');
-  assert.equal(drawn.byId['grid-region'].getAttribute('aria-label'), 'After divided by before, per dataset and indicator');
+  assert.ok(drawn.byId['grid-region'].getAttribute('aria-label').startsWith('After divided by before, per dataset and indicator: The whole way'));
 });
 
 test('the page says the file\'s word for an indicator, and "indicator" where it gives none', () => {
@@ -517,7 +553,7 @@ test('the page says the file\'s word for an indicator, and "indicator" where it 
   assert.ok(said(drawn, 'indicator').length >= 3);
   assert.deepEqual([...new Set(said(drawn, 'indicator'))], ['impact category']);
   assert.deepEqual(said(drawn, 'Indicator'), ['Impact category']);
-  assert.equal(drawn.byId['grid-region'].getAttribute('aria-label'), 'After divided by before, per ' + data.item.one + ' and impact category');
+  assert.ok(drawn.byId['grid-region'].getAttribute('aria-label').startsWith('After divided by before, per ' + data.item.one + ' and impact category: '));
   const text = drawn.text();
   assert.match(text, new RegExp(data.indicators.length + ' impact categories\\. '));
   assert.match(text, /One floor per impact category and reference unit/);

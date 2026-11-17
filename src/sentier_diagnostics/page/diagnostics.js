@@ -31,6 +31,7 @@
   // the ends of the bands, as rule.SIZE_STEPS: the distance (|log10| of the factor) at which each ends
   var SIZE_STEPS = [[Math.log10(1.1), '1-1.1'], [Math.log10(1.25), '1.1-1.25'], [Math.log10(2), '1.25-2'], [1, '2-10']];
   var LOOK = ['off claim', 'not claimed', 'claimed, not moved'];
+  var LOOK_MARK = { 'off claim': '◐', 'not claimed': '■', 'claimed, not moved': '○' };
   var SAID = {
     'agrees': 'the two results differ by no more than the tolerance',
     'within noise': 'they differ by no more than two builds of one state do',
@@ -514,25 +515,26 @@
       var classes = 'cell tone-' + v.tone + (v.noRatio ? ' no-ratio' : '');
       var td = el('td', { cls: classes, title: title, style: v.strength ? '--s:' + v.strength : null, 'data-class': cls },
         [v.text, v.mark ? el('span', { cls: 'mark', text: v.mark, 'aria-hidden': 'true' }) : null]);
-      if (verdict && LOOK.indexOf(verdict) >= 0) td.appendChild(el('span', { cls: 'mark verdict-look', text: verdict === 'claimed, not moved' ? '○' : verdict === 'off claim' ? '◐' : '■', title: verdict }));
+      if (verdict && LOOK.indexOf(verdict) >= 0) td.appendChild(el('span', { cls: 'mark verdict-look', text: LOOK_MARK[verdict], title: verdict }));
       return td;
     }
 
     function legend(node, ratio) {
       clear(node);
+      // short words beside each key, the whole sentence in its title
       var keys = [
-        ['tone-up', ratio ? '1.3' : 'up', 'went up (as signed numbers)'],
-        ['tone-down', ratio ? '0.77' : 'down', 'went down: two results below zero that go further below zero went down'],
-        ['tone-up no-ratio', '0 →', 'from zero, to zero or across zero: no ratio'],
-        ['tone-none', ratio ? '1.00' : '=', 'agrees within the tolerance' + (ratio ? ': no tint' : '')],
-        ['tone-noise', ratio ? '1.00~' : '~', 'within the measured noise'],
-        ['tone-near', '≈ 0', 'near zero on both sides'],
-        ['tone-missing', 'missing', 'a side has no result']
+        ['tone-up', ratio ? '1.3' : 'up', 'up', 'went up (as signed numbers)'],
+        ['tone-down', ratio ? '0.77' : 'down', 'down', 'went down (as signed numbers): two results below zero that go further below zero went down'],
+        ['tone-up no-ratio', '0 →', 'no ratio', 'from zero, to zero or across zero: no ratio'],
+        ['tone-none', ratio ? '1.00' : '=', 'agrees', 'agrees within the tolerance' + (ratio ? ': no tint' : '')],
+        ['tone-noise', ratio ? '1.00~' : '~', 'noise', 'within the measured noise'],
+        ['tone-near', '≈ 0', 'near zero', 'near zero on both sides'],
+        ['tone-missing', 'missing', '', 'a side has no result']
       ];
       keys.forEach(function (k) {
-        node.appendChild(el('span', null, [el('span', { cls: 'key ' + k[0], style: '--s:0.7', text: k[1] }), k[2]]));
+        node.appendChild(el('span', { title: k[3] }, [el('span', { cls: 'key ' + k[0], style: '--s:0.7', text: k[1] }), k[2]]));
       });
-      node.appendChild(el('span', null, ['■ not claimed, ◐ off claim, ○ claimed, not moved']));
+      node.appendChild(el('span', { title: 'verdicts worth a look' }, ['■ not claimed ◐ off claim ○ claimed, not moved']));
     }
 
     // the file's own word for an item, in the page's own sentences
@@ -566,10 +568,42 @@
       // only a chain that starts from the published results has a step 0 that reproduces them
       q('steps-zero').hidden = D.states[0].kind !== 'published';
       q('made-by').textContent = 'Written by ' + D.made_by + '. ' + FORMAT + '.';
-      var select = clear(q('comparison'));
-      select.appendChild(el('option', { value: 'total', text: 'The whole way' }));
-      D.steps.forEach(function (s, k) { select.appendChild(el('option', { value: s.id, text: 'Step ' + stepNo(k) + ': ' + s.label })); });
-      select.value = view.comp;
+      renderChips();
+    }
+
+    // the comparison is chosen from a row of chips: the whole way, then each step with its
+    // number, the values that moved in it and a mark for each verdict worth a look
+    function renderChips() {
+      var row = clear(q('comparison'));
+      var chip = function (value, parts, title) {
+        row.appendChild(el('button', { type: 'button', cls: 'sd-chip', 'data-comp': value, title: title,
+          'aria-pressed': view.comp === value ? 'true' : 'false' }, parts));
+      };
+      var count = function (comp) {
+        var m = sumOver(comp, moved);
+        return el('span', { cls: 'sd-chip-count', text: n(m) + ' moved' });
+      };
+      chip('total', [el('span', { cls: 'sd-chip-label', text: 'The whole way' }), count('total')], compLabel('total'));
+      D.steps.forEach(function (s, k) {
+        var parts = [el('span', { cls: 'sd-chip-no', text: String(stepNo(k)) }), el('span', { cls: 'sd-chip-label', text: s.label }), count(s.id)];
+        var said = [compLabel(s.id), n(sumOver(s.id, moved)) + ' values moved'];
+        if (!s.explained) {
+          parts.push(el('span', { cls: 'sd-chip-flag', text: '!' }));
+          said.push('nothing explains it');
+        }
+        if (s.claim) LOOK.forEach(function (name) {
+          var found = sumOver(s.id, function (b) { return b.verdicts[name]; });
+          if (!found) return;
+          parts.push(el('span', { cls: 'sd-chip-mark', text: LOOK_MARK[name] }));
+          said.push(n(found) + ' ' + name);
+        });
+        chip(s.id, parts, said.join('. ') + '.');
+      });
+    }
+
+    function markChips() {
+      var chips = q('comparison').querySelectorAll('button[data-comp]');
+      for (var i = 0; i < chips.length; i++) chips[i].setAttribute('aria-pressed', chips[i].getAttribute('data-comp') === view.comp ? 'true' : 'false');
     }
 
     // what the page holds of the items: the listed ones, or every one once the matrix is here
@@ -647,7 +681,7 @@
           row.push(el('td', { cls: 'num' + (block.classes[c] ? '' : ' zero'), text: n(block.classes[c]), title: title }));
         });
         row.push(el('td', { cls: 'num', text: n(block.directions.up) }), el('td', { cls: 'num', text: n(block.directions.down) }));
-        row.push(el('td', { text: ranked.join(', ') || 'none' }));
+        row.push(el('td', { cls: 'sd-wide', text: ranked.join(', ') || 'none' }));
         row.push(el('td', { cls: 'num', text: n(att.spread), title: 'its total moved, and no single step moved it: small steps that add up' }));
         row.push(el('td', { cls: 'num', text: n(att.not_attributable), title: 'its total moved, and it has no result in a state between: its difference cannot be split' }));
         row.push(el('td', { cls: 'num', text: n(att.unexplained_moved), title: 'moved in a step that no cause explains' }));
@@ -792,8 +826,10 @@
       var shown = found.slice(0, view.limit);
       q('grid-said').textContent = D.tier === 'counts'
         ? 'This file holds counts only: it names no ' + D.item.one + '.'
-        : 'Showing ' + groupThousands(shown.length) + ' of ' + groupThousands(found.length) + ' ' + many(found.length) + ', among ' + heldSaid() + '. ' +
-          compLabel(view.comp) + '.' + (view.sort === 'worst' ? ' The furthest apart first.' : '') + sizeSaid();
+        : 'Showing ' + groupThousands(shown.length) + ' of ' + groupThousands(found.length) + ' ' + many(found.length) +
+          (M ? '' : ', among ' + heldSaid()) + '.' + sizeSaid();
+      q('grid-region').setAttribute('aria-label', 'After divided by before, per ' + D.item.one + ' and ' + indWord(false) + ': ' + compLabel(view.comp) +
+        (view.sort === 'worst' ? ', the furthest apart first' : ''));
       var table = clear(q('grid-table'));
       var sorted = function (key) { return view.sort === key ? (key === 'name' ? 'ascending' : 'descending') : null; };
       var head = [
@@ -1165,7 +1201,7 @@
       });
       ['audience', 'unchecked', 'item'].forEach(function (name) { if (q(name)) q(name).hidden = true; });
       if (q('states')) clear(q('states'));
-      q('load').hidden = false;
+      showLoad();
       q('content').hidden = true;
       q('load-error').textContent = problem;
     }
@@ -1229,7 +1265,13 @@
     }
 
     function start() {
-      q('comparison').addEventListener('change', function (e) { view.comp = e.target.value; view.cls = ''; view.verdict = ''; view.limit = PAGE; renderComparison(); });
+      q('comparison').addEventListener('click', function (e) {
+        var chip = e.target.closest ? e.target.closest('button[data-comp]') : null;
+        if (!chip || chip.getAttribute('data-comp') === view.comp) return;
+        view.comp = chip.getAttribute('data-comp'); view.cls = ''; view.verdict = ''; view.limit = PAGE;
+        markChips();
+        renderComparison();
+      });
       q('size').addEventListener('change', function (e) { view.size = +e.target.value; view.limit = PAGE; renderWorst(); renderGrid(); });
       q('worst-n').addEventListener('change', function (e) { view.worstN = +e.target.value; renderWorst(); });
       q('worst-indicator').addEventListener('change', function (e) { view.worstIndicator = e.target.value; renderWorst(); });
@@ -1273,7 +1315,15 @@
         });
         return;
       }
+      showLoad();
+    }
+
+    // the place for a file: a page of its own offers to open one; a host's page never does,
+    // and shows only why nothing is drawn
+    function showLoad() {
       q('load').hidden = false;
+      q('load-choose').hidden = !standalone;
+      if (!standalone && !q('load-error').textContent) q('load-error').textContent = 'No diagnostics file came with this page.';
     }
 
     start();

@@ -488,9 +488,20 @@ items, the length of every row) before a row of it is drawn; its codes are check
 The text a page renders comes from the file or from words chosen to be neutral: it avoids
 stage, triage, ledger, layer, upstream, provider and candidate (a test holds this).
 
+**The page is a matrix page.** From the top: the header (10.1); a row of chips that
+chooses the comparison, the whole way first and then each step with its number, the values
+that moved in it, a `!` where nothing explains it and a mark for each verdict worth a look;
+one row of controls (name, group, class, verdict, the size filter) with the count and the
+legend on its right; then the matrix (10.5), which opens an item in a drawer (10.6). Below
+it, each closed until a reader opens it: the steps and the whole way (10.2), the
+distributions (10.3), the worst values (10.4), the explanations and the rule (10.7). A
+host's page never offers to open a file; it says only why nothing is drawn.
+
 ### 10.1 Header
-Title, the states in order (with their identity and join counts), the file's tier, how many
-items it holds of how many worth a look, and a banner for a local file.
+The title, the file's `about`, and one quiet line: how many items and indicators, how many
+it holds of how many worth a look, and, for a local file, that its writer has not said it
+may be published (a quiet part of the line, as a site's own notice, not a box). The states
+in order, with their identity and join counts, head the steps (10.2).
 
 ### 10.2 Steps and the whole way
 Steps are numbered from 0 where the first state is `published`: step 0 is then the
