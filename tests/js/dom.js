@@ -154,6 +154,7 @@ function page(data, breakdowns, options) {
   for (const [key, value] of Object.entries(options.attributes || {})) root.setAttribute(key, value);
   const head = new FakeNode('head');
   const listeners = {};
+  const documentListeners = {}; // by type: [listener, capture]
   const document = {
     title: '',
     readyState: 'complete',
@@ -162,7 +163,12 @@ function page(data, breakdowns, options) {
     createElement: (tag) => new FakeNode(tag),
     createTextNode: (text) => new FakeNode(null, String(text)),
     querySelectorAll: (selector) => (matches(root, selector) ? [root] : []),
-    addEventListener: () => {},
+    addEventListener: (type, listener, capture) => { (documentListeners[type] = documentListeners[type] || []).push([listener, !!capture]); },
+    removeEventListener: (type, listener, capture) => {
+      const held = documentListeners[type] || [];
+      const at = held.findIndex(([l, c]) => l === listener && c === !!capture);
+      if (at >= 0) held.splice(at, 1);
+    },
   };
   root.ownerDocument = document;
   const context = {
@@ -177,6 +183,7 @@ function page(data, breakdowns, options) {
     addEventListener: (type, listener) => { (listeners[type] = listeners[type] || []).push(listener); },
     removeEventListener: (type, listener) => { const held = listeners[type] || []; if (held.indexOf(listener) >= 0) held.splice(held.indexOf(listener), 1); },
     URLSearchParams,
+    WeakRef, // as a browser has it; a test takes it away to see the page without it
     FileReader: class {},
     fetch: options.fetch || (() => Promise.reject(new Error('no network'))),
     ...(options.globals || {}),
@@ -203,6 +210,7 @@ function page(data, breakdowns, options) {
     // the hashchange a browser fires after the page itself wrote the hash
     changed: () => (listeners.hashchange || []).slice().forEach((listener) => listener({})),
     listeners,
+    documentListeners,
   };
 }
 
