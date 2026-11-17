@@ -55,6 +55,17 @@ def as_script(name: str, value) -> str:
     return f"window.{name} = {_json(value)};\n"
 
 
+def matrix_script(matrix: Mapping) -> str:
+    """A matrix as the script beside a page: it adds an entry to the list of matrices handed
+    to the pages of a document (`SENTIER_DIAGNOSTICS_MATRICES`) rather than setting one
+    global: the address the script was loaded from and the matrix. A page takes the entry of
+    the script it names, so that two pages in one host each take the matrix of their own file."""
+    return (
+        "(window.SENTIER_DIAGNOSTICS_MATRICES = window.SENTIER_DIAGNOSTICS_MATRICES || []).push("
+        f'{{"src": document.currentScript ? document.currentScript.src : null, "matrix": {_json(matrix)}}});\n'
+    )
+
+
 def _read(name: str) -> str:
     return (resources.files(__package__) / "page" / name).read_text(encoding="utf-8")
 
@@ -141,7 +152,7 @@ def write(
             raise ValueError("not the matrix of this file: " + "; ".join(found[:10]))
     inner = _body(data, breakdowns=breakdowns, base="", title=False,
                   matrix=MATRIX_SCRIPT if matrix is not None else None, standalone=True)  # fmt: skip
-    script = as_script("SENTIER_DIAGNOSTICS_MATRIX", matrix) if matrix is not None else None
+    script = matrix_script(matrix) if matrix is not None else None
     if script is not None and len(script) > matrix_format.MAX_BYTES:
         raise ValueError(
             f"{MATRIX_SCRIPT} would be {len(script)} bytes, and a page loads {matrix_format.MAX_BYTES} at most"

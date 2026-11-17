@@ -59,6 +59,8 @@
     '~': 'within noise', '=': 'unchanged', '?': 'not judged'
   };
   var NO_CLAIM = '.';
+  // what a column's heading sorts by, in the words of its title (furthestKey)
+  var COLUMN_ORDER = 'Sort by this column: the moves that have no factor first (from or to zero, a sign change), then the largest factor between the two results, then the rest';
   var SAME = '='; // matrix.SAME: a result equal to the one of the state before it
 
   // ------------------------------------------------------------------ pure helpers
@@ -379,13 +381,16 @@
   // pairs included ("1.00"), so that a column reads as numbers; else what cellView says
   // ("≈ 0", "from 0", "− → +", "missing"). The class shows as the tint and a mark, never in
   // place of the number: the colour is the direction's, its strength the band's. The ratio is
-  // a display; the class stays the file's.
+  // a display; the class stays the file's. A pair that moved never reads as one that agrees:
+  // where three digits round its ratio to "1.00", it is written as ratioText writes it
+  // ("1 + 2e−4", "1.004"), so that the text, not only the tint, says it moved.
   var RATIO_CLASSES = ['agrees', 'within noise', 'differs', 'beyond 10x'];
   function ratioView(before, after, cls, dir, band) {
     var view = cellView(before, after, cls, dir, band);
     var ratio = before !== null && after !== null && before !== 0 && after !== 0 && (before > 0) === (after > 0);
     if (ratio && RATIO_CLASSES.indexOf(cls) >= 0) {
       view.text = ratioShort(before, after);
+      if (MOVES.indexOf(cls) >= 0 && view.text === '1.00') view.text = ratioText(before, after);
       if (cls === 'within noise') view.mark = '~';
       view.title += ' After ÷ before: ' + String(after / before) + '.';
     }
@@ -406,12 +411,123 @@
     return [rank, -magnitude];
   }
 
+  // whether numbers add up to a total as a breakdown must: to within 1e-9 of the largest of
+  // them, summed from the left (breakdown.CLOSURE and breakdown._adds_up)
+  var CLOSURE = 1e-9;
+  function addsUp(parts, total) {
+    var size = Math.abs(total), sum = 0;
+    parts.forEach(function (p) { size = Math.max(size, Math.abs(p)); sum += p; });
+    return Math.abs(sum - total) <= CLOSURE * size;
+  }
+
   function compareKeys(a, b) {
     for (var i = 0; i < Math.min(a.length, b.length); i++) {
       if (a[i] < b[i]) return -1;
       if (a[i] > b[i]) return 1;
     }
     return a.length - b.length;
+  }
+
+  // The relative luminance of a colour as CSS writes it (WCAG 2), or null where it cannot be
+  // read. Hex, rgb(), oklab() and oklch() are read here: the browser gives a host's colour in
+  // one of these where the host wrote it in sRGB or in OKLab (Tailwind 4 writes every colour
+  // in oklch). Any other form (lab(), color() ...) is drawn on a canvas of one pixel and read
+  // back. A canvas keeps its colour when it is given one it cannot read (light-dark(), a bare
+  // "0 0% 100%"): set over two different colours, such a text leaves two different colours,
+  // and is unknown, never black. A browser that hides what a canvas holds (against
+  // fingerprinting) gives back blank or altered pixels: a known colour that does not come
+  // back as it went says that nothing drawn can be read, and the colour is unknown.
+  function luminance(text, doc) {
+    text = String(text || '').trim();
+    var rgb = null, m;
+    if ((m = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(text))) {
+      var h = m[1].length <= 4 ? m[1].replace(/(.)/g, '$1$1') : m[1];
+      rgb = [0, 2, 4].map(function (at) { return parseInt(h.slice(at, at + 2), 16); });
+    } else if ((m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(text))) {
+      rgb = [+m[1], +m[2], +m[3]];
+    } else if ((m = OKLAB.exec(text))) {
+      return oklabLuminance(m);
+    } else if (text && doc && doc.createElement) {
+      try {
+        var canvas = doc.createElement('canvas');
+        canvas.width = canvas.height = 1;
+        var context = canvas.getContext('2d');
+        var taken = ['#010203', '#fdfeff'].map(function (over) {
+          context.fillStyle = over; context.fillStyle = text;
+          return String(context.fillStyle);
+        });
+        if (taken[0] !== taken[1]) return null;
+        var drawn = function (fill) {
+          context.clearRect(0, 0, 1, 1);
+          context.fillStyle = fill;
+          context.fillRect(0, 0, 1, 1);
+          var d = context.getImageData(0, 0, 1, 1).data;
+          return [d[0], d[1], d[2]];
+        };
+        if (drawn('#010203').join() !== '1,2,3') return null;
+        rgb = drawn(text);
+      } catch (error) { return null; }
+    }
+    if (!rgb || rgb.some(function (v) { return !isFinite(v); })) return null;
+    var lin = rgb.map(function (v) { v = Math.min(255, v) / 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+    return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+  }
+
+  // oklab(L a b) and oklch(L C H), as CSS Color 4 writes them: L a number or a percentage of
+  // 1, a, b and C a number or a percentage of 0.4, H in degrees (or deg, grad, rad, turn),
+  // "none" as zero; an alpha after "/" is left aside, as rgb() leaves it
+  var OKNUM = '(none|[+-]?(?:\\d+\\.?\\d*|\\.\\d+)(?:e[+-]?\\d+)?(?:%|deg|grad|rad|turn)?)';
+  var OKLAB = new RegExp('^okl(ab|ch)\\(\\s*' + OKNUM + '\\s+' + OKNUM + '\\s+' + OKNUM + '\\s*(?:\\/[^)]*)?\\)$', 'i');
+  var TURN = { deg: 1, grad: 0.9, rad: 180 / Math.PI, turn: 360 };
+  function oklabLuminance(m) {
+    function part(t, whole) {
+      if (/^none$/i.test(t)) return 0;
+      var unit = /[a-z%]+$/i.exec(t), v = parseFloat(t);
+      if (!unit) return v;
+      if (unit[0] === '%') return whole === undefined ? NaN : v / 100 * whole;
+      return whole === undefined ? v * TURN[unit[0].toLowerCase()] : NaN; // an angle only in a hue
+    }
+    var lch = m[1].toLowerCase() === 'ch';
+    var L = part(m[2], 1), a, b;
+    if (lch) {
+      var C = part(m[3], 0.4), hue = part(m[4]) * Math.PI / 180;
+      a = C * Math.cos(hue); b = C * Math.sin(hue);
+    } else {
+      a = part(m[3], 0.4); b = part(m[4], 0.4);
+    }
+    if (![L, a, b].every(isFinite)) return null;
+    // OKLab to linear sRGB (Ottosson 2020), clipped to sRGB as a canvas draws it
+    var l = Math.pow(L + 0.3963377774 * a + 0.2158037573 * b, 3);
+    var mm = Math.pow(L - 0.1055613458 * a - 0.0638541728 * b, 3);
+    var s = Math.pow(L - 0.0894841775 * a - 1.2914855480 * b, 3);
+    var lin = [
+      4.0767416621 * l - 3.3077115913 * mm + 0.2309699292 * s,
+      -1.2684380046 * l + 2.6097574011 * mm - 0.3413193965 * s,
+      -0.0041960863 * l - 0.7034186147 * mm + 1.7076147010 * s,
+    ].map(function (v) { return Math.min(1, Math.max(0, v)); });
+    return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+  }
+
+  // Whether the host's tokens make a dark page: a light ink (whatever its ground), or a dark
+  // ground where no ink can be read. A token that is no colour the page can read says
+  // nothing: it is never taken for black. Light and dark part where a colour contrasts as
+  // much with black as with white, at a relative luminance of about 0.179.
+  var SCHEME_PARTS = Math.sqrt(1.05 * 0.05) - 0.05;
+
+  // the keys a host may name a page by in the address (`data-sd-key`), and the page's own
+  var KEY_LONGEST = 40;
+  var KEY_WORD = new RegExp('^[A-Za-z][A-Za-z0-9_-]{0,' + (KEY_LONGEST - 1) + '}$');
+  var OWN_KEY = /^sd[0-9]*$/i;
+  function schemeIsDark(ink, surface, lum) {
+    function read(text) {
+      text = String(text || '').trim();
+      var l = text ? lum(text) : null;
+      return l === null || l === undefined || !isFinite(l) ? null : l;
+    }
+    var l = read(ink);
+    if (l !== null) return l > SCHEME_PARTS;
+    l = read(surface);
+    return l !== null && l < SCHEME_PARTS;
   }
 
   // what a page needs of a file before it shows anything
@@ -569,14 +685,21 @@
     if (!root || root.getAttribute('data-sd-mounted') !== null) return null;
     root.setAttribute('data-sd-mounted', '');
     given = given || {};
-    var doc = root.ownerDocument || global.document;
+    // the document the page lives in: its root's, but for a root a host built from a
+    // <template>, whose document is inert (no window) until the host puts it in the page's
+    var doc = root.ownerDocument && root.ownerDocument.defaultView ? root.ownerDocument : global.document;
     var win = global;
     var standalone = root.getAttribute('data-sd-standalone') !== null;
     var base = root.getAttribute('data-sd-base') || '';
 
     var D = null, B = {}, LISTED = [], M = null;
     var matrix = { state: 'none', said: '' };
-    var view = { set: [], anchor: null, notice: '', pickOpen: false, pickFind: '', pickMoved: false, worstN: 20, worstIndicator: '', find: '', cls: '', verdict: '', group: '', limit: PAGE, size: 0, sort: 'worst', open: null, distScale: 'card' };
+    // what the grid is sorted by: the page's own orders and an indicator's column are kept in
+    // two spaces, so that an indicator called "name" or "worst" is a column like any other
+    var WORST = { by: 'worst' }, BY_NAME = { by: 'name' };
+    function byColumn(id) { return { by: 'indicator', id: id }; }
+    var view = { set: [], anchor: null, notice: '', pickOpen: false, pickFind: '', pickMoved: false, worstN: 20, worstIndicator: '', find: '', cls: '', verdict: '', group: '', limit: PAGE, size: 0, sort: WORST, open: null, distScale: 'card' };
+    function sortIs(sort) { return view.sort.by === sort.by && view.sort.id === sort.id; }
     var lastFocus = null;
 
     function q(name) { return root.querySelector('[data-sd="' + name + '"]'); }
@@ -1293,7 +1416,7 @@
       var cards = q('dist-cards').childNodes;
       for (var i = 0; i < cards.length; i++) {
         var card = cards[i];
-        var chosen = card.getAttribute('data-indicator') === view.sort;
+        var chosen = sortIs(byColumn(card.getAttribute('data-indicator')));
         card.className = card.className.replace(/ sd-chosen/g, '') + (chosen ? ' sd-chosen' : '');
         var button = card.childNodes[0].childNodes[0];
         button.setAttribute('aria-pressed', chosen ? 'true' : 'false');
@@ -1342,17 +1465,19 @@
           ? 'Median of ' + groupThousands(qs.n) + ' ' + (qs.n === 1 ? 'ratio' : 'ratios') + ' ' + said3[1] + ', 10th percentile ' + said3[0] + ', 90th ' + said3[2] +
             (left ? '; ' + groupThousands(left) + ' without a ratio' : '')
           : 'No value with a ratio');
-        var button = el('button', { type: 'button', cls: 'sd-dist-pick', 'aria-pressed': view.sort === ind.id ? 'true' : 'false',
+        var column = byColumn(ind.id);
+        var button = el('button', { type: 'button', cls: 'sd-dist-pick', 'aria-pressed': sortIs(column) ? 'true' : 'false',
           title: 'Sort the matrix by ' + ind.name }, [ind.name]);
         button.addEventListener('click', function () {
-          view.sort = view.sort === ind.id ? 'worst' : ind.id;
+          if (released) return; // drawn by a page since unmounted: another may be mounted here
+          view.sort = sortIs(column) ? WORST : column;
           view.limit = PAGE;
           renderGrid();
           markChosenCard();
           var region = q('grid-region');
           if (region && region.scrollIntoView) region.scrollIntoView({ block: 'start', behavior: 'smooth' });
         });
-        box.appendChild(el('div', { cls: 'sd-dist' + (c.active ? '' : ' sd-still') + (view.sort === ind.id ? ' sd-chosen' : ''), 'data-indicator': ind.id }, [
+        box.appendChild(el('div', { cls: 'sd-dist' + (c.active ? '' : ' sd-still') + (sortIs(column) ? ' sd-chosen' : ''), 'data-indicator': ind.id }, [
           el('h4', null, [button]),
           el('p', { cls: 'sd-top', 'aria-hidden': 'true', text: view.distScale === 'one'
             ? 'full height: ' + groupThousands(Math.round(top)) + ' of ' + groupThousands(block.pairs)
@@ -1393,7 +1518,7 @@
       var body = el('tbody');
       shown.forEach(function (one, i) {
         var pair = pairOf(one.row, one.ind, k);
-        body.appendChild(el('tr', { cls: 'sd-row', tabindex: '0', 'data-item': one.row.id }, [
+        body.appendChild(el('tr', { cls: 'sd-row', tabindex: i ? '-1' : '0', 'data-item': one.row.id }, [
           el('td', { cls: 'num', text: String(i + 1) }),
           el('td', { text: one.row.name + (one.row.place ? ' (' + one.row.place + ')' : '') }),
           el('td', { text: indicatorName(one.ind) }),
@@ -1420,43 +1545,61 @@
         return true;
       });
       var keyed = found.map(function (row, at) {
-        if (view.sort === 'name') return { row: row, key: [row.name.toLowerCase(), row.place || '', at] };
-        if (view.sort === 'worst') return { row: row, key: worstKey(row, k, ids).concat([at]) };
-        var pair = pairOf(row, view.sort, k);
-        return { row: row, key: severityKey(pair[0], pair[1], clsAt(row, view.sort, k)).concat([at]) };
+        if (view.sort.by === 'name') return { row: row, key: [row.name.toLowerCase(), row.place || '', at] };
+        if (view.sort.by === 'worst') return { row: row, key: worstKey(row, k, ids).concat([at]) };
+        return { row: row, key: furthestKey(row, k, [view.sort.id]).concat([at]) };
       });
       keyed.sort(function (a, b) { return compareKeys(a.key, b.key); });
       return keyed.map(function (one) { return one.row; });
     }
 
-    // where a row stands when the grid opens: the largest factor between its two results over
-    // every indicator, among the values that moved and have a ratio, the furthest from 1
-    // first; a row whose moves have no ratio (from or to zero, a sign change) follows, by its
-    // worst value as severityKey orders values; a row that did not move comes last. Kept on
-    // the row per comparison.
-    function worstKey(row, k, ids) {
-      var tag = isSet(k) ? 'set:' + C.key : k;
-      if (row.worst && row.worst.k === tag) return row.worst.key;
+    // where a row stands over the indicators `ids`: a move that has no factor (from or to
+    // zero, a sign change) lies further apart than any factor, so such a row comes first;
+    // then the largest factor between its two results, among the values that moved, the
+    // furthest from 1 first; a row that did not move comes last; among equals, by its worst
+    // value as severityKey orders values. Over every indicator it is the order the grid opens
+    // in; over one, the order of that column's heading: one order, the one the titles say.
+    var NO_FACTOR = ['zero reference', 'zero result', 'sign change'];
+    function furthestKey(row, k, ids) {
       var furthest = 0, worst = null;
       ids.forEach(function (id) {
         var pair = pairOf(row, id, k), cls = clsAt(row, id, k);
-        if (cls === 'differs' || cls === 'beyond 10x') furthest = Math.max(furthest, distance(pair[0], pair[1]));
+        if (NO_FACTOR.indexOf(cls) >= 0) furthest = Infinity;
+        else if (cls === 'differs' || cls === 'beyond 10x') furthest = Math.max(furthest, distance(pair[0], pair[1]));
         var one = severityKey(pair[0], pair[1], cls);
         if (worst === null || compareKeys(one, worst) < 0) worst = one;
       });
-      var key = [-furthest].concat(worst);
+      return [-furthest].concat(worst);
+    }
+
+    // the order the grid opens in, kept on the row per comparison
+    function worstKey(row, k, ids) {
+      var tag = isSet(k) ? 'set:' + C.key : k;
+      if (row.worst && row.worst.k === tag) return row.worst.key;
+      var key = furthestKey(row, k, ids);
       row.worst = { k: tag, key: key };
       return key;
     }
 
-    // a heading sorts by itself; a second click goes back to the furthest apart first
-    function sortButton(label, key, title) {
+    // a heading sorts by itself; a second click goes back to the furthest apart first. The
+    // headings are drawn anew, so the focus goes to the new button of the same heading, not
+    // to the end of the page.
+    function sortButton(label, sort, title) {
       var button = el('button', { type: 'button', cls: 'sd-sort', text: label, title: title });
+      button.sdSort = sort;
       button.addEventListener('click', function () {
-        view.sort = view.sort === key ? 'worst' : key;
+        if (released) return;
+        var focused = doc.activeElement === button;
+        view.sort = sortIs(sort) ? WORST : sort;
         view.limit = PAGE;
         renderGrid();
         markChosenCard();
+        if (!focused) return;
+        var again = q('grid-table').querySelectorAll('button[type="button"]');
+        for (var i = 0; i < again.length; i++) {
+          var other = again[i].sdSort;
+          if (other && other.by === sort.by && other.id === sort.id) { again[i].focus(); break; }
+        }
       });
       return button;
     }
@@ -1489,22 +1632,22 @@
         : 'Showing ' + groupThousands(shown.length) + ' of ' + groupThousands(found.length) + ' ' + many(found.length) +
           (M ? '' : ', among ' + heldSaid()) + '.' + sizeSaid();
       q('grid-region').setAttribute('aria-label', 'After divided by before, per ' + D.item.one + ' and ' + indWord(false) + ': ' + nowLabel() +
-        (view.sort === 'worst' ? ', the furthest apart first' : ''));
+        (view.sort.by === 'worst' ? ', the furthest apart first' : ''));
       var table = clear(q('grid-table'));
-      var sorted = function (key) { return view.sort === key ? (key === 'name' ? 'ascending' : 'descending') : null; };
+      var sorted = function (sort) { return sortIs(sort) ? (sort.by === 'name' ? 'ascending' : 'descending') : null; };
       var head = [
-        el('th', { scope: 'col', cls: 'sd-name', 'aria-sort': sorted('name') }, [sortButton(capital(D.item.one), 'name', 'Sort by name')]),
+        el('th', { scope: 'col', cls: 'sd-name', 'aria-sort': sorted(BY_NAME) }, [sortButton(capital(D.item.one), BY_NAME, 'Sort by name')]),
         el('th', { scope: 'col', cls: 'sd-group', text: 'Group' })
       ];
       cols.forEach(function (c) {
-        var ind = c.ind;
-        head.push(el('th', { scope: 'col', cls: 'num' + (c.active ? '' : ' sd-still'), 'aria-sort': sorted(ind.id),
+        var ind = c.ind, column = byColumn(ind.id);
+        head.push(el('th', { scope: 'col', cls: 'num' + (c.active ? '' : ' sd-still'), 'aria-sort': sorted(column),
           title: ind.name + (ind.unit ? ' (' + ind.unit + ')' : '') + ': ' + activeSaid(c) + ' here' },
-          [sortButton(indicatorName(ind.id), ind.id, 'Sort by how far the two lie apart, the furthest first')]));
+          [sortButton(indicatorName(ind.id), column, COLUMN_ORDER)]));
       });
       table.appendChild(el('thead', null, [el('tr', null, head)]));
       var body = el('tbody');
-      shown.forEach(function (row) {
+      shown.forEach(function (row, i) {
         var name = row.name + (row.place ? ' (' + row.place + ')' : '');
         var cells = [
           el('th', { scope: 'row', title: name + ', per ' + (row.unit || 'unknown unit') }, [M && row.item ? el('span', { cls: 'sd-listed', title: 'listed in this file' }) : null, name]),
@@ -1515,7 +1658,7 @@
           if (!c.active) td.className += ' sd-still';
           cells.push(td);
         });
-        body.appendChild(el('tr', { cls: 'sd-row', tabindex: '0', 'data-item': row.id, 'aria-current': view.open === row.id ? 'true' : null }, cells));
+        body.appendChild(el('tr', { cls: 'sd-row', tabindex: i ? '-1' : '0', 'data-item': row.id, 'aria-current': view.open === row.id ? 'true' : null }, cells));
       });
       table.appendChild(body);
       var more = q('grid-more');
@@ -1640,13 +1783,20 @@
       var list = el('ul', { cls: 'sd-why' });
       var own = D.explanations.filter(function (e) { return e.about.item === row.id; });
       var wider = D.explanations.filter(function (e) { return !e.about.item && movedUnder(row, e.about); });
+      // a file explains the items it lists only: for one that came from the matrix, no
+      // explanation of its own was ever possible, which is not "none given"
+      if (!row.item) {
+        list.appendChild(el('li', { cls: 'sd-none', text: 'Not listed in this file, so it carries no explanation of its own: a file explains only the ' + D.item.many + ' it lists.' }));
+      }
       own.forEach(function (e) { list.appendChild(explanationNode(e, 'This ' + D.item.one)); });
       wider.forEach(function (e) { list.appendChild(explanationNode(e, e.about.step && e.about.indicator ? 'Its step and ' + indWord(false) : e.about.step ? 'A step it moved in' : e.about.indicator ? capital(article(indWord(false))) + ' it moved in' : 'The whole file')); });
       if (!own.length && !wider.length) {
         var any = movedUnder(row, {});
-        list.appendChild(el('li', { cls: 'sd-none', text: any
-          ? 'None given: no explanation in this file is about this ' + D.item.one + ', or about a step or ' + indWord(false) + ' in which it moved.'
-          : 'It moved in no comparison, and no explanation in this file is about it.' }));
+        var text = !row.item
+          ? (any ? 'No explanation in this file is about a step or ' + indWord(false) + ' in which it moved.' : 'It moved in no comparison.')
+          : any ? 'None given: no explanation in this file is about this ' + D.item.one + ', or about a step or ' + indWord(false) + ' in which it moved.'
+            : 'It moved in no comparison, and no explanation in this file is about it.';
+        list.appendChild(el('li', { cls: 'sd-none', text: text }));
       }
       return list;
     }
@@ -1701,6 +1851,8 @@
       if (drawer.hidden) lastFocus = doc.activeElement || null;
       view.open = row.id;
       drawer.hidden = false;
+      drawer.setAttribute('aria-label', row.name);
+      showDrawer(drawer);
       q('item-title').textContent = row.name;
       q('item-meta').textContent = [row.id, row.place, row.group, row.unit ? 'per ' + row.unit : 'unit unknown',
         row.item ? null : 'from the matrix: not listed in this file'].filter(Boolean).join(' · ');
@@ -1724,22 +1876,47 @@
         var holder = el('div');
         body.appendChild(el('h4', { text: 'What it is made of: ' + compLabel(comp) }));
         body.appendChild(holder);
-        var found = B[name];
-        if (found) {
-          if (breakdownFits(found, row.id, comp)) breakdownInto(holder, found);
-          else holder.appendChild(el('p', { cls: 'sd-error', text: 'The breakdown ' + name + ' is of another ' + D.item.one + ' or another step: not drawn.' }));
-          return;
-        }
+        var drawOrRefuse = function (data) {
+          var problem = breakdownProblem(data, row, comp);
+          clear(holder);
+          if (problem) holder.appendChild(el('p', { cls: 'sd-error', text: 'The breakdown ' + name + ' ' + problem + ': not drawn.' }));
+          else breakdownInto(holder, data);
+        };
+        if (B[name]) { drawOrRefuse(B[name]); return; }
         holder.appendChild(el('p', { cls: 'sd-quiet', text: 'The breakdown ' + name + ' is not with this page.' }));
         if (safeName(name) && /^https?:$/.test(win.location.protocol)) {
           win.fetch(base + name).then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
-            .then(function (data) { if (!breakdownFits(data, row.id, comp)) throw new Error(); clear(holder); breakdownInto(holder, data); })
-            .catch(function () { /* the sentence above stays */ });
+            .then(drawOrRefuse, function () { /* not read: the sentence above stays */ });
         }
       });
       markOpen();
       var title = q('item-title');
-      if (!quiet && title.focus) title.focus();
+      // the title takes the focus without scrolling the host's page to wherever it stands
+      if (!quiet && title.focus) title.focus({ preventScroll: true });
+    }
+
+    // The drawer is a dialog, drawn above everything on the host's page however the host
+    // stacks or transforms what holds the page. On a wide window it opens as a popover, the
+    // grid beside it still in use. Where it fills the window (a phone), or where the browser
+    // knows no popovers, it opens as a modal dialog, the rest of the page inert behind it. A
+    // browser that knows neither, or where showing it fails, shows it as a fixed element.
+    var NARROW = '(max-width: 47.99rem)'; // the width at which the style makes it the whole window
+    function popoverOpen(node) {
+      try { return !!node.showPopover && node.matches(':popover-open'); } catch (error) { return false; }
+    }
+    function showDrawer(node) {
+      if (node.open || popoverOpen(node)) return;
+      var narrow = !!(win.matchMedia && win.matchMedia(NARROW).matches);
+      try {
+        if (node.showPopover && !(narrow && node.showModal)) node.showPopover();
+        else if (node.showModal) node.showModal();
+      } catch (error) { /* the fixed element stands */ }
+    }
+    function hideDrawer(node) {
+      try {
+        if (popoverOpen(node)) node.hidePopover();
+        if (node.open && node.close) node.close();
+      } catch (error) { /* hidden as an element all the same */ }
     }
 
     function markOpen() {
@@ -1755,6 +1932,7 @@
       var drawer = q('item');
       if (!drawer || drawer.hidden) return;
       drawer.hidden = true;
+      hideDrawer(drawer);
       view.open = null;
       markOpen();
       if (hashParts().item) setHash(null);
@@ -1762,13 +1940,37 @@
       lastFocus = null;
     }
 
-    // a breakdown is drawn only under the item and the step that it breaks down
-    function breakdownFits(data, itemId, comp) {
-      if (!data || data.format !== 'sentier-diagnostics-breakdown/1' || data.item !== itemId) return false;
+    // Why a breakdown is not drawn under this item for this step, or null. It is drawn only
+    // where it is this item's breakdown of this step, its parts and rest add up to its totals,
+    // and its totals are the item's results in the two states: the checks of breakdown.errors
+    // and breakdown.against, which a breakdown fetched over http has had no Python to pass.
+    function breakdownProblem(data, row, comp) {
+      if (!data || typeof data !== 'object' || data.format !== 'sentier-diagnostics-breakdown/1') return 'is not a breakdown';
       var k = stepIndex(comp);
       var from = comp === 'total' ? D.states[0].id : D.steps[k].from;
       var to = comp === 'total' ? D.states[D.states.length - 1].id : D.steps[k].to;
-      return data.from === from && data.to === to && !!data.indicators && typeof data.indicators === 'object';
+      if (data.item !== row.id || data.from !== from || data.to !== to) return 'is of another ' + D.item.one + ' or another step';
+      if (!data.indicators || typeof data.indicators !== 'object' || Array.isArray(data.indicators) || !Object.keys(data.indicators).length) return 'holds no indicators';
+      var sides = [D.states.map(function (s) { return s.id; }).indexOf(from), D.states.map(function (s) { return s.id; }).indexOf(to)];
+      var pairOk = function (p) { return Array.isArray(p) && p.length === 2 && p.every(function (v) { return typeof v === 'number' && isFinite(v); }); };
+      var keys = Object.keys(data.indicators);
+      for (var i = 0; i < keys.length; i++) {
+        var key = keys[i], entry = data.indicators[key];
+        if (!row.values[key]) return 'names ' + article(indWord(false)) + ' this file does not hold, ' + key;
+        if (!entry || !pairOk(entry.total) || !pairOk(entry.rest) || !Array.isArray(entry.parts) ||
+            !entry.parts.every(function (p) { return p && pairOk(p.values); })) {
+          return 'is not of the shape of a breakdown in ' + indicatorName(key);
+        }
+        for (var side = 0; side < 2; side++) {
+          var parts = entry.parts.map(function (p) { return p.values[side]; }).concat([entry.rest[side]]);
+          if (!addsUp(parts, entry.total[side])) return 'does not add up: in ' + indicatorName(key) + ' its parts are not its total ' + (side ? 'after' : 'before');
+          var result = row.values[key][sides[side]];
+          if (result === null || result === undefined || !addsUp([entry.total[side]], result)) {
+            return 'is not of this file: its total in ' + indicatorName(key) + ' is not the ' + D.item.one + '\'s result in ' + D.states[sides[side]].id;
+          }
+        }
+      }
+      return null;
     }
 
     function breakdownInto(holder, data) {
@@ -1816,7 +2018,7 @@
     }
 
     function takeMatrix(m) {
-      if (!D) return;
+      if (!D) return; // none drawn, or the page was unmounted
       var problem = checkMatrix(m, D);
       if (problem) { refuseMatrix(problem); return; }
       M = matrixRows(m, D);
@@ -1834,17 +2036,60 @@
       route();
     }
 
-    function refuseMatrix(said) { matrix.state = 'refused'; matrix.said = said; matrixSaid(); if (D) markPicker(); }
+    function refuseMatrix(said) { if (released) return; matrix.state = 'refused'; matrix.said = said; matrixSaid(); if (D) markPicker(); }
 
-    // the matrix comes after the page is drawn: from a global, or from the file the root or
-    // the diagnostics file names, as a script beside the page (which opens from disk too) or
-    // as JSON over http
+    // The matrices handed to the pages of a document. A script `page.write` puts beside a
+    // page adds an entry to a list, `SENTIER_DIAGNOSTICS_MATRICES`: the address it was loaded
+    // from and its matrix. A document may hold several pages, each with its own script, so a
+    // page takes the entry of the script it names, by its address, and no other. A host that
+    // keeps a page's matrix in a script of its own sets one global instead,
+    // `SENTIER_DIAGNOSTICS_MATRIX`, for one page.
+    function handedAt(address) {
+      var list = Array.isArray(win.SENTIER_DIAGNOSTICS_MATRICES) ? win.SENTIER_DIAGNOSTICS_MATRICES : [];
+      for (var i = list.length - 1; i >= 0; i--) if (list[i] && list[i].src && list[i].src === address) return list[i].matrix;
+      return null;
+    }
+    // Before loading: this file's matrix among the entries of the script named, at its
+    // address or at it with another query or fragment (a host that put `matrix.js?v=3` in
+    // its page to pass a cache). The check against the file keeps a stale matrix out, not
+    // the address, which is as likely the stale copy. Where none is this file's, the entry at
+    // the very address is taken (and refused, and said why); with none, the script is loaded.
+    function handedFor(address) {
+      var list = Array.isArray(win.SENTIER_DIAGNOSTICS_MATRICES) ? win.SENTIER_DIAGNOSTICS_MATRICES : [];
+      var file = address.split(/[?#]/)[0];
+      for (var i = list.length - 1; i >= 0; i--) {
+        var entry = list[i];
+        if (entry && typeof entry.src === 'string' && entry.src.split(/[?#]/)[0] === file && !checkMatrix(entry.matrix, D)) return entry.matrix;
+      }
+      return handedAt(address);
+    }
+    // the address a name beside the page is loaded from, as a script's `src` reads it
+    function addressOf(name) {
+      var a = doc.createElement('a');
+      a.setAttribute('href', base + name);
+      return a.href || base + name;
+    }
+
+    // The matrix comes after the page is drawn: the one handed over by the host where it is
+    // this file's, or the file the root or the diagnostics file names, as a script beside the
+    // page (which opens from disk too) or as JSON over http. A page that names no matrix
+    // looks only at the host's global: another page's matrix in the list was never meant
+    // for it.
     function loadMatrix() {
       if (given.matrix) { takeMatrix(given.matrix); return; }
-      if (win.SENTIER_DIAGNOSTICS_MATRIX) { takeMatrix(win.SENTIER_DIAGNOSTICS_MATRIX); return; }
+      var hostMatrix = D.tier === 'counts' ? null : win.SENTIER_DIAGNOSTICS_MATRIX || null;
+      if (hostMatrix && !checkMatrix(hostMatrix, D)) { takeMatrix(hostMatrix); return; }
       var name = root.getAttribute('data-sd-matrix') || (D.matrix ? D.matrix.file : null);
-      if (!name || D.tier === 'counts') { matrixSaid(); return; }
+      if (!name || D.tier === 'counts') {
+        if (hostMatrix) takeMatrix(hostMatrix); // refused, and said why
+        else matrixSaid();
+        return;
+      }
       if (!safeName(name)) { refuseMatrix('its name is not a plain file name beside the page'); return; }
+      if (/\.js$/.test(name)) {
+        var there = handedFor(addressOf(name)); // a host that put the script in its page itself
+        if (there) { takeMatrix(there); return; }
+      }
       matrix.state = 'loading';
       matrix.said = name;
       matrixSaid();
@@ -1853,7 +2098,9 @@
         var script = doc.createElement('script');
         script.setAttribute('src', base + name);
         script.onload = function () {
-          if (win.SENTIER_DIAGNOSTICS_MATRIX) takeMatrix(win.SENTIER_DIAGNOSTICS_MATRIX);
+          var got = handedAt(script.src || addressOf(name));
+          if (got) takeMatrix(got); // refused, and said why, if not this file's
+          else if (win.SENTIER_DIAGNOSTICS_MATRIX && win.SENTIER_DIAGNOSTICS_MATRIX !== hostMatrix) takeMatrix(win.SENTIER_DIAGNOSTICS_MATRIX); // a script that sets the global
           else refuseMatrix(name + ' holds no matrix');
         };
         script.onerror = function () { refuseMatrix(name + ' is not beside the page'); };
@@ -1886,6 +2133,7 @@
 
     // a file the page cannot draw draws nothing: not even the part it drew before it failed
     function refuse(problem) {
+      if (released) return; // a file that failed to come after the page was unmounted
       D = null; M = null; LISTED = [];
       if (standalone) doc.title = 'Diagnostics';
       ['title', 'about', 'tier', 'audience', 'unchecked', 'matrix-said'].forEach(function (name) {
@@ -1903,6 +2151,9 @@
     // after the validator passed it. A file chosen here or named in the address was not
     // checked: the page checks its shape only, and says so above everything it draws.
     function show(data, checked) {
+      if (released) return;
+      shown = { data: data, checked: checked };
+      if (waiting) return;
       var problem = checkShape(data);
       if (problem) { refuse(problem); return; }
       D = data;
@@ -1947,11 +2198,138 @@
     // the whole way, `#steps=<id>:<id>,<id>` for any other set (a run as its first and last
     // step), and `&item=<id>`. The parts are kept as written, each id decoded on its own, so
     // that an id holding a comma or a colon is still one id.
+    //
+    // The address is the host's too, and may hold other pages: a page reads and writes only
+    // its own parts, and leaves every other part where it was. A page of its own writes its
+    // parts as above. A page in a host's page writes them after its key, so that it never
+    // reads a host's own `item=` and two pages never take each other's step or item: the
+    // host's name for it (`data-sd-key`), or else `sd.` for the first page in the document
+    // and `sd2.`, `sd3.` … for the next, in the order they took them, not the order of their
+    // places, so a page mounted later but placed earlier takes a key of its own.
+    //
+    // A key the host names is a plain word (a letter, then letters, digits, - or _), and not
+    // one of the page's own (`sd`, `sd2` ...): anything else would write an address the page
+    // cannot read back. The page refuses it and says why.
+    //
+    // A page takes its key in the document, never outside it: when it is mounted there, or
+    // else when it is first found there (the document changed, the address changed, or it
+    // is used). It holds the key while it is in the document, and a page that leaves it
+    // keeps its key until a page in the document needs it. So a page drawn in place of one
+    // removed takes the key it left, and an address made before still opens it; a page
+    // built and dropped before it was ever put in takes none; and two pages built before
+    // either is put in take one key each once they are in.
+    //
+    // A page out of the document answers no address. One put back takes its key again where
+    // no page in the document took it, or else the next free one (an address made for it
+    // before now opens the page that took its key); a page the host named waits, says why,
+    // and is drawn once the other page with its name has left. Two pages in the document
+    // never hold one key. `unmount()` takes a page's listeners off and gives its key up: a
+    // host that removes pages for good calls it, or each removed page stays in memory.
+    var OWN_PARTS = ['step', 'steps', 'item'];
+    var keyProblem = null; // a key the page can never hold: it is not a word, or it is one of the page's own
+    var waiting = false; // another page in the document holds the key the host named: the page draws nothing
+    var keys = win.SENTIER_DIAGNOSTICS_KEYS = win.SENTIER_DIAGNOSTICS_KEYS || {};
+    // the pages waiting for a key another holds: one that gives a key up wakes them, as no
+    // change to the document may reach them (it left from inside a shadow root they do not watch)
+    var waiters = win.SENTIER_DIAGNOSTICS_WAITERS = win.SENTIER_DIAGNOSTICS_WAITERS || [];
+    var self = { root: root, wake: function () { present(); } }; // this page's entry in the list of keys
+    var named = root.getAttribute('data-sd-key');
+    var KEY = standalone ? '' : null; // what the page's parts start with, while it holds a key
+    var lastKey = null;
+    var teardown = [];
+    var released = false;
+    var acting = false; // in the document with its key, at the last look
+    var routing = false;
+    var shown = null; // the file last handed to the page, drawn once it may draw
+    if (named !== null && !standalone) {
+      if (!KEY_WORD.test(named)) keyProblem = 'The page\'s key, data-sd-key="' + named + '", is not a plain word: a letter, then up to ' + (KEY_LONGEST - 1) + ' letters, digits, - or _. An address could not hold it.';
+      else if (OWN_KEY.test(named)) keyProblem = 'The page\'s key, data-sd-key="' + named + '", is one the page gives a page the host names none for (sd, sd2 ...): name it otherwise.';
+    }
+    function inDocument() { return root.isConnected !== false; }
+    function holding() { return standalone || (lastKey !== null && keys[lastKey] === self); }
+    function free(key) {
+      var held = keys[key];
+      return !held || held === self || held.root.isConnected === false;
+    }
+    function stopWaiting() { var at = waiters.indexOf(self); if (at >= 0) waiters.splice(at, 1); }
+    function wakeOthers() { waiters.slice().forEach(function (other) { other.wake(); }); }
+    function pick() {
+      if (named !== null) return free(named) ? named : null;
+      if (lastKey !== null && free(lastKey)) return lastKey;
+      for (var n = 1; ; n++) {
+        var key = 'sd' + (n > 1 ? n : '');
+        if (free(key)) return key;
+      }
+    }
+    function mayAct() {
+      if (released || keyProblem) return false;
+      if (standalone) return true;
+      if (!inDocument()) return false;
+      if (holding()) return true;
+      var key = pick();
+      if (key === null) {
+        if (waiters.indexOf(self) < 0) waiters.push(self);
+        if (!waiting) {
+          waiting = true;
+          refuse('Another page in the document has the key data-sd-key="' + named + '": two pages with one key would open on each other\'s items. Give each its own. This page is drawn once the other has left.');
+        }
+        return false;
+      }
+      keys[key] = self;
+      lastKey = key;
+      KEY = key + '.';
+      stopWaiting();
+      return true;
+    }
+    // Whether the page may act on the address now: it is in the document and holds its key,
+    // which it takes here if it holds none. A page that could not act before catches up: it
+    // draws the file it waited to draw, or reads the address as it is now.
+    function present() {
+      var was = acting;
+      acting = mayAct();
+      if (was && !acting) wakeOthers(); // it left: its key is free for a page waiting for it
+      if (acting && !was) {
+        if (waiting) {
+          waiting = false;
+          q('load-error').textContent = '';
+          if (shown) show(shown.data, shown.checked);
+          else showLoad();
+        } else if (D && !routing) route();
+      }
+      return acting;
+    }
+    // unmounted: the page answers nothing more, draws nothing more, and gives its key up;
+    // the address keeps what it said, for a page mounted in its place. The element is left
+    // free: a page may be mounted on it again (React's StrictMode does, on the same element)
+    function release() {
+      if (released) return;
+      released = true;
+      acting = false;
+      while (teardown.length) teardown.pop()();
+      stopWaiting();
+      if (lastKey !== null && keys[lastKey] === self) delete keys[lastKey];
+      closeItem();
+      D = null; M = null; LISTED = []; shown = null;
+      q('content').hidden = true;
+      q('load').hidden = true;
+      root.removeAttribute('data-sd-mounted');
+      wakeOthers();
+    }
+    function hashList() {
+      var text = (win.location.hash || '').replace(/^#/, '');
+      return text ? text.split('&') : [];
+    }
+    function ownName(part) {
+      var at = part.indexOf('=');
+      if (KEY === null || !holding() || at <= 0 || part.slice(0, KEY.length) !== KEY) return null;
+      var name = part.slice(KEY.length, at);
+      return OWN_PARTS.indexOf(name) >= 0 ? name : null;
+    }
     function hashParts() {
       var out = {};
-      (win.location.hash || '').slice(1).split('&').forEach(function (part) {
-        var at = part.indexOf('=');
-        if (at > 0) out[part.slice(0, at)] = part.slice(at + 1);
+      hashList().forEach(function (part) {
+        var name = ownName(part);
+        if (name) out[name] = part.slice(part.indexOf('=') + 1);
       });
       return out;
     }
@@ -1975,14 +2353,17 @@
       return { set: set.sort(function (a, b) { return a - b; }), unknown: unknown };
     }
     function setHash(item) {
+      if (!present()) return false; // out of the document, or without its key: the address is another's
       var said = [], k = kNow();
-      if (isSet(k)) said.push('steps=' + setText(view.set));
-      else if (k < D.steps.length) said.push('step=' + encodeURIComponent(D.steps[k].id));
-      if (item) said.push('item=' + encodeURIComponent(item));
-      var wanted = said.join('&');
+      if (isSet(k)) said.push(KEY + 'steps=' + setText(view.set));
+      else if (k < D.steps.length) said.push(KEY + 'step=' + encodeURIComponent(D.steps[k].id));
+      if (item) said.push(KEY + 'item=' + encodeURIComponent(item));
+      var others = hashList().filter(function (part) { return ownName(part) === null; });
+      var wanted = others.concat(said).join('&');
       if ((win.location.hash || '').replace(/^#/, '') === wanted) return false;
       if (wanted) win.location.hash = wanted;
-      else if (win.history && win.history.replaceState) win.history.replaceState(null, '', win.location.pathname + win.location.search);
+      // nothing left to say: the address loses its "#", and the host keeps its history state
+      else if (win.history && win.history.replaceState) win.history.replaceState(win.history.state, '', win.location.pathname + win.location.search);
       return true;
     }
 
@@ -2009,7 +2390,7 @@
       markPicker();
       renderStepSaid();
       if (same) return null;
-      view.cls = ''; view.verdict = ''; view.limit = PAGE; view.sort = 'worst';
+      view.cls = ''; view.verdict = ''; view.limit = PAGE; view.sort = WORST;
       renderComparison();
       if (view.open) renderItem(view.open, true);
       return null;
@@ -2048,6 +2429,8 @@
     // the address, read: what it names is chosen; what it names that the file does not have,
     // or that cannot be judged now, is said, and the whole way shown
     function route() {
+      routing = true;
+      try { present(); } finally { routing = false; }
       if (!D) return;
       var parts = hashParts();
       var wanted = allSteps(), said = '';
@@ -2076,8 +2459,29 @@
     function openFrom(event) {
       var row = event.target.closest ? event.target.closest('tr[data-item]') : null;
       if (!row) return;
+      takeStop(row, false);
       var id = row.getAttribute('data-item');
       if (!setHash(id)) renderItem(id);
+    }
+
+    // A table of items is one tab stop, the row last moved to (the first when it is drawn);
+    // the arrow keys, Home and End move between its rows, so that Tab leaves the table in one
+    // press however many rows it holds.
+    var ROW_KEYS = { ArrowDown: 1, ArrowUp: -1, Home: -Infinity, End: Infinity };
+    function moveRow(event) {
+      if (!ROW_KEYS.hasOwnProperty(event.key)) return;
+      var row = event.target.closest ? event.target.closest('tr[data-item]') : null;
+      if (!row || !row.parentNode) return;
+      var rows = row.parentNode.childNodes;
+      var at = Array.prototype.indexOf.call(rows, row);
+      var to = Math.max(0, Math.min(rows.length - 1, at + ROW_KEYS[event.key]));
+      if (event.preventDefault) event.preventDefault();
+      if (to !== at) takeStop(rows[to], true);
+    }
+    function takeStop(row, focus) {
+      var rows = row.parentNode ? row.parentNode.childNodes : [row];
+      for (var i = 0; i < rows.length; i++) rows[i].setAttribute('tabindex', rows[i] === row ? '0' : '-1');
+      if (focus && row.focus) row.focus();
     }
 
     function readScript(name) {
@@ -2086,8 +2490,133 @@
       return JSON.parse(node.textContent);
     }
 
+    // The page's own colours follow the host's. A host that sets a light ink is a dark page:
+    // the page takes its dark ground and its other dark colours for every token the host did
+    // not set, so that the host's ink is never set on the page's white. A host that sets a
+    // dark ground and no ink gets the light ink. A host that sets neither keeps the light
+    // colours, the ground set with the ink. Read again when the reader's colour scheme
+    // changes, as a host's tokens may follow it.
+    // The page's own mark sets only its own tokens (`--sd-*`), never `--ink`, `--surface` or
+    // `color-scheme`, so the host's are read with the mark in place, and the mark is changed
+    // only where the answer changed: a host that watches the page sees nothing for a reading
+    // that found what it found before.
+    function matchScheme() {
+      var style = win.getComputedStyle ? win.getComputedStyle(root) : null;
+      if (!style || !style.getPropertyValue) return;
+      var dark = schemeIsDark(tokenColour(style, '--ink'), tokenColour(style, '--surface'), function (text) {
+        return luminance(text, doc);
+      });
+      if (dark === (root.getAttribute('data-sd-scheme') === 'dark')) return;
+      if (dark) root.setAttribute('data-sd-scheme', 'dark');
+      else root.removeAttribute('data-sd-scheme');
+    }
+
+    // What the scheme is read from, read without changing anything: the host's two tokens as
+    // the browser computes them (another var() in them already put in), the colour scheme
+    // they may resolve by (light-dark(), a system colour), and the reader's. Null for a page
+    // out of the document, which has no host to read.
+    var DARK_READER = '(prefers-color-scheme: dark)';
+    function schemeSign() {
+      if (root.isConnected === false || !win.getComputedStyle) return null;
+      var style = win.getComputedStyle(root);
+      if (!style || !style.getPropertyValue) return null;
+      var reader = win.matchMedia ? win.matchMedia(DARK_READER) : null;
+      return [style.getPropertyValue('--ink'), style.getPropertyValue('--surface'),
+        style.getPropertyValue('color-scheme'), reader && reader.matches ? 'dark' : 'light'].join('\n');
+    }
+
+    // A host's colour token as the browser resolves it, set on a probe in the page, so that
+    // whatever the host wrote (a name, light-dark(), another var()) comes back as a colour.
+    // A token that is no colour (a bare "0 0% 100%", kept by some hosts for their own hsl())
+    // leaves the probe the colour of its parent; under two parents of different colours it
+    // is told apart, and is null. Without a browser's styles: the token as written.
+    function tokenColour(style, name) {
+      var said = String(style.getPropertyValue(name) || '').trim();
+      if (!said) return '';
+      var got = [];
+      try {
+        ['rgb(1, 2, 3)', 'rgb(4, 5, 6)'].forEach(function (parent) {
+          var outer = doc.createElement('span'), probe = doc.createElement('span');
+          outer.hidden = true;
+          outer.style.setProperty('color', parent);
+          probe.style.setProperty('color', 'var(' + name + ')');
+          outer.appendChild(probe);
+          root.appendChild(outer);
+          try { got.push(String(win.getComputedStyle(probe).color || '')); } finally { root.removeChild(outer); }
+        });
+      } catch (error) { return said; }
+      if (!got[0]) return said;
+      return got[0] === got[1] ? got[0] : null;
+    }
+
+    // A listener, taken off when the page is released: on the window, the document, or the
+    // page's own elements, which a page mounted again on the same element would otherwise
+    // share with this one.
+    function listen(target, type, react, capture) {
+      if (!target || !target.addEventListener) return;
+      target.addEventListener(type, react, capture);
+      teardown.push(function () { if (target.removeEventListener) target.removeEventListener(type, react, capture); });
+    }
+
+    // Look again whenever the host may have switched its theme: the reader's colour scheme
+    // changed, the document changed (a class or an attribute anywhere, an element put in or
+    // taken out, the page itself put in after it was built), or a stylesheet finished
+    // loading. Watched: the document and every shadow root the page sits in, for changes
+    // and for loads (a load does not leave a shadow root). A look reads only what the
+    // scheme is read from (schemeSign), once a frame however much changed, and reads the
+    // scheme itself only where that changed. So the page's own probes, and a host's
+    // observer that answers them, end after one look. Not seen: a rule a host adds or edits
+    // through the CSS object model alone, which changes nothing in the document.
+    //
+    // A change to the document is also where a page put in after it was built, or put
+    // back, is found: it takes its key there, before the next frame (`present`).
+    var WATCHED = { attributes: true, childList: true, subtree: true };
+    function followScheme() {
+      var last = schemeSign(), queued = false, watch = null, heard = [doc];
+      var frame = win.requestAnimationFrame ? function (f) { win.requestAnimationFrame(f); } : function (f) { f(); };
+      function tops() { // the document, and each shadow root from the page's out to it
+        var out = [doc];
+        for (var node = root; node && node.getRootNode; ) {
+          var top = node.getRootNode();
+          if (!top || top === doc || !top.host) break;
+          out.push(top);
+          node = top.host;
+        }
+        return out;
+      }
+      // the roots the page sits in now: put in, or moved, it may sit in others than before
+      function observe() {
+        tops().forEach(function (top) {
+          if (watch) watch.observe(top, WATCHED);
+          if (heard.indexOf(top) < 0) { heard.push(top); listen(top, 'load', later, true); }
+        });
+      }
+      function look() {
+        queued = false;
+        if (released) return;
+        var sign = schemeSign();
+        if (sign === null) return;
+        observe();
+        if (sign === last) return;
+        last = sign;
+        matchScheme();
+      }
+      function later() { if (!queued && !released) { queued = true; frame(look); } }
+      if (win.matchMedia) listen(win.matchMedia(DARK_READER), 'change', later);
+      listen(doc, 'load', later, true);
+      if (win.MutationObserver) {
+        watch = new win.MutationObserver(function () { present(); later(); });
+        teardown.push(function () { watch.disconnect(); });
+      }
+      observe();
+    }
+
     function start() {
-      q('comparison').addEventListener('click', function (e) {
+      if (keyProblem) { refuse(keyProblem); return; }
+      present();
+      matchScheme();
+      followScheme();
+      listen(q('comparison'), 'click', function (e) {
         var cell = e.target.closest ? e.target.closest('button[data-comp]') : null;
         if (!cell || !D) return;
         var comp = cell.getAttribute('data-comp');
@@ -2096,7 +2625,7 @@
       });
       // the arrow keys move along the strip, a step alone at a time; with Shift they grow or
       // shrink the steps chosen at the end away from where they started
-      q('comparison').addEventListener('keydown', function (e) {
+      listen(q('comparison'), 'keydown', function (e) {
         if (!D || (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft')) return;
         var step = e.key === 'ArrowRight' ? 1 : -1;
         var whole = view.set.length === D.steps.length;
@@ -2119,7 +2648,7 @@
         if (next && next.focus) next.focus();
       });
       if (q('pick-list')) {
-        q('pick-list').addEventListener('click', function (e) {
+        listen(q('pick-list'), 'click', function (e) {
           if (!D) return;
           var row = e.target.closest ? e.target.closest('button[data-pick]') : null;
           if (row) { pickStep(+row.getAttribute('data-pick'), e.shiftKey || e.metaKey || e.ctrlKey ? 'to' : 'one'); return; }
@@ -2128,32 +2657,35 @@
         });
       }
       if (q('pick-open')) {
-        q('pick-open').addEventListener('click', function () {
+        listen(q('pick-open'), 'click', function () {
           view.pickOpen = !view.pickOpen;
           q('pick-open').setAttribute('aria-expanded', view.pickOpen ? 'true' : 'false');
           q('pick-panel').hidden = !view.pickOpen;
         });
       }
-      if (q('pick-find')) q('pick-find').addEventListener('input', function (e) { view.pickFind = e.target.value; renderPickList(); });
-      if (q('pick-moved')) q('pick-moved').addEventListener('change', function (e) { view.pickMoved = !!e.target.checked; renderPickList(); });
-      if (q('pick-all')) q('pick-all').addEventListener('click', function () { if (D) { view.anchor = null; pickSet(allSteps()); } });
-      q('size').addEventListener('change', function (e) { view.size = +e.target.value; view.limit = PAGE; renderWorst(); renderGrid(); });
-      q('worst-n').addEventListener('change', function (e) { view.worstN = +e.target.value; renderWorst(); });
-      q('dist-scale').addEventListener('change', function (e) { view.distScale = e.target.value === 'one' ? 'one' : 'card'; renderDistributions(); });
-      q('worst-indicator').addEventListener('change', function (e) { view.worstIndicator = e.target.value; renderWorst(); });
-      q('grid-find').addEventListener('input', function (e) { view.find = e.target.value; view.limit = PAGE; renderGrid(); });
-      q('grid-class').addEventListener('change', function (e) { view.cls = e.target.value; view.limit = PAGE; renderGrid(); });
-      q('grid-verdict').addEventListener('change', function (e) { view.verdict = e.target.value; view.limit = PAGE; renderGrid(); });
-      q('grid-group').addEventListener('change', function (e) { view.group = e.target.value; view.limit = PAGE; renderGrid(); });
-      q('grid-more').addEventListener('click', function () { view.limit += PAGE; renderGrid(); });
-      q('item-close').addEventListener('click', closeItem);
-      root.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeItem(); });
+      if (q('pick-find')) listen(q('pick-find'), 'input', function (e) { view.pickFind = e.target.value; renderPickList(); });
+      if (q('pick-moved')) listen(q('pick-moved'), 'change', function (e) { view.pickMoved = !!e.target.checked; renderPickList(); });
+      if (q('pick-all')) listen(q('pick-all'), 'click', function () { if (D) { view.anchor = null; pickSet(allSteps()); } });
+      listen(q('size'), 'change', function (e) { view.size = +e.target.value; view.limit = PAGE; renderWorst(); renderGrid(); });
+      listen(q('worst-n'), 'change', function (e) { view.worstN = +e.target.value; renderWorst(); });
+      listen(q('dist-scale'), 'change', function (e) { view.distScale = e.target.value === 'one' ? 'one' : 'card'; renderDistributions(); });
+      listen(q('worst-indicator'), 'change', function (e) { view.worstIndicator = e.target.value; renderWorst(); });
+      listen(q('grid-find'), 'input', function (e) { view.find = e.target.value; view.limit = PAGE; renderGrid(); });
+      listen(q('grid-class'), 'change', function (e) { view.cls = e.target.value; view.limit = PAGE; renderGrid(); });
+      listen(q('grid-verdict'), 'change', function (e) { view.verdict = e.target.value; view.limit = PAGE; renderGrid(); });
+      listen(q('grid-group'), 'change', function (e) { view.group = e.target.value; view.limit = PAGE; renderGrid(); });
+      listen(q('grid-more'), 'click', function () { view.limit += PAGE; renderGrid(); });
+      listen(q('item-close'), 'click', closeItem);
+      listen(root, 'keydown', function (e) { if (e.key === 'Escape') closeItem(); });
+      // a modal drawer the browser closed itself (a phone's back gesture) is closed here too
+      listen(q('item'), 'close', function () { if (!q('item').hidden) closeItem(); });
       ['grid-table', 'worst-table'].forEach(function (name) {
-        q(name).addEventListener('click', openFrom);
-        q(name).addEventListener('keydown', function (e) { if (e.key === 'Enter') openFrom(e); });
+        listen(q(name), 'click', openFrom);
+        listen(q(name), 'keydown', function (e) { if (e.key === 'Enter') openFrom(e); else moveRow(e); });
       });
-      win.addEventListener('hashchange', route);
-      q('file').addEventListener('change', function (e) {
+      // a page that takes its key here has read the address already
+      listen(win, 'hashchange', function () { var was = acting; if (present() && was) route(); });
+      listen(q('file'), 'change', function (e) {
         var file = e.target.files[0];
         if (!file) return;
         var reader = new win.FileReader();
@@ -2193,7 +2725,14 @@
     }
 
     start();
-    return { show: show, close: closeItem, open: renderItem };
+    // a page whose key is refused draws nothing and opens nothing, whoever asks it to: the
+    // reason stays where it was said, never replaced by a fault of the file it was given
+    if (keyProblem) {
+      var still = function () { refuse(keyProblem); };
+      return { show: still, close: still, open: still, unmount: release };
+    }
+    // an unmounted page does nothing a host asks of it: it has no file to show an item of
+    return { show: show, close: closeItem, open: renderItem, unmount: release };
   }
 
   // every root of the document not yet mounted, but those a host mounts itself
@@ -2209,7 +2748,7 @@
     bandStep: bandStep, bandOf: bandOf, checkShape: checkShape, checkMatrix: checkMatrix, matrixRows: matrixRows,
     safeLink: safeLink, safeName: safeName, splitOf: splitOf, splitText: splitText, distance: distance, quantileTexts: quantileTexts, RANK: RANK,
     judge: judge, runsOf: runsOf, runPair: runPair, noiseOfStates: noiseOfStates, endsKnown: endsKnown, statesCarryNoise: statesCarryNoise,
-    mount: mount, mountAll: mountAll };
+    luminance: luminance, schemeIsDark: schemeIsDark, mount: mount, mountAll: mountAll };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else if (typeof global.document !== 'undefined') {
     global.SentierDiagnostics = api;

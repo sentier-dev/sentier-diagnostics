@@ -517,7 +517,20 @@ are `--sd-*` properties that take the site's tokens where the site sets them
 (`--sd-ink: var(--ink, #1d232a)`, and so on for `--muted`, `--surface`, `--paper-deep`,
 `--line`, `--line-strong`, `--index`, `--fail`, `--radius`, `--t-*`, `--s*`); up, down and
 noise keep colours of their own (amber up, teal down), so that a direction never takes a
-site's accent. A test reads the sheet and holds this.
+site's accent. A test reads the sheet and holds this. Where the site's ink is light (or,
+with no ink, its ground dark), the script marks the root `data-sd-scheme="dark"` and every
+token the site did not set falls back to a dark colour, so that a light ink never stands
+on the page's white. It reads the tokens as the browser resolves them (`light-dark()`,
+another `var()`), and a token it cannot read as a colour is unknown, never black. A colour
+the browser gives in sRGB, `oklab()` or `oklch()` is read as written; any other is drawn on
+a canvas of one pixel and read back, and where the browser hides what a canvas holds (a
+known colour does not come back as it went) it is unknown as well. It looks
+again when the reader's colour scheme changes, when anything changes in the document or in
+a shadow root the page sits in, and when a stylesheet loads: once a frame at most, and it
+reads the tokens again only where they, the computed `color-scheme` or the reader's
+scheme changed, so that a host's observer that answers the page's reading sets off no
+other. A rule a site changes through the CSS object model alone changes nothing the page
+can see.
 
 **A host lets the body be wide.** The matrix needs the page's width, and a site that caps
 the children of an article at a reading measure (`.prose > * { max-width: 44rem }`) caps
@@ -530,7 +543,12 @@ page that holds a measure).
 the body in it, the two assets, and `standalone.css`, which sets the tokens and font a site
 would. It opens from disk; no build step, no server, no network, no font or script from
 elsewhere. Where the file names a matrix that lies beside it, the page writes it as
-`matrix.js`, which loads from disk too; a site serving `matrix.json` needs nothing else, as
+`matrix.js`, which loads from disk too: it adds the matrix to a list,
+`SENTIER_DIAGNOSTICS_MATRICES`, with the address it was loaded from, and a page takes the
+entry of the script it names and no other, so that several pages in one document each take
+their own. An entry of that script under another query (a host's `matrix.js?v=3`) is taken
+where it is this file's matrix: the check against the file, not the address, keeps a stale
+one out. A site serving `matrix.json` needs nothing else, as
 the page fetches it over HTTP. Served over HTTP the page can also read `?file=...`, and it
 opens a file a reader chooses (read in the browser, sent nowhere). **For one step and the whole way, the page works out no class, no direction and no count
 of its own.** It reads them from the file, which the validator has checked, and only adds
@@ -562,7 +580,29 @@ filter) with the count and the legend in the row under it; then the matrix (10.5
 opens an item in a drawer (10.6); directly under it, always open, the distributions of the
 chosen comparison (10.3). The address keeps what is chosen and an open item, so that a
 reviewer can send someone to exactly that view: nothing for the whole way, `#step=<id>` for
-one step, `#steps=<first>:<last>` for a run (each id URL-encoded), and `&item=<id>`. An
+one step, `#steps=<first>:<last>` for a run (each id URL-encoded), and `&item=<id>`. In a
+host's page each part carries the page's key, so that the page never reads the host's own
+parts and two pages never take each other's: the host's name for it (`data-sd-key`), else
+`sd.` for the first page in the document and `sd2.`, `sd3.` … for the next
+(`#sd.step=<id>`). A host's name is a plain word (a letter, then up to 39 letters, digits,
+`-` or `_`), not `sd` or `sdN`; the page refuses any other and says why. A page takes its
+key in the document, never outside it: when it is mounted there, or else when it is first
+found there (the document changes, the address changes, or it is used). It holds the key
+while it is in the document, and a page that left keeps it until a page in the document
+needs it. So a page drawn in place of one removed takes the key it left, and an address
+made before still opens it; a page built and dropped before it was ever put in takes none;
+two pages built before either is put in take one each once they are in. A page out of the
+document answers no address. Put back, it takes its key again where no page in the
+document holds it, or else the next free one; a page the host named waits instead, says
+why, and is drawn once the other page with that name has left. Two pages in the document
+never hold one key. `mount` returns `{show, open, close, unmount}`: `unmount()` takes the
+page's listeners off (on the window, the document and its own elements), gives its key up
+and draws nothing more, leaving the address as it was; a file or a matrix that comes after
+it is not drawn. The element is left free: a page may be mounted on it again, as React's
+StrictMode does. A page that gives a key up, by `unmount()` or by leaving the document,
+wakes a page waiting for it. A host that removes a page for good calls `unmount()`; a page
+removed without it stays in memory, in case it is put back. Every part the page does not
+own is kept as it was. An
 address naming a step the file does not have, steps apart, or a run the page cannot judge
 (no matrix), says so and shows the whole way. Below
 them, each closed until a reader opens it: the steps and the whole way (10.2), the worst
@@ -670,7 +710,9 @@ filter changes no count.
 
 ### 10.6 Item
 A drawer at the right (the whole window on a phone), opened from a row of the matrix or the
-worst list, closed with Close or Escape. First **why it differs**: the explanations about
+worst list, closed with Close or Escape. It is a dialog drawn above the host's page, named
+by the item: beside the matrix, which stays in use, where the window is wide; modal, the
+rest inert, where it fills the window or the browser knows no popovers. First **why it differs**: the explanations about
 the item, then those about a step or an indicator in which it moved (said to be so, as they
 may not be about it), or "none given" when the file holds neither; the file holds every
 explanation, so this "none" is never said over a part of a list. Then per indicator, the

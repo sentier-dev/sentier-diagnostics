@@ -193,9 +193,14 @@ class Body(unittest.TestCase):
             self.assertEqual(root["data-sd-matrix"], "matrix.js")
             self.assertIn("data-sd-standalone", root)
             script = (where.parent / "matrix.js").read_text(encoding="utf-8")
-            self.assertEqual(
-                json.loads(script.removeprefix("window.SENTIER_DIAGNOSTICS_MATRIX = ").rstrip(";\n")), full
+            # an entry of the list: the address the script was loaded from, and the matrix
+            head = (
+                "(window.SENTIER_DIAGNOSTICS_MATRICES = window.SENTIER_DIAGNOSTICS_MATRICES || []).push("
+                '{"src": document.currentScript ? document.currentScript.src : null, "matrix": '
             )
+            self.assertTrue(script.startswith(head), script[:200])
+            self.assertTrue(script.endswith("});\n"), script[-20:])
+            self.assertEqual(json.loads(script.removeprefix(head).removesuffix("});\n")), full)
             page.write(data, Path(folder))  # no matrix this time: the old one goes
             self.assertFalse((where.parent / "matrix.js").exists())
 

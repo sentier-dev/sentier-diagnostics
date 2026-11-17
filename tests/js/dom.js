@@ -34,6 +34,9 @@ class FakeNode {
     this.value = '';
     this.disabled = false;
     this.focused = false;
+    // the inline style, as the CSSOM sets it: by property
+    const values = {};
+    this.style = { setProperty: (name, value) => { values[name] = String(value); }, getPropertyValue: (name) => values[name] || '' };
   }
 
   get firstChild() { return this.childNodes[0] || null; }
@@ -75,6 +78,11 @@ class FakeNode {
 
   addEventListener(type, listener) { (this.listeners[type] = this.listeners[type] || []).push(listener); }
 
+  removeEventListener(type, listener) {
+    const held = this.listeners[type] || [];
+    if (held.indexOf(listener) >= 0) held.splice(held.indexOf(listener), 1);
+  }
+
   // an event on this node, passed up to its parents as a browser does
   dispatch(type, event) {
     const full = { target: this, ...event };
@@ -92,7 +100,7 @@ class FakeNode {
 
   contains(other) { for (let n = other; n; n = n.parentNode) if (n === this) return true; return false; }
 
-  focus() { this.focused = true; }
+  focus(options) { this.focused = true; this.focusOptions = options; }
 
   scrollIntoView() {}
 
@@ -135,7 +143,7 @@ function body(scripts) {
   return root;
 }
 
-// `options`: {standalone, attributes, globals, fetch, protocol, scripts}
+// `options`: {standalone, attributes, globals, fetch, protocol, scripts, hash, historyState}
 function page(data, breakdowns, options) {
   options = options || {};
   const scripts = options.scripts || {};
@@ -159,9 +167,15 @@ function page(data, breakdowns, options) {
   root.ownerDocument = document;
   const context = {
     document,
-    location: { hash: '', search: '', pathname: '/index.html', protocol: options.protocol || 'file:' },
-    history: { replaceState: () => { context.location.hash = ''; } },
+    location: { hash: options.hash ? '#' + options.hash : '', search: '', pathname: '/index.html', protocol: options.protocol || 'file:' },
+    // replaceState drops the "#"; each call is kept, with the state it was given
+    history: {
+      state: options.historyState === undefined ? null : options.historyState,
+      replaced: [],
+      replaceState: (state, title, url) => { context.history.replaced.push({ state, url }); context.history.state = state; context.location.hash = ''; },
+    },
     addEventListener: (type, listener) => { (listeners[type] = listeners[type] || []).push(listener); },
+    removeEventListener: (type, listener) => { const held = listeners[type] || []; if (held.indexOf(listener) >= 0) held.splice(held.indexOf(listener), 1); },
     URLSearchParams,
     FileReader: class {},
     fetch: options.fetch || (() => Promise.reject(new Error('no network'))),
@@ -184,8 +198,11 @@ function page(data, breakdowns, options) {
     text: () => root.childNodes.filter((n) => !n.hidden && n.tagName !== 'SCRIPT').map((n) => n.seen().join(' ')).join('\n'),
     open: (hash) => {
       context.location.hash = '#' + hash;
-      (listeners.hashchange || []).forEach((listener) => listener({}));
+      (listeners.hashchange || []).slice().forEach((listener) => listener({}));
     },
+    // the hashchange a browser fires after the page itself wrote the hash
+    changed: () => (listeners.hashchange || []).slice().forEach((listener) => listener({})),
+    listeners,
   };
 }
 
