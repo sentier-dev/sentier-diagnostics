@@ -1151,7 +1151,8 @@ characterisation factor about 12,000 (about 250 KB), a fix to a market everythin
 to about 300,000 (6 to 7 MB). 64 MB holds about ten dense fixes and thousands of sparse
 ones; effects move to one file per fix only if dense fixes become common. Checked on a
 made-up file of that base with 100 fixes of 500 items each in every indicator, ten of them
-requiring the fix before them (39.5 MB), the check takes 2.7 seconds.
+requiring the fix before them (39.5 MB), the check takes about 2.7 seconds, and counting a
+set of 50 of them under one.
 
 ### 16.11 Acceptance cases
 

@@ -40,6 +40,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Iterable, Mapping
+from functools import cached_property
 from pathlib import Path
 
 from . import __version__, chain, claims, fileformat, matrix, rule
@@ -353,7 +354,7 @@ def size_note(f: Mapping) -> str:
 
 class _Base:
     """The base of a checked file, worked out once: its results, the floor of every item, and
-    the class of every item against itself (agrees, near zero or missing)."""
+    (when a count asks) the class of every item against itself: agrees, near zero or missing."""
 
     def __init__(self, f: Mapping):
         self.ids = [i["id"] for i in f["indicators"]]
@@ -362,16 +363,23 @@ class _Base:
         table = {(x["indicator"], x["unit"]): x["value"] for x in f["rule"]["floors"]}
         self.floor = {ind: [table[(ind, r[4])] for r in f["items"]] for ind in self.ids}
         self.values = f["base"]
-        self.kinds = {
+
+    @cached_property
+    def kinds(self) -> dict[str, list[str]]:
+        return {
             ind: [rule.classify(v, v, floor=fl) for v, fl in zip(self.values[ind], self.floor[ind])]
             for ind in self.ids
         }
-        self.tally = {}
+
+    @cached_property
+    def tally(self) -> dict[str, dict[str, int]]:
+        out = {}
         for ind in self.ids:
             tally = dict.fromkeys((rule.AGREES, rule.NEAR_ZERO, rule.MISSING), 0)
             for kind in self.kinds[ind]:
                 tally[kind] += 1
-            self.tally[ind] = tally
+            out[ind] = tally
+        return out
 
 
 class _Builds:
@@ -388,10 +396,7 @@ class _Builds:
 
     @classmethod
     def of(cls, f: Mapping) -> _Builds:
-        closures: dict[str, frozenset] = {}
-        for one in f["fixes"]:
-            closures[one["id"]] = frozenset(one["requires"]).union(*(closures[r] for r in one["requires"]))
-        found = cls(_Base(f), closures)
+        found = cls(_Base(f), _closures(f))
         found.entries = {one["id"]: _columns(one["effect"]) for one in f["fixes"]}
         found.built = {frozenset(b["fixes"]): _columns(b["results"]) for b in f["built"]}
         return found
@@ -419,11 +424,6 @@ class _Builds:
             self._memo[fixes] = found
         return found
 
-    def before(self, fix_id: str, ind: str, k: int):
-        """What a fix's result at one item was measured against: the build of what it requires."""
-        under = self.column(self.closures[fix_id])[ind]
-        return under[k] if k in under else self.base.values[ind][k]
-
     def covers(self, fixes: frozenset, *, built: bool = True) -> list[frozenset]:
         """The builds inside a closed set that hold two fixes or more, in the order a set's
         result looks for them: every fix with what it requires, in the order of the file, then
@@ -445,19 +445,29 @@ class _Builds:
             for k in self.entries[y][ind]:
                 touching.setdefault(k, []).append(y)
         covers = self.covers(fixes, built=built)
+        base, mine = self.base.values[ind], {y: self.entries[y][ind] for y in fixes}
+        under = {y: self.column(self.closures[y])[ind] for y in fixes}  # what each was measured against
         out = {}
         for k, ys in touching.items():
             if len(ys) == 1:
-                out[k] = (self.entries[ys[0]][ind][k], True)
+                out[k] = (mine[ys[0]][k], True)
                 continue
             here = set(ys)
             cover = next((c for c in covers if here <= c), None)
             if cover is not None:
                 column = self.column(cover)[ind]
-                out[k] = (column[k] if k in column else self.base.values[ind][k], True)
+                out[k] = (column[k] if k in column else base[k], True)
             else:
-                out[k] = _sum(self.base.values[ind][k], [(self.entries[y][ind][k], self.before(y, ind, k)) for y in ys])
+                out[k] = _sum(base[k], [(mine[y][k], under[y][k] if k in under[y] else base[k]) for y in ys])
         return out
+
+
+def _closures(f: Mapping) -> dict[str, frozenset]:
+    """Every fix of a checked file, with every fix it requires at any depth."""
+    closures: dict[str, frozenset] = {}
+    for one in f["fixes"]:
+        closures[one["id"]] = frozenset(one["requires"]).union(*(closures[r] for r in one["requires"]))
+    return closures
 
 
 def _columns(sparse: Mapping) -> dict[str, dict[int, float | None]]:
@@ -577,8 +587,8 @@ def chosen(f: Mapping, ids: Iterable[str]) -> tuple[list[str], list[str]]:
             raise ValueError(f"the file holds no fix {one!r}")
     if len(set(ids)) != len(ids):
         raise ValueError("a set holds each fix once")
-    builds = _Builds.of(f)
-    closed = set(ids).union(*(builds.closures[i] for i in ids))
+    closures = _closures(f)
+    closed = set(ids).union(*(closures[i] for i in ids))
     names = sorted(closed, key=order.__getitem__)
     return names, [x for x in names if x not in ids]
 
@@ -597,7 +607,11 @@ def held_pairs(f: Mapping, ids: Iterable[str]) -> list[dict]:
 def label(f: Mapping, ids: Iterable[str]) -> str:
     """Built, exact or estimated (SPEC 16.5)."""
     names = chosen(f, ids)[0]
-    if _Builds.of(f).column(names) is not None:
+    return _label(f, _Builds.of(f), names)
+
+
+def _label(f: Mapping, builds: _Builds, names: list[str]) -> str:
+    if builds.column(names) is not None:
         return BUILT
     if f["interactions"]["checked"] and not held_pairs(f, names):
         return EXACT
@@ -631,19 +645,18 @@ def noise_of(f: Mapping, ids: Iterable[str]) -> dict[str, dict]:
     return out
 
 
-def _changed(f: Mapping, names: list[str]) -> tuple[_Builds, dict, dict]:
+def _changed(builds: _Builds, names: list[str]) -> tuple[dict, dict]:
     """The items a closed set changes, per indicator, with its result at each; and the items
     where no sum can be formed."""
-    builds = _Builds.of(f)
     column = builds.column(names)
     if column is not None:
-        return builds, column, {ind: [] for ind in builds.base.ids}
+        return column, {ind: [] for ind in builds.base.ids}
     changed, cannot = {}, {}
     for ind in builds.base.ids:
         cells = builds.composed(frozenset(names), ind)
         changed[ind] = {k: v for k, (v, _) in cells.items()}
         cannot[ind] = sorted(k for k, (_, ok) in cells.items() if not ok)
-    return builds, changed, cannot
+    return changed, cannot
 
 
 def compose(f: Mapping, ids: Iterable[str]) -> dict:
@@ -654,7 +667,8 @@ def compose(f: Mapping, ids: Iterable[str]) -> dict:
     names, per indicator, the item indices whose result is None because no sum can be formed
     there, so that it reads apart from a missing result. A set has no verdict."""
     names, added = chosen(f, ids)
-    builds, changed, cannot = _changed(f, names)
+    builds = _Builds.of(f)
+    changed, cannot = _changed(builds, names)
     results = {}
     for ind in builds.base.ids:
         column = list(builds.base.values[ind])
@@ -664,7 +678,7 @@ def compose(f: Mapping, ids: Iterable[str]) -> dict:
     return {
         "fixes": [{k: one[k] for k in ("id", "label", "requires", "claim", "counts")} for one in _fixes_of(f, names)],
         "added": added,
-        "label": label(f, names),
+        "label": _label(f, builds, names),
         "pairs": held_pairs(f, names),
         "pair_terms": pair_terms(f, names),
         "tolerance": tolerance_of(f, names),
@@ -678,10 +692,11 @@ def counts(f: Mapping, ids: Iterable[str]) -> dict:
     """The counts of a set against the base, per indicator, with its label beside them: an
     estimated set's counts are estimates ("estimated: 153 would differ"). No verdicts."""
     names = chosen(f, ids)[0]
-    builds, changed, _ = _changed(f, names)
+    builds = _Builds.of(f)
+    changed, _ = _changed(builds, names)
     tol, noise = tolerance_of(f, names), noise_of(f, names)
     return {
-        "label": label(f, names),
+        "label": _label(f, builds, names),
         "by": {ind: _block(builds.base, ind, changed[ind], tol, noise[ind]["value"], None) for ind in builds.base.ids},
     }
 
