@@ -287,6 +287,23 @@ test('a text by a model is drawn as a claim nobody checked (A9)', () => {
   assert.ok(model.seen().join(' ').includes('A claim, not checked by a person'));
 });
 
+// the string literals of a script, its comments left out
+const stringsOf = (source) => {
+  const found = [];
+  for (let i = 0; i < source.length; i++) {
+    const c = source[i];
+    if (c === '/' && source[i + 1] === '/') { i = source.indexOf('\n', i); if (i < 0) break; }
+    else if (c === '/' && source[i + 1] === '*') { i = source.indexOf('*/', i + 2) + 1; if (i <= 0) break; }
+    else if (c === "'" || c === '"' || c === '`') {
+      let j = i + 1, text = '';
+      while (j < source.length && source[j] !== c) { if (source[j] === '\\') { text += source[j + 1]; j += 2; } else text += source[j++]; }
+      found.push(text);
+      i = j;
+    }
+  }
+  return found;
+};
+
 test('nothing drawn calls a move better or worse (A22)', () => {
   // what the script draws, in each view; the page's own words are read in the written page
   // (`test_a22_the_reference_is_neutral_after_step_0`)
@@ -296,6 +313,12 @@ test('nothing drawn calls a move better or worse (A22)', () => {
   const text = seen.join('\n').toLowerCase();
   assert.ok(text.includes('the whole way') && text.includes('what it is made of'), 'the views were drawn');
   for (const word of ['better', 'worse', 'improve', 'closer']) assert.ok(!text.includes(word), word);
+  // and what it draws only in a branch these views do not reach ("Every part is listed."
+  // shows only where no part is left out): every string the script holds
+  const strings = stringsOf(fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'sentier_diagnostics', 'page', 'diagnostics.js'), 'utf8'));
+  assert.ok(strings.includes('Every part is listed. ') && strings.includes('nothing explains it'), 'the script\'s strings were read');
+  assert.deepEqual(strings.filter((t) => t.includes('\n')), [], 'each string ends on its own line: the script was read in step');
+  for (const word of ['better', 'worse', 'improve', 'closer']) assert.deepEqual(strings.filter((t) => t.toLowerCase().includes(word)), [], word);
 });
 
 // a drawn table as its rows, each cell's text under its column's name
@@ -319,12 +342,15 @@ test('the item view draws each result in its own row and column, and each part o
     d.steps.forEach((s, k) => {
       assert.equal(rows[k].Before, page.formatNumber(values[k]), `${ind.id} ${s.id} before`);
       assert.equal(rows[k].After, page.formatNumber(values[k + 1]), `${ind.id} ${s.id} after`);
+      assert.equal(rows[k].Verdict, item.verdicts[ind.id][k] || '—', `${ind.id} ${s.id} verdict`);
       checked += values[k] !== values[k + 1];
     });
     assert.equal(rows[d.steps.length].Before, page.formatNumber(values[0]));
     assert.equal(rows[d.steps.length].After, page.formatNumber(values[values.length - 1]));
+    assert.equal(rows[d.steps.length].Verdict, '—', 'the whole way has no claim');
   }
   assert.ok(checked >= 2, 'some results moved, so before and after differ');
+  assert.ok(Object.values(item.verdicts).flat().some((v) => v && v !== 'unchanged'), 'a verdict other than unchanged is drawn');
   const parts = tables.filter((t) => tableRows(t).length && 'Part' in tableRows(t)[0]);
   const bd = wheat();
   assert.equal(parts.length, Object.keys(bd.indicators).length);
@@ -337,6 +363,9 @@ test('the item view draws each result in its own row and column, and each part o
       assert.equal(rows[k].Kind, kind);
       assert.equal(rows[k].Before, page.formatNumber(pair[0]), `${rows[k].Part} before`);
       assert.equal(rows[k].After, page.formatNumber(pair[1]), `${rows[k].Part} after`);
+      // the change is after less before, with its sign
+      const change = pair[1] - pair[0];
+      assert.equal(rows[k].Change, change === 0 ? '=' : (change > 0 ? '+' : '−') + page.formatNumber(Math.abs(change)), `${rows[k].Part} change`);
     });
     assert.ok(entry.parts.some((p) => p.values[0] !== p.values[1]));
   });
@@ -367,7 +396,9 @@ test('the whole way and the steps are drawn with each count in its own column (i
     const sum = (f) => n(Object.values(d.counts.steps[s.id]).reduce((a, b) => a + f(b), 0));
     assert.equal(steps[k].Up, sum((b) => b.directions.up), s.id);
     assert.equal(steps[k].Down, sum((b) => b.directions.down), s.id);
+    assert.equal(steps[k].Explained, s.explained ? 'yes' : 'no: nothing explains it', s.id);
   });
+  assert.ok(d.steps.some((s) => s.explained) && d.steps.some((s) => !s.explained), 'steps of both kinds');
 });
 
 test('the page takes each edge it shares with the Python where the Python does: ten times, a zero, a large noise (issue 15)', () => {
