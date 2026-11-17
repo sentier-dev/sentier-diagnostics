@@ -33,7 +33,7 @@
     <div class="sd-wrap"><table class="sd-table" data-sd="steps-table"></table></div>
     <h4 data-sd="total-heading">The whole way</h4>
     <p class="sd-note">Every difference between the first state and the last is the sum of the steps' differences.
-      "Largest step" counts, per indicator, the <span data-sd-word="many">items</span> whose largest share comes from each step, of the steps that moved them;
+      "Largest step" counts, per <span data-sd-word="indicator">indicator</span>, the <span data-sd-word="many">items</span> whose largest share comes from each step, of the steps that moved them;
       "spread over steps" counts the <span data-sd-word="many">items</span> whose whole way moved while no single step did.
       The split is exact up to rounding, and it depends on the order of the steps where two steps touch the same results.</p>
     <div class="sd-wrap"><table class="sd-table" data-sd="total-table"></table></div>
@@ -41,7 +41,7 @@
 
   <section class="sd-section" data-sd="grid">
     <h3>Matrix</h3>
-    <p class="sd-note">Each cell is the result after divided by the result before, for one <span data-sd-word="one">item</span> and indicator, in the comparison chosen above.
+    <p class="sd-note">Each cell is the result after divided by the result before, for one <span data-sd-word="one">item</span> and <span data-sd-word="indicator">indicator</span>, in the comparison chosen above.
       A heading sorts by how far the two lie apart, the furthest first. Choose a row (click it, or press Enter on it) to open the <span data-sd-word="one">item</span>.</p>
     <div class="sd-controls">
       <label class="sd-field sd-grow"><span>Name</span><input type="search" data-sd="grid-find" placeholder="Filter by name, place or id" autocomplete="off" spellcheck="false"></label>
@@ -71,7 +71,7 @@
 
   <section class="sd-section" data-sd="distributions">
     <h3>Distributions</h3>
-    <p class="sd-note">Values per class and band, as a share of all values of the indicator. Every indicator is drawn on the same scale.</p>
+    <p class="sd-note">Values per class and band, as a share of all values of the <span data-sd-word="indicator">indicator</span>. Every <span data-sd-word="indicator">indicator</span> is drawn on the same scale.</p>
     <p class="sd-legend" data-sd="dist-legend"></p>
     <div class="sd-wrap"><table class="sd-table" data-sd="dist-table"></table></div>
   </section>
@@ -80,7 +80,7 @@
     <h3>Worst</h3>
     <div class="sd-controls">
       <label class="sd-field"><span>Show</span><select data-sd="worst-n"><option>10</option><option selected>20</option><option>50</option><option>100</option></select></label>
-      <label class="sd-field"><span>Indicator</span><select data-sd="worst-indicator"></select></label>
+      <label class="sd-field"><span data-sd-word="Indicator">Indicator</span><select data-sd="worst-indicator"></select></label>
     </div>
     <p class="sd-note" data-sd="worst-said"></p>
     <div class="sd-wrap"><table class="sd-table" data-sd="worst-table"></table></div>

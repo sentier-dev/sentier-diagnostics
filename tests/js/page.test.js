@@ -427,8 +427,59 @@ test('the page\'s own sentences say the file\'s word for an item', () => {
   const drawn = dom.page(data);
   const words = drawn.root.querySelectorAll('[data-sd-word]');
   assert.ok(words.length >= 4);
-  for (const span of words) assert.equal(span.textContent, span.getAttribute('data-sd-word') === 'many' ? 'datasets' : 'dataset');
+  const items = words.filter((span) => ['one', 'many'].includes(span.getAttribute('data-sd-word')));
+  assert.ok(items.length >= 4);
+  for (const span of items) assert.equal(span.textContent, span.getAttribute('data-sd-word') === 'many' ? 'datasets' : 'dataset');
   assert.equal(drawn.byId['item-close'].getAttribute('aria-label'), 'Close the dataset');
   assert.equal(drawn.byId['grid-region'].getAttribute('aria-label'), 'After divided by before, per dataset and indicator');
+});
+
+test('the page says the file\'s word for an indicator, and "indicator" where it gives none', () => {
+  const plain = dom.page(example());
+  const said = (drawn, value) => drawn.root.querySelectorAll('[data-sd-word]')
+    .filter((span) => span.getAttribute('data-sd-word') === value).map((span) => span.textContent);
+  assert.deepEqual([...new Set(said(plain, 'indicator'))], ['indicator']);
+  const data = example();
+  data.indicator = { one: 'impact category', many: 'impact categories' };
+  const drawn = dom.page(data);
+  assert.equal(drawn.byId.content.hidden, false);
+  assert.ok(said(drawn, 'indicator').length >= 3);
+  assert.deepEqual([...new Set(said(drawn, 'indicator'))], ['impact category']);
+  assert.deepEqual(said(drawn, 'Indicator'), ['Impact category']);
+  assert.equal(drawn.byId['grid-region'].getAttribute('aria-label'), 'After divided by before, per ' + data.item.one + ' and impact category');
+  const text = drawn.text();
+  assert.match(text, new RegExp(data.indicators.length + ' impact categories\\. '));
+  assert.match(text, /One floor per impact category and reference unit/);
+  assert.doesNotMatch(text.replace(data.about, ''), /\bindicators?\b/i);
+});
+
+test('a page refuses an indicator word that is not {one, many}', () => {
+  const data = example();
+  data.indicator = { one: 'impact category' };
+  const drawn = dom.page(data);
+  assert.equal(drawn.byId.content.hidden, true);
+  assert.match(drawn.text(), /indicator word of the file is not \{one, many\}/);
+});
+
+test('steps count from 1 where the chain does not start from the published results', () => {
+  const published = example();
+  assert.equal(published.states[0].kind, 'published');
+  const first = dom.page(published);
+  assert.match(first.text(), /Step 0: /);
+  assert.equal(first.byId['steps-zero'].hidden, false);
+  const data = example();
+  data.states[0].kind = 'build';
+  const drawn = dom.page(data);
+  assert.equal(drawn.byId.content.hidden, false);
+  assert.equal(drawn.byId['steps-zero'].hidden, true);
+  const text = drawn.text();
+  assert.doesNotMatch(text, /Step 0\b/);
+  data.steps.forEach((s, k) => assert.ok(text.includes('Step ' + (k + 1) + ': ' + s.label), s.label));
+  const rows = drawn.byId['steps-table'].all().filter((n) => n.tagName === 'TR' && n.firstChild && n.firstChild.tagName === 'TD');
+  assert.deepEqual(rows.map((row) => row.firstChild.textContent), data.steps.map((s, k) => String(k + 1)));
+  drawn.open('item=' + encodeURIComponent(data.items[0].id));
+  const drawer = drawn.byId['item-body'].seen().join(' ');
+  assert.ok(drawer.includes('Step 1: ' + data.steps[0].label), drawer.slice(0, 200));
+  assert.doesNotMatch(drawer, /Step 0\b/);
 });
 

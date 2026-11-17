@@ -40,7 +40,7 @@ FLOOR_BASES = ("median", "declared", "none")
 ORIGIN_KINDS = ("person", "code", "model")
 TOTAL = "total"
 #: Keys a file may leave out; each is null where it says nothing.
-OPTIONAL_KEYS = {"matrix"}
+OPTIONAL_KEYS = {"matrix", "indicator"}
 
 #: The largest file a page reads: it holds the whole file.
 MAX_BYTES = 12 * 1024 * 1024
@@ -152,6 +152,27 @@ def is_count(value) -> bool:
 
 def is_share(value) -> bool:
     return rule.is_value(value) and value >= 0
+
+
+def indicator_word(data: Mapping) -> dict:
+    """What the file calls an indicator, {one, many}: its own word, or "indicator".
+
+    >>> indicator_word({"indicator": {"one": "impact category", "many": "impact categories"}})["many"]
+    'impact categories'
+    >>> indicator_word({})["one"]
+    'indicator'
+    """
+    return data.get("indicator") or {"one": "indicator", "many": "indicators"}
+
+
+def first_step(data: Mapping) -> int:
+    """The number of the first step: 0 where the chain starts from the published results (that
+    step checks they are reproduced), 1 otherwise.
+
+    >>> first_step({"states": [{"kind": "published"}]}), first_step({"states": [{"kind": "build"}]})
+    (0, 1)
+    """
+    return 0 if data["states"][0]["kind"] == "published" else 1
 
 
 def is_link(value) -> bool:
@@ -812,6 +833,10 @@ def _errors(data, found: list[str]) -> list[str]:
     if not (isinstance(item, dict) and set(item) == {"one", "many"}
             and all(is_text(w, 30) for w in item.values())):  # fmt: skip
         found.append("`item` is not {one, many}")
+    word = data.get("indicator")
+    if word is not None and not (isinstance(word, dict) and set(word) == {"one", "many"}
+                                 and all(is_text(w, 30) for w in word.values())):  # fmt: skip
+        found.append("`indicator` is not {one, many}, or null")
     if not is_text(data["made_by"], 60):
         found.append("`made_by` is not a short text")
     notes = data["notes"]

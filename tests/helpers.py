@@ -10,13 +10,13 @@ A, B = "x:a", "x:b"
 INDICATORS = [(A, "Indicator A", "A", "kg CO2 eq"), (B, "Indicator B", "B", "m3")]
 
 
-def two_states(before: dict, after: dict, *, claim=None, units=None, **more) -> dict:
+def two_states(before: dict, after: dict, *, claim=None, units=None, first_kind="published", **more) -> dict:
     """A chain of one step: `before` and `after` are `{indicator: {item: value}}`."""
     items = {item for side in (before, after) for column in side.values() for item in column}
     return chain.build(
         "Two states",
         indicators=INDICATORS,
-        states=[chain.state("s0", "Before", kind="published"), chain.state("s1", "After")],
+        states=[chain.state("s0", "Before", kind=first_kind), chain.state("s1", "After")],
         steps=[chain.step("one", "One step", kind="fix", claim=claim)],
         values={"s0": before, "s1": after},
         units=units or dict.fromkeys(items, "kg"),

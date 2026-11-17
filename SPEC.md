@@ -119,6 +119,7 @@ control characters, bounded lengths.
 | `audience` | `"local"` (the default) or `"public"`: whether its writer says it may be published. The tool checks only that it is one of the two; a site's own check decides what it accepts. A page of a local file says so at its top |
 | `title`, `about` | Short text; `about` may be null |
 | `item` | `{"one": "product", "many": "products"}`: the word for an item |
+| `indicator` | Optional. `{"one": "impact category", "many": "impact categories"}`: the word for an indicator, which the page and the summary use; null or absent for "indicator" |
 | `indicators` | `[{id, name, short, unit}]`. An indicator is matched by its exact id, never by a prefix |
 | `rule` | The floors and the tolerance of the whole way (section 5) |
 | `states` | `[{id, label, about, kind, identity, join}]` in order. `identity` is a short table of texts (commit, release, machine); `join` is what the reader counted when it matched its rows to items: `{compared, unmatched, ambiguous, note}`, or null |
@@ -485,6 +486,10 @@ Title, the states in order (with their identity and join counts), the file's tie
 items it holds of how many worth a look, and a banner for a local file.
 
 ### 10.2 Steps and the whole way
+Steps are numbered from 0 where the first state is `published`: step 0 is then the
+reproduction (rule 1 of section 1). A chain that starts from a build of its own has no
+reproduction, and its steps are numbered from 1.
+
 One row per step: kind, explained or not, the claim and its origin, moved, up, down, the
 verdicts, missing before and after, tolerance and noise. Then the whole way per indicator:
 every class, up, down, the step that carries most of the difference (section 7), spread
@@ -673,6 +678,8 @@ sentier-bafu-agribalyse wrote their requirements. What became of each:
 | Per-product table of all categories, distributions, drill-down, written reasons | agribalyse (from the backtest) | yes: grid, distributions, item view, explanations |
 | Run identity on the page | agribalyse | yes: each state's `identity` |
 | Indicators not hardcoded | agribalyse | yes: from the file |
+| The file's own word for an indicator ("impact category") | bafu | yes: the optional `indicator` |
+| No step 0 in a chain that does not start from the published results | bafu | yes: its steps are numbered from 1 (section 10.2) |
 | Readable without JavaScript for the counts; 375 px wide | bafu-agribalyse | 375 px: yes, no sideways scroll of the page (tables scroll inside their frame; checked in a browser). Without JavaScript: the summary is Markdown; a no-script page is later |
 
 ## 15. Open questions

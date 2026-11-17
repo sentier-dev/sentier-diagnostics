@@ -44,6 +44,13 @@ class Validator(unittest.TestCase):
     def test_the_example_is_valid(self):
         self.assertEqual(fileformat.errors(self.data), [])
 
+    def test_the_word_for_an_indicator_is_optional_and_checked(self):
+        for word in ({"one": "impact category", "many": "impact categories"}, None):
+            self.assertEqual(fileformat.errors(helpers.mutated(self.data, lambda d: d.update(indicator=word))), [])
+        for wrong in ({"one": "category"}, {"one": "x", "many": "y", "few": "z"}, {"one": "", "many": "y"},
+                      {"one": "x" * 31, "many": "y"}, "impact category", ["one", "many"]):  # fmt: skip
+            self.refuses(lambda d, w=wrong: d.update(indicator=w), "`indicator`")
+
     def test_a_class_that_contradicts_the_rule(self):
         def change(d):
             item = next(i for i in d["items"] if i["classes"]["x:climate"][-1] == rule.DIFFERS)
@@ -401,6 +408,20 @@ class FromTables(unittest.TestCase):
         said = {k: n for k, n in data["counts"]["steps"]["st"][A]["verdicts"].items() if n}
         self.assertEqual(said, {"as claimed": 1, "unchanged": 1})
 
+    def test_a_description_names_its_word_for_an_indicator(self):
+        spec = {"title": "t", "item": {"one": "i", "many": "is"},
+                "indicators": [{"id": A, "name": "A", "short": "A", "unit": "m3"}], "items": "items.csv",
+                "states": [{"id": "s0", "label": "0", "results": "s0.csv"}, {"id": "s1", "label": "1", "results": "s1.csv"}],
+                "steps": [{"id": "st", "label": "step", "kind": "method"}]}  # fmt: skip
+        tables_ = {"items.csv": "item,unit\na,kg\n", "s0.csv": f"item,{A}\na,1.0\n", "s1.csv": f"item,{A}\na,1.5\n"}
+        with tempfile.TemporaryDirectory() as folder:
+            self.assertNotIn("indicator", from_tables.build(self.description(Path(folder), tables_, spec)))
+            word = {"one": "impact category", "many": "impact categories"}
+            data = from_tables.build(self.description(Path(folder), tables_, {**spec, "indicator": word}))
+            self.assertEqual((data["indicator"], fileformat.errors(data)), (word, []))
+            wrong = {**spec, "indicator": {"one": "impact category"}}
+            self.assertTrue(any("indicator" in e for e in from_tables.description_errors(wrong)))
+
     def test_noise_is_taken_beyond_the_floor_only(self):
         """A residue near zero (4e-16 in one build, 0 in the other) is not noise: it would make
         the noise 1.0 and hide a correction by a factor of 580 as "within noise"."""
@@ -577,6 +598,28 @@ class Summary(unittest.TestCase):
     def test_the_noise_says_its_size(self):
         said = summary.text(example.build())
         self.assertIn("Water 2.4 %", said)
+
+    def test_steps_are_numbered_from_1_where_the_chain_starts_from_no_published_results(self):
+        """Step 0 checks that the published results are reproduced; a chain that starts from
+        a build of its own has no such step and counts from 1."""
+        published = summary.text(helpers.two_states({A: {"p": 1.0}}, {A: {"p": 2.0}}))
+        self.assertTrue(any(line.startswith("| 0. One step |") for line in published.splitlines()))
+        built = summary.text(helpers.two_states({A: {"p": 1.0}}, {A: {"p": 2.0}}, first_kind="build"))
+        rows = [line for line in built.splitlines() if line.startswith("| 1. One step |")]
+        self.assertEqual(len(rows), 1)
+        self.assertNotIn("Step 0", built)
+
+    def test_the_file_word_for_an_indicator(self):
+        data = example.build()
+        self.assertIn(f"{len(data['indicators'])} indicators.", summary.text(data))
+        data["indicator"] = {"one": "impact category", "many": "impact categories"}
+        self.assertEqual(fileformat.errors(data), [])
+        said = summary.text(data)
+        self.assertIn(f"{len(data['indicators'])} impact categories.", said)
+        self.assertIn("| Impact category |", said)
+        self.assertIn("one per impact category and reference unit", said)
+        self.assertNotIn("| Indicator |", said)
+        self.assertNotIn(" indicators. ", said.replace(data["about"], ""))
 
     def test_texts_of_the_file_are_not_markdown(self):
         """A text from the file cannot add a table column, a link, markup or a mention to a

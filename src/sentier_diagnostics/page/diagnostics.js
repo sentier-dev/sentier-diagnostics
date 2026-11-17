@@ -39,7 +39,7 @@
     'zero reference': 'the result before is zero or within the floor; the result after is not',
     'zero result': 'the result after is zero or within the floor; the result before is not',
     'sign change': 'the two results have different signs',
-    'near zero': 'both results are within the floor of their indicator and unit: their ratio says nothing',
+    'near zero': 'both results are within their floor: their ratio says nothing',
     'missing': 'a side has no result; it is not read as zero'
   };
   var SHORT = {
@@ -153,8 +153,8 @@
   // what a step's noise says: measured and identical, measured, or not measured. Two
   // identical builds are a finding, and never read as "not measured"; an indicator the noise
   // holds no size for was not measured, and is never read as identical. `ids` are the
-  // file's indicators.
-  function noiseText(noise, ids) {
+  // file's indicators, and `many` what the file calls them.
+  function noiseText(noise, ids, many) {
     if (!noise || !noise.measured) return 'not measured';
     var by = noise.by || {};
     var between = ' between ' + noise.between.join(' and ');
@@ -162,7 +162,7 @@
     var all = ids || keys;
     var absent = all.filter(function (k) { return !(k in by); }).length;
     if (!keys.length) return 'not measured: no result beyond the floor in both builds' + between;
-    var part = absent ? ', for ' + keys.length + ' of ' + all.length + ' indicators' : '';
+    var part = absent ? ', for ' + keys.length + ' of ' + all.length + ' ' + (many || 'indicators') : '';
     var largest = Math.max.apply(null, keys.map(function (k) { return by[k]; }));
     if (largest === 0) return 'identical' + between + part;
     return 'measured' + between + part + (largest > LARGE_NOISE ? '; large: up to ' + formatNumber(largest * 100) + ' %' : '');
@@ -310,6 +310,8 @@
       if (!d[tables[k]] || typeof d[tables[k]] !== 'object' || Array.isArray(d[tables[k]])) return 'the ' + tables[k] + ' of the file is not a table';
     }
     if (!d.indicators.length) return 'the file has no indicator';
+    if (d.indicator !== undefined && d.indicator !== null && !(d.indicator && typeof d.indicator.one === 'string' &&
+        typeof d.indicator.many === 'string')) return 'the indicator word of the file is not {one, many}';
     if (d.steps.length !== d.states.length - 1) return 'the file has not one step fewer than states';
     if (!d.counts.steps || !d.counts.total) return 'the counts of the file are not {steps, total}';
     return null;
@@ -426,6 +428,7 @@
     function n(x) { return x === null || x === undefined ? '—' : groupThousands(x); }
     function many(count) { return count === 1 ? D.item.one : D.item.many; }
     function capital(text) { return text.charAt(0).toUpperCase() + text.slice(1); }
+    function article(word) { return (/^[aeiou]/i.test(word) ? 'an ' : 'a ') + word; }
 
     function indicatorName(id) {
       for (var i = 0; i < D.indicators.length; i++) {
@@ -446,7 +449,15 @@
     function compLabel(comp) {
       if (comp === 'total') return 'The whole way: ' + D.states[0].label + ' → ' + D.states[D.states.length - 1].label;
       var k = stepIndex(comp);
-      return 'Step ' + k + ': ' + D.steps[k].label;
+      return 'Step ' + stepNo(k) + ': ' + D.steps[k].label;
+    }
+    // a step's number: from 0 where the chain starts from the published results (step 0
+    // checks they are reproduced), from 1 otherwise
+    function stepNo(k) { return k + (D.states[0].kind === 'published' ? 0 : 1); }
+    // what the file calls an indicator: its own word, or "indicator"
+    function indWord(many) {
+      var word = D.indicator || { one: 'indicator', many: 'indicators' };
+      return many ? word.many : word.one;
     }
     function pairOf(row, indicator, k) {
       var values = row.values[indicator];
@@ -510,8 +521,12 @@
     // the file's own word for an item, in the page's own sentences
     function sayWords() {
       var spans = root.querySelectorAll('[data-sd-word]');
-      for (var i = 0; i < spans.length; i++) spans[i].textContent = spans[i].getAttribute('data-sd-word') === 'many' ? D.item.many : D.item.one;
-      q('grid-region').setAttribute('aria-label', 'After divided by before, per ' + D.item.one + ' and indicator');
+      var words = { one: D.item.one, many: D.item.many, indicator: indWord(false), indicators: indWord(true), Indicator: capital(indWord(false)) };
+      for (var i = 0; i < spans.length; i++) {
+        var said = words[spans[i].getAttribute('data-sd-word')];
+        if (said !== undefined) spans[i].textContent = said;
+      }
+      q('grid-region').setAttribute('aria-label', 'After divided by before, per ' + D.item.one + ' and ' + indWord(false));
       q('item-close').setAttribute('aria-label', 'Close the ' + D.item.one);
     }
 
@@ -536,14 +551,14 @@
       q('made-by').textContent = 'Written by ' + D.made_by + '. ' + FORMAT + '.';
       var select = clear(q('comparison'));
       select.appendChild(el('option', { value: 'total', text: 'The whole way' }));
-      D.steps.forEach(function (s, k) { select.appendChild(el('option', { value: s.id, text: 'Step ' + k + ': ' + s.label })); });
+      D.steps.forEach(function (s, k) { select.appendChild(el('option', { value: s.id, text: 'Step ' + stepNo(k) + ': ' + s.label })); });
       select.value = view.comp;
     }
 
     // what the page holds of the items: the listed ones, or every one once the matrix is here
     function tierSaid() {
       var c = D.items_count;
-      var head = groupThousands(c.all) + ' ' + D.item.many + ', ' + D.indicators.length + ' indicators. ';
+      var head = groupThousands(c.all) + ' ' + D.item.many + ', ' + D.indicators.length + ' ' + indWord(D.indicators.length !== 1) + '. ';
       var said;
       if (D.tier === 'counts') said = 'This file holds counts only: no single ' + D.item.one + ' is shown.';
       else if (M) said = 'All ' + groupThousands(M.length) + ' are loaded from the matrix; ' + groupThousands(c.listed) + ' of the ' +
@@ -566,14 +581,14 @@
       var body = el('tbody');
       D.steps.forEach(function (s, k) {
         var verdict = function (name) { return s.claim ? n(sumOver(s.id, function (b) { return b.verdicts[name]; })) : '—'; };
-        var noise = noiseText(s.noise, indicatorIds());
+        var noise = noiseText(s.noise, indicatorIds(), indWord(true));
         // the step from the published results: what moved there is the residual the chain
         // starts from, not a regression, whatever its claim says
         var unrepro = sumOver(s.id, moved);
         var residual = k === 0 && D.states[0].kind === 'published'
           ? (unrepro === 1 ? '1 value' : n(unrepro) + ' values') + ' not reproduced within the tolerance: the residual the chain starts from, not a regression.' : null;
         body.appendChild(el('tr', null, [
-          el('td', { cls: 'num', text: String(k) }),
+          el('td', { cls: 'num', text: String(stepNo(k)) }),
           el('td', null, [safeLink(s.link) ? el('a', { href: safeLink(s.link), text: s.label }) : s.label, s.about ? el('div', { cls: 'sd-quiet', text: s.about }) : null,
             residual ? el('div', { cls: 'sd-quiet', text: residual }) : null]),
           el('td', { text: s.kind }),
@@ -600,7 +615,7 @@
       var total = clear(q('total-table'));
       q('total-heading').textContent = 'The whole way: ' + D.states[0].label + ' → ' + D.states[D.states.length - 1].label;
       var classes = Object.keys(D.counts.total[D.indicators[0].id].classes);
-      var cols = ['Indicator'].concat(classes, ['Up', 'Down', 'Largest step', 'Spread over steps', 'Not attributable', 'Moved by what nothing explains']);
+      var cols = [capital(indWord(false))].concat(classes, ['Up', 'Down', 'Largest step', 'Spread over steps', 'Not attributable', 'Moved by what nothing explains']);
       total.appendChild(el('thead', null, [el('tr', null, cols.map(function (h) { return el('th', { scope: 'col', text: h, title: SAID[h] || null }); }))]));
       var tbody = el('tbody');
       D.indicators.forEach(function (ind) {
@@ -638,7 +653,7 @@
         .concat(up.map(function (b) { return ['band', b, 'up']; }))
         .concat(aside.map(function (c) { return ['class', c, '']; }));
       var table = clear(q('dist-table'));
-      var head = [el('th', { scope: 'col', text: 'Indicator' })];
+      var head = [el('th', { scope: 'col', text: capital(indWord(false)) })];
       columns.forEach(function (c) {
         var label = c[0] === 'band' ? (c[2] === 'up' ? '↑ ' : '↓ ') + bandStep(c[1]) : (SHORT[c[1]] || c[1]);
         head.push(el('th', { scope: 'col', cls: 'num', text: label, title: c[1] + (SAID[c[1]] ? ': ' + SAID[c[1]] : '') }));
@@ -683,7 +698,7 @@
         : 'Showing ' + shown.length + ' of the ' + groupThousands(found.length) + ' values that moved or are missing in ' + compLabel(view.comp) +
           ', among ' + heldSaid() + '. Ordered by class (sign change, zero reference, zero result, beyond 10x, differs, missing), then by how far the two sizes lie apart.' + sizeSaid();
       var table = clear(q('worst-table'));
-      var head = ['#', capital(D.item.one), 'Indicator', 'Class', 'Before', 'After', 'Change', 'Verdict'];
+      var head = ['#', capital(D.item.one), capital(indWord(false)), 'Class', 'Before', 'After', 'Change', 'Verdict'];
       table.appendChild(el('thead', null, [el('tr', null, head.map(function (h) { return el('th', { scope: 'col', text: h }); }))]));
       var body = el('tbody');
       shown.forEach(function (one, i) {
@@ -807,7 +822,7 @@
 
     function aboutText(about) {
       var parts = [];
-      if (about.step) parts.push(about.step === 'total' ? 'the whole way' : 'step ' + D.steps[stepIndex(about.step)].label);
+      if (about.step) parts.push(about.step === 'total' ? 'the whole way' : 'step ' + stepNo(stepIndex(about.step)) + ': ' + D.steps[stepIndex(about.step)].label);
       if (about.indicator) parts.push(indicatorName(about.indicator));
       if (about.item) {
         var row = rowById(about.item);
@@ -841,14 +856,14 @@
       var stepsTable = el('table', null, [el('thead', null, [el('tr', null, ['Step', 'Tolerance', 'Basis', 'Note', 'Noise'].map(function (h) { return el('th', { scope: 'col', text: h }); }))])]);
       var tb = el('tbody');
       D.steps.forEach(function (s) {
-        var noise = noiseText(s.noise, indicatorIds()) + (s.noise.measured ? ': ' + Object.keys(s.noise.by).map(function (k) { return indicatorName(k) + ' ' + formatNumber(s.noise.by[k]); }).join(', ') : '');
+        var noise = noiseText(s.noise, indicatorIds(), indWord(true)) + (s.noise.measured ? ': ' + Object.keys(s.noise.by).map(function (k) { return indicatorName(k) + ' ' + formatNumber(s.noise.by[k]); }).join(', ') : '');
         tb.appendChild(el('tr', null, [el('td', { text: s.label }), el('td', { cls: 'num', text: String(s.tolerance.value) }), el('td', { text: s.tolerance.basis }), el('td', { text: s.tolerance.note || '' }), el('td', { text: noise })]));
       });
       stepsTable.appendChild(tb);
       body.appendChild(el('div', { cls: 'sd-wrap' }, [stepsTable]));
       body.appendChild(el('h4', { text: 'Floors' }));
-      body.appendChild(el('p', { cls: 'sd-quiet', text: 'One floor per indicator and reference unit: ' + D.rule.floor_factor + ' times the median size of the results of ' + D.states[stateIndex(D.rule.floors_from)].label + ' in that unit, unless declared. Units are never pooled.' }));
-      var floors = el('table', null, [el('thead', null, [el('tr', null, ['Indicator', 'Unit', 'Floor', 'Basis', 'From results'].map(function (h) { return el('th', { scope: 'col', text: h }); }))])]);
+      body.appendChild(el('p', { cls: 'sd-quiet', text: 'One floor per ' + indWord(false) + ' and reference unit: ' + D.rule.floor_factor + ' times the median size of the results of ' + D.states[stateIndex(D.rule.floors_from)].label + ' in that unit, unless declared. Units are never pooled.' }));
+      var floors = el('table', null, [el('thead', null, [el('tr', null, [capital(indWord(false)), 'Unit', 'Floor', 'Basis', 'From results'].map(function (h) { return el('th', { scope: 'col', text: h }); }))])]);
       var fb = el('tbody');
       D.rule.floors.forEach(function (f) {
         fb.appendChild(el('tr', null, [el('td', { text: indicatorName(f.indicator) }), el('td', { text: f.unit || 'unknown' }), el('td', { cls: 'num', text: formatNumber(f.value), title: String(f.value) }), el('td', { text: f.basis }), el('td', { cls: 'num', text: n(f.n) })]));
@@ -877,11 +892,11 @@
       var own = D.explanations.filter(function (e) { return e.about.item === row.id; });
       var wider = D.explanations.filter(function (e) { return !e.about.item && movedUnder(row, e.about); });
       own.forEach(function (e) { list.appendChild(explanationNode(e, 'This ' + D.item.one)); });
-      wider.forEach(function (e) { list.appendChild(explanationNode(e, e.about.step && e.about.indicator ? 'Its step and indicator' : e.about.step ? 'A step it moved in' : e.about.indicator ? 'An indicator it moved in' : 'The whole file')); });
+      wider.forEach(function (e) { list.appendChild(explanationNode(e, e.about.step && e.about.indicator ? 'Its step and ' + indWord(false) : e.about.step ? 'A step it moved in' : e.about.indicator ? capital(article(indWord(false))) + ' it moved in' : 'The whole file')); });
       if (!own.length && !wider.length) {
         var any = movedUnder(row, {});
         list.appendChild(el('li', { cls: 'sd-none', text: any
-          ? 'None given: no explanation in this file is about this ' + D.item.one + ', or about a step or indicator in which it moved.'
+          ? 'None given: no explanation in this file is about this ' + D.item.one + ', or about a step or ' + indWord(false) + ' in which it moved.'
           : 'It moved in no comparison, and no explanation in this file is about it.' }));
       }
       return list;
@@ -898,7 +913,7 @@
         var b = values[k], a = values[k + 1];
         var share = split.state === 'split' ? shareText(split.shares[k]) : '—';
         tb.appendChild(el('tr', null, [
-          el('td', null, ['Step ' + k + ': ' + s.label, s.explained ? null : el('div', { cls: 'sd-error', text: 'nothing explains it' })]),
+          el('td', null, ['Step ' + stepNo(k) + ': ' + s.label, s.explained ? null : el('div', { cls: 'sd-error', text: 'nothing explains it' })]),
           el('td', { cls: 'num', text: formatNumber(b), title: String(b) }),
           el('td', { cls: 'num', text: formatNumber(a), title: String(a) }),
           valueCell(row, ind.id, k, false),
@@ -931,7 +946,7 @@
       var body = clear(q('item-body'));
       body.appendChild(el('h4', { text: 'Why it differs' }));
       body.appendChild(whyNode(row));
-      body.appendChild(el('p', { cls: 'sd-quiet', text: 'The explanations about this ' + D.item.one + ' first, then those about a step or indicator in which it moved: those may not be about it. An explanation is a claim; it changes no class.' }));
+      body.appendChild(el('p', { cls: 'sd-quiet', text: 'The explanations about this ' + D.item.one + ' first, then those about a step or ' + indWord(false) + ' in which it moved: those may not be about it. An explanation is a claim; it changes no class.' }));
       // the indicators, the one whose whole way lies furthest apart first
       var last = D.steps.length;
       var order = D.indicators.slice().sort(function (a, b) {

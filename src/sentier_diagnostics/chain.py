@@ -200,6 +200,7 @@ def _build(
     units: Mapping[str, str | None] | None = None,
     names: Mapping[str, Mapping] | None = None,
     item_word: tuple[str, str] = ("item", "items"),
+    indicator_word: tuple[str, str] | None = None,
     about: str | None = None,
     floors: Mapping[tuple[str, str | None], float] | None = None,
     floor_factor: float = rule.FLOOR_FACTOR,
@@ -430,6 +431,7 @@ def _build(
         "title": title,
         "about": about,
         "item": {"one": item_word[0], "many": item_word[1]},
+        **({"indicator": {"one": indicator_word[0], "many": indicator_word[1]}} if indicator_word else {}),
         "indicators": meta,
         "rule": {
             "floor_factor": floor_factor,

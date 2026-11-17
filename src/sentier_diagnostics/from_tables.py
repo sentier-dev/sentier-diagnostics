@@ -3,6 +3,7 @@
     {
       "title": "Our database, from the published results to main",
       "item": {"one": "dataset", "many": "datasets"},
+      "indicator": {"one": "impact category", "many": "impact categories"},
       "indicators": [{"id": "ef31:climate", "name": "Climate change", "short": "Climate",
                       "unit": "kg CO2 eq"}],
       "items": "items.csv",
@@ -36,8 +37,8 @@ from pathlib import Path
 
 from . import chain, claims, fileformat, tables
 
-KEYS = {"title", "about", "item", "indicators", "items", "states", "steps", "listed", "tier", "audience", "claim_lists",
-        "explanations", "notes", "floor_factor", "matrix"}  # fmt: skip
+KEYS = {"title", "about", "item", "indicator", "indicators", "items", "states", "steps", "listed", "tier", "audience",
+        "claim_lists", "explanations", "notes", "floor_factor", "matrix"}  # fmt: skip
 
 
 def _origin(said):
@@ -77,6 +78,11 @@ def description_errors(spec) -> list[str]:
         ("floor_factor", _number, "a number"),
         (
             "item",
+            lambda v: _table(v, ("one", "many")) and all(map(_text, v.values())),
+            "{one, many} in words",
+        ),
+        (
+            "indicator",
             lambda v: _table(v, ("one", "many")) and all(map(_text, v.values())),
             "{one, many} in words",
         ),
@@ -275,6 +281,7 @@ def build_with_matrix(path: Path) -> tuple[dict, dict | None]:
         units=units,
         names=items,
         item_word=(word["one"], word["many"]),
+        indicator_word=(spec["indicator"]["one"], spec["indicator"]["many"]) if spec.get("indicator") else None,
         listed=spec.get("listed", 200),
         tier=spec.get("tier", "items"),
         audience=spec.get("audience", "local"),
