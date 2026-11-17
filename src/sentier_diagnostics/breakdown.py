@@ -65,12 +65,12 @@ def errors(data) -> list[str]:
         if not isinstance(parts, list) or len(parts) > MAX_PARTS:
             found.append(f"{where}: `parts` is not a list of at most {MAX_PARTS}")
             continue
-        for part in parts:
-            if not (isinstance(part, dict) and set(part) == {"label", "kind", "values"}
-                    and is_text(part["label"], 300) and is_optional(part["kind"], MAX_WORD)):  # fmt: skip
-                found.append(f"{where}: a part is not {{label, kind, values}}")
-                break
-            pairs.append(part["values"])
+        if not all(isinstance(part, dict) and set(part) == {"label", "kind", "values"} for part in parts):
+            found.append(f"{where}: a part is not {{label, kind, values}}")
+            continue  # its sums cannot be read
+        if not all(is_text(part["label"], 300) and is_optional(part["kind"], MAX_WORD) for part in parts):
+            found.append(f"{where}: a part's `label` is not a text of at most 300, or its `kind` a short text")
+        pairs += [part["values"] for part in parts]
         if not all(isinstance(p, list) and len(p) == 2 and all(rule.is_value(v) for v in p) for p in pairs):
             found.append(f"{where}: a total, rest or part is not [before, after] in finite numbers")
             continue

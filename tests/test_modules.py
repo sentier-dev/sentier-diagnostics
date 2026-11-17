@@ -105,34 +105,10 @@ class Validator(unittest.TestCase):
     def test_values_of_any_type_are_faults_and_never_raise(self):
         """Every node of the example replaced by values of other types: the check returns
         faults that name a place, and never raises or stops without one (issue 4)."""
-        odd = ([], {}, [[]], {"a": 1}, "x", -1, 1.5, True, None, 10**400, [None])
         data = json.loads(json.dumps(self.data))
         data["items"] = data["items"][:5]  # five items hold every kind of node, and the explained ones
         data["items_count"].update(listed=5, not_listed=data["items_count"]["qualifying"] - 5)
-
-        def nodes(node, at=()):
-            if isinstance(node, dict):
-                for key, value in node.items():
-                    yield node, key
-                    yield from nodes(value)
-            elif isinstance(node, list):  # the first, second and last of a list stand for the rest
-                for key in sorted({0, 1, len(node) - 1} & set(range(len(node)))):
-                    yield node, key
-                    yield from nodes(node[key])
-
-        stopped = []
-        for parent, key in list(nodes(data)):
-            kept = parent[key]
-            for value in odd:
-                parent[key] = value
-                try:
-                    found = fileformat.errors(data)
-                except Exception as error:  # noqa: BLE001 - the test is that nothing raises
-                    self.fail(f"{key!r} = {value!r}: {type(error).__name__}: {error}")
-                self.assertIsInstance(found, list)
-                stopped += [(key, value) for e in found if e.startswith(fileformat.STOPPED)]
-            parent[key] = kept
-        self.assertEqual(stopped, [])
+        helpers.replaced_everywhere(self, data, fileformat.errors, stopped=fileformat.STOPPED)
         self.assertEqual(fileformat.errors(data), [])
 
     def test_a_claim_list_in_a_file_of_counts(self):
@@ -286,6 +262,16 @@ class Breakdowns(unittest.TestCase):
         self.assertEqual(entry["parts_not_listed"], 2)
         self.assertEqual(entry["rest"], [1.0, 1.0])
         self.assertEqual(entry["total"], [2.0, 4.0])
+
+    def test_values_of_any_type_are_faults_and_never_raise(self):
+        """Every node of a breakdown replaced by values of other types (issue 4): a part that
+        is not a part (`1`) is a fault, not a TypeError in the sums."""
+        good = breakdown.build("p", "s0", "s1", {A: ("kg", [("a", "kind", 0.2, 0.1), ("b", None, 0.3, 0.3), ("c", None, 0.01, 0.0)])}, top=2)
+        helpers.replaced_everywhere(self, good, breakdown.errors)
+        self.assertEqual(breakdown.errors(good), [])
+        for parts in ([1], [{"label": "a", "kind": None, "values": [1.0, 1.0]}, None]):
+            bad = helpers.mutated(good, lambda d, p=parts: d["indicators"][A].update(parts=p))
+            self.assertIn(f"indicator {A!r}: a part is not {{label, kind, values}}", breakdown.errors(bad))
 
     def test_a_rest_without_parts_left_out(self):
         good = breakdown.build("p", "s0", "s1", {A: ("kg", [("a", None, 1.0, 2.0)])})

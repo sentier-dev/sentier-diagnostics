@@ -1229,8 +1229,9 @@ def _fixes(f, found, base: _Base, builds: _Builds) -> bool:
             found.append(f"{where}: `counts` is not one block per indicator")
             return False
         shape = [e for ind in base.ids for e in fileformat._block(written[ind], f"{where}, counts of {ind!r}", one)]
-        shape += [f"{where}, counts of {ind!r}: `{key}` is null: a fix has no published results to come closer to"
-                  for ind in base.ids for key in ("closer", "further") if written[ind][key] is not None]  # fmt: skip
+        if not shape:  # each is a block of counts: its `closer` and `further` can be read
+            shape = [f"{where}, counts of {ind!r}: `{key}` is null: a fix has no published results to come closer to"
+                     for ind in base.ids for key in ("closer", "further") if written[ind][key] is not None]  # fmt: skip
         if shape:
             found += shape
             continue

@@ -177,6 +177,17 @@ class File(unittest.TestCase):
                     self.assertFalse(said(found, fixes.fileformat.STOPPED), found)
         self.assertEqual(fixes.errors(None), ["not a fixes file: not an object"])
 
+    def test_values_of_any_type_are_faults_that_name_their_place(self):
+        """Every node of a fixes file, however deep, replaced by values of other types: the
+        check names the place of each fault, and never falls back to the backstop that names
+        none (issue 4: `counts` of an indicator that is `1` or `{}`)."""
+        f, *_ = made()
+        helpers.replaced_everywhere(self, f, fixes.errors, stopped=fixes.fileformat.STOPPED)
+        self.assertEqual(fixes.errors(f), [])
+        for junk in (1, {}):
+            found = fixes.errors(changed(f, lambda g, v=junk: g["fixes"][0]["counts"].__setitem__(A, v)))
+            self.assertTrue(said(found, f"counts of {A!r}: counts are not"), found)
+
 
 class Checks(unittest.TestCase):
     """SPEC 16.9, each check probed by the change it must find."""
