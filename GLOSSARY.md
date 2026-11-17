@@ -33,8 +33,9 @@ The words this repository uses, each in one line. [SPEC.md](SPEC.md) says the re
 - **Drawer**: the panel of one item, at the right of the page, opened from a row.
 - **Base**: the one state of a chain that every fix is measured against (SPEC section 16).
 - **Fix**: one change applied to the base alone and built, with a step's kind, claim, tolerance and noise.
-- **Effect**: what a fix does to the base, per item and indicator: its result with the fix minus the base result.
-- **Set**: the fixes a reader chooses together; its result is the base plus the sum of their effects. It has no verdict.
-- **Interaction**: two fixes whose joint result is not the sum of their effects. Checked in pairs, in the model.
+- **Requires**: the fixes a fix cannot be applied without. Its effect is measured with them applied, and choosing it chooses them.
+- **Effect**: what a fix does, per item and indicator: its result with the fix minus its result without it, both with what it requires.
+- **Set**: the fixes a reader chooses together, with what they require; its result is the base plus the sum of their effects. It has no verdict.
+- **Interaction**: two fixes whose joint result is not the sum of their effects. Checked in pairs, in the model; a listed pair says its kind, its reach and its size, never words.
 - **Pair terms**: how far an estimated set may lie from its sum, to first order: the sum of the measured sizes of the listed pairs it holds; not known where one was not measured.
-- **Built, exact, estimated**: the label of a set. Built where the producer built it; exact where no two of its fixes can interact; estimated otherwise, and marked on every cell.
+- **Built, exact, estimated**: the label of a set. Built where the producer built it (one fix with what it requires, or a built set); exact where no two of its fixes can interact; estimated otherwise, and marked on every cell.
