@@ -7,4 +7,5 @@
 
 The tool must be possible to run, review and release without any one person
 ([docs/runbook.md](docs/runbook.md)). Changes go through a pull request that someone other
-than its author reviews and merges.
+than its author reviews, a person or another session; once it is reviewed, a session may
+merge it (Manuel Klarmann, 17 November 2026).

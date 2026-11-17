@@ -75,7 +75,9 @@ would refuse it.
    a partner. `tests/test_repository.py` refuses identifier-shaped strings and data folders,
    but it cannot see everything; read the diff.
 
-A person reviews and merges. Nobody merges their own pull request.
+A pull request is reviewed by someone other than its author: a person, or another session.
+Once it is reviewed, a session may merge it and tag a release (Manuel Klarmann, 17 November
+2026). Nothing is merged that nobody but its author has reviewed.
 
 ## Change the format
 
