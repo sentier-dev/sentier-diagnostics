@@ -20,7 +20,8 @@ from .helpers import A, B
 
 HERE = Path(__file__).parent
 FIXTURES = HERE / "fixtures" / "tables"
-MODULES = ["rule", "claims", "chain", "fileformat", "breakdown", "tables", "summary", "page", "from_tables", "matrix", "together"]
+MODULES = ["rule", "claims", "chain", "fileformat", "breakdown", "tables", "summary", "page", "from_tables", "matrix", "together",
+           "fixes"]
 
 
 def load_tests(loader, tests, pattern):

@@ -36,4 +36,5 @@ The words this repository uses, each in one line. [SPEC.md](SPEC.md) says the re
 - **Effect**: what a fix does to the base, per item and indicator: its result with the fix minus the base result.
 - **Set**: the fixes a reader chooses together; its result is the base plus the sum of their effects. It has no verdict.
 - **Interaction**: two fixes whose joint result is not the sum of their effects. Checked in pairs, in the model.
+- **Pair terms**: how far an estimated set may lie from its sum, to first order: the sum of the measured sizes of the listed pairs it holds; not known where one was not measured.
 - **Built, exact, estimated**: the label of a set. Built where the producer built it; exact where no two of its fixes can interact; estimated otherwise, and marked on every cell.
