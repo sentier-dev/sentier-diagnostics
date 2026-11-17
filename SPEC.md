@@ -545,9 +545,11 @@ only where the page holds every item (the matrix is loaded, or the file lists th
 over the values with a ratio (both results neither zero nor missing, of one sign), and says
 over how many ("Median of 11 893 ratios", and how many have none). From the listed items
 alone it gives none and says why: they are the furthest apart, and their median would say
-more than the whole holds. Each percentile has as few digits as keep it apart from a
-neighbour that differs (three at least, six at most); where six still read the same it
-says "just under the median" or "just over the median" instead of two equal numbers.
+more than the whole holds. The three percentiles share one precision: the fewest digits
+(three at least, six at most) at which every two that differ read differently, so that no
+rounded number stands as exact beside a longer one. Where six still read a percentile as the
+median, it says "just under the median" or "just over the median" instead of two equal
+numbers, and the numbers left take the digits they need.
 
 A card's title sorts the matrix by its indicator; a heading of the matrix marks its card.
 

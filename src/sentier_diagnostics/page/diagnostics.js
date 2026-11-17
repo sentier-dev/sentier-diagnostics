@@ -122,31 +122,35 @@
     return s.replace(/-/g, '−');
   }
 
-  // the 10th, 50th and 90th percentile, each in as few digits as keep it apart from a
-  // neighbour that differs (three at least, six at most): "1.00, 1.00, 1.00" over values
-  // that moved would hide the spread a reader looks for. Where six digits still read the
-  // same, the line says how the two lie instead of printing two equal numbers.
+  // the 10th, 50th and 90th percentile in one precision: the smallest (three digits at
+  // least, six at most) at which every two that differ read differently. "1.00, 1.00, 1.00"
+  // over values that moved would hide the spread a reader looks for, and one line in mixed
+  // precisions reads a rounded number as exact. Where six digits still read a percentile
+  // as the median, the line says how it lies, and the numbers left take the digits they need.
   function quantileTexts(qs) {
     var values = [qs.p10, qs.median, qs.p90];
     var one = function (v, digits) {
       if (v !== 0 && (Math.abs(v) < 0.01 || Math.abs(v) >= 1e4)) return v.toExponential(digits - 1).replace(/\.?0+e/, 'e').replace('e+', 'e').replace(/-/g, '−');
       return v.toPrecision(digits).replace(/-/g, '−');
     };
-    var digits = [3, 3, 3];
-    var text = function (i) { return one(values[i], digits[i]); };
-    // widen only the two of a pair that read the same while they differ
-    [[0, 1], [1, 2], [0, 2]].forEach(function (pair) {
-      var i = pair[0], j = pair[1];
-      if (values[i] === values[j]) return;
-      // compared at one precision: "1.000" and "1.00" are one number
-      for (var d = 3; ; d++) {
-        if (one(values[i], d) !== one(values[j], d) || d >= 6) { digits[i] = Math.max(digits[i], d); digits[j] = Math.max(digits[j], d); return; }
+    var pairs = [[0, 1], [1, 2], [0, 2]];
+    var digitsFor = function (kept) {
+      for (var d = 3; d <= 6; d++) {
+        var apart = pairs.every(function (p) {
+          return kept.indexOf(p[0]) < 0 || kept.indexOf(p[1]) < 0 || values[p[0]] === values[p[1]] || one(values[p[0]], d) !== one(values[p[1]], d);
+        });
+        if (apart) return d;
       }
-    });
-    var out = [text(0), text(1), text(2)];
-    if (values[0] !== values[1] && out[0] === out[1]) out[0] = 'just under the median';
-    if (values[2] !== values[1] && out[2] === out[1]) out[2] = 'just over the median';
-    return out;
+      return null;
+    };
+    var words = {};
+    var d = digitsFor([0, 1, 2]);
+    if (d === null) {
+      if (values[0] !== values[1] && one(values[0], 6) === one(values[1], 6)) words[0] = 'just under the median';
+      if (values[2] !== values[1] && one(values[2], 6) === one(values[1], 6)) words[2] = 'just over the median';
+      d = digitsFor([0, 1, 2].filter(function (i) { return !(i in words); })) || 6;
+    }
+    return [0, 1, 2].map(function (i) { return i in words ? words[i] : one(values[i], d); });
   }
 
   // Steps whose differences add up to more than this many times the whole difference
