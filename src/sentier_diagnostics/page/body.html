@@ -18,9 +18,14 @@
 
 <div data-sd="content" hidden>
   <div class="sd-board" data-sd="grid">
-    <div class="sd-picker" role="group" aria-label="Steps compared">
+    <div class="sd-picker" role="group" aria-label="What is compared">
+      <div class="sd-mode" data-sd="mode" role="group" aria-label="Compare" hidden>
+        <button type="button" class="sd-mode-button" data-mode="chain" aria-pressed="true">Steps of the chain</button>
+        <button type="button" class="sd-mode-button" data-mode="fixes" aria-pressed="false">Any set of fixes</button>
+        <span class="sd-quiet sd-mode-said" data-sd="fixes-said"></span>
+      </div>
       <div class="sd-picker-head">
-        <span class="sd-chips-label">Steps</span>
+        <span class="sd-chips-label" data-sd="picker-label">Steps</span>
         <span class="sd-quiet sd-pick-summary" data-sd="pick-summary"></span>
         <button type="button" class="sd-button sd-pick-open" data-sd="pick-open" aria-expanded="false">Find and choose steps</button>
       </div>
@@ -36,6 +41,20 @@
         <p class="sd-notice" data-sd="pick-locked" hidden></p>
         <p class="sd-quiet sd-pick-hint">Click a step for it alone; Shift-click for every step from the one chosen before, a run. A heading chooses its run. <span data-sd="pick-shown"></span></p>
         <div class="sd-pick-list" data-sd="pick-list"></div>
+      </div>
+      <div class="sd-pick-panel sd-fix-panel" data-sd="fix-panel" hidden>
+        <div class="sd-pick-tools">
+          <label class="sd-field sd-grow"><span>Find a fix</span><input type="search" data-sd="fix-find" placeholder="Name, id or kind" autocomplete="off" spellcheck="false"></label>
+          <label class="sd-field"><span>Kind</span><select data-sd="fix-kind"></select></label>
+          <label class="sd-switch"><input type="checkbox" data-sd="fix-moved"> Only fixes that change a result</label>
+          <span class="sd-pick-actions">
+            <button type="button" class="sd-button" data-sd="fix-none">None: the base</button>
+            <button type="button" class="sd-button" data-sd="fix-every">Every fix</button>
+          </span>
+        </div>
+        <p class="sd-quiet sd-pick-hint">Tick fixes to see what they do together. Each was measured on its own against one base; a fix that needs others ticks them too. <span data-sd="fix-shown"></span></p>
+        <div class="sd-fix-built" data-sd="fix-built"></div>
+        <div class="sd-pick-list sd-fix-list" data-sd="fix-list" role="group" aria-label="Fixes"></div>
       </div>
     </div>
     <div class="sd-step" data-sd="step-said" aria-live="polite"></div>

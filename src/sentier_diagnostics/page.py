@@ -10,7 +10,9 @@ element and sets no font and nothing on `:root` or `body`; its colours take the 
 assets and `standalone.css`, which sets the tokens and font a site would. It opens from disk
 by a double click and needs no server and no network. A local file may name its matrix of
 every item (`chain.build_with_matrix`); given it, `write` puts it beside the page as
-`matrix.js`, which the page loads after it has drawn.
+`matrix.js`, which the page loads after it has drawn. Given a file of fixes (SPEC 16), it
+puts that beside the page as `fixes.js`, and the page offers any set of those fixes beside
+the steps of the chain.
 
 The page shows what the file says. It works out no class, no direction and no count of
 its own: it only adds the file's counts up (the classes that moved into "moved", a step's
@@ -29,6 +31,7 @@ from importlib import resources
 from pathlib import Path
 
 from . import breakdown, fileformat
+from . import fixes as fixes_format
 from . import matrix as matrix_format
 
 #: What a site copies into its assets to hold the body.
@@ -37,6 +40,7 @@ ASSETS = ("diagnostics.js", "diagnostics.css")
 STANDALONE = ("index.html", "standalone.css")
 TEMPLATE = "body.html"
 MATRIX_SCRIPT = "matrix.js"
+FIXES_SCRIPT = "fixes.js"
 _NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]*")
 _ROOT = '<div class="sentier-diagnostics" data-sentier-diagnostics>'
 
@@ -63,6 +67,16 @@ def matrix_script(matrix: Mapping) -> str:
     return (
         "(window.SENTIER_DIAGNOSTICS_MATRICES = window.SENTIER_DIAGNOSTICS_MATRICES || []).push("
         f'{{"src": document.currentScript ? document.currentScript.src : null, "matrix": {_json(matrix)}}});\n'
+    )
+
+
+def fixes_script(f: Mapping) -> str:
+    """A file of fixes as the script beside a page, as `matrix_script` writes a matrix: an entry
+    added to `SENTIER_DIAGNOSTICS_FIXES_FILES`, the address the script was loaded from and the
+    file, so that a page takes the fixes of the script it names and never another page's."""
+    return (
+        "(window.SENTIER_DIAGNOSTICS_FIXES_FILES = window.SENTIER_DIAGNOSTICS_FIXES_FILES || []).push("
+        f'{{"src": document.currentScript ? document.currentScript.src : null, "fixes": {_json(f)}}});\n'
     )
 
 
@@ -95,22 +109,28 @@ def body(
     base: str = "",
     title: bool = True,
     matrix: str | None = None,
+    fixes: str | None = None,
 ) -> str:
     """The diagnostics as one element for a site's page, the file and its breakdowns inside.
 
     `base` is put before the names of the files the page loads (breakdowns, the matrix), for
     a site that keeps them elsewhere than the page. `title=False` leaves the heading to the
     site. `matrix` names the file of the matrix the page loads after it has drawn, where it
-    is not the one the file names (a site that serves `matrix.json` needs none).
+    is not the one the file names (a site that serves `matrix.json` needs none). `fixes`
+    names a file of fixes of this file (`fixes.json`, or a script as `fixes_script` writes
+    it), which the page loads after it has drawn.
     """
-    return _body(data, breakdowns=breakdowns, base=base, title=title, matrix=matrix, standalone=False)
+    return _body(
+        data, breakdowns=breakdowns, base=base, title=title, matrix=matrix, fixes=fixes, standalone=False
+    )
 
 
-def _body(data, *, breakdowns, base, title, matrix, standalone) -> str:
+def _body(data, *, breakdowns, base, title, matrix, fixes=None, standalone) -> str:
     breakdowns = dict(breakdowns or {})
     _checked(data, breakdowns)
-    if matrix is not None and not (_NAME.fullmatch(matrix) and ".." not in matrix):
-        raise ValueError(f"the matrix {matrix!r} is not a plain file name")
+    for what, name in (("matrix", matrix), ("file of fixes", fixes)):
+        if name is not None and not (_NAME.fullmatch(name) and ".." not in name):
+            raise ValueError(f"the {what} {name!r} is not a plain file name")
     scripts = f'<script type="application/json" data-sd="data">{_json(data)}</script>\n'
     if breakdowns:
         scripts += f'<script type="application/json" data-sd="breakdowns">{_json(breakdowns)}</script>\n'
@@ -124,6 +144,8 @@ def _body(data, *, breakdowns, base, title, matrix, standalone) -> str:
         attributes += f' data-sd-base="{html.escape(base, quote=True)}"'
     if matrix:
         attributes += f' data-sd-matrix="{html.escape(matrix, quote=True)}"'
+    if fixes:
+        attributes += f' data-sd-fixes="{html.escape(fixes, quote=True)}"'
     if standalone:
         attributes += " data-sd-standalone"
     text = _read(TEMPLATE)
@@ -142,20 +164,33 @@ def write(
     folder: Path,
     breakdowns: Mapping[str, Mapping] | None = None,
     matrix: Mapping | None = None,
+    fixes: Mapping | None = None,
 ) -> Path:
     """A page of its own and its data in `folder`; returns the path of `index.html`. A
-    matrix is checked against the file before it is written beside the page."""
-    if matrix is not None:
+    matrix and a file of fixes are checked against the file before they are written beside
+    the page; the fixes against the matrix too, where it is given."""
+    if matrix is not None or fixes is not None:
         _checked(data, dict(breakdowns or {}))
+    if matrix is not None:
         found = matrix_format.errors(matrix) or matrix_format.against(matrix, data)
         if found:
             raise ValueError("not the matrix of this file: " + "; ".join(found[:10]))
+    if fixes is not None:
+        found = fixes_format.errors(fixes) or fixes_format.against(fixes, data, matrix)
+        if found:
+            raise ValueError("not a file of fixes of this file: " + "; ".join(found[:10]))
     inner = _body(data, breakdowns=breakdowns, base="", title=False,
-                  matrix=MATRIX_SCRIPT if matrix is not None else None, standalone=True)  # fmt: skip
+                  matrix=MATRIX_SCRIPT if matrix is not None else None,
+                  fixes=FIXES_SCRIPT if fixes is not None else None, standalone=True)  # fmt: skip
     script = matrix_script(matrix) if matrix is not None else None
     if script is not None and len(script) > matrix_format.MAX_BYTES:
         raise ValueError(
             f"{MATRIX_SCRIPT} would be {len(script)} bytes, and a page loads {matrix_format.MAX_BYTES} at most"
+        )
+    fixes_text = fixes_script(fixes) if fixes is not None else None
+    if fixes_text is not None and len(fixes_text) > fixes_format.MAX_BYTES:
+        raise ValueError(
+            f"{FIXES_SCRIPT} would be {len(fixes_text)} bytes, and a page loads {fixes_format.MAX_BYTES} at most"
         )
     name = html.escape(data["title"], quote=False)
     page = _read("index.html")
@@ -167,11 +202,13 @@ def write(
         with resources.as_file(source / one) as path:
             shutil.copyfile(path, folder / one)
     (folder / "index.html").write_text(page, encoding="utf-8")
-    stale = folder / MATRIX_SCRIPT
-    if script is not None:
-        stale.write_text(script, encoding="utf-8")
-    elif stale.exists():
-        stale.unlink()  # the matrix of an earlier page: this one names none
+    # the matrix or fixes of an earlier page, which this one does not name, are taken away
+    for name, text in ((MATRIX_SCRIPT, script), (FIXES_SCRIPT, fixes_text)):
+        beside = folder / name
+        if text is not None:
+            beside.write_text(text, encoding="utf-8")
+        elif beside.exists():
+            beside.unlink()
     return folder / "index.html"
 
 
