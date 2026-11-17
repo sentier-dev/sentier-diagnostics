@@ -458,6 +458,7 @@ test('the page takes each edge it shares with the Python where the Python does: 
   assert.match(noise(0.010000000000000002), /large: just over 1 %$/);
   assert.match(noise(0.0100001), /large: up to 1\.00001 %$/);
   assert.match(noise(0.0104), /large: up to 1\.04 %$/);
+  assert.match(noise(0.0100016), /large: up to 1\.0002 %$/); // five digits where they do
   // and where a step's noise is the sum of its two states'
   const said = (sizes) => {
     const d = example();

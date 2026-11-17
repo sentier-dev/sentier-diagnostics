@@ -203,12 +203,13 @@
   // that it reads above it: in the page's style where four digits do, at five or six where
   // four round it onto the bound, and as "just over" the bound where six still do. A word
   // that says "above" beside a number that reads as the bound would contradict itself.
-  // `lead` goes before a number, not before "just over".
+  // `lead` goes before a number, not before "just over". The digits that first read above
+  // the bound never end in 0: with one fewer, the number would have read the same.
   function overText(v, bound, lead) {
     if (Number(v.toPrecision(4)) > bound) return lead + formatNumber(v);
     for (var d = 5; d <= 6; d++) {
       var s = v.toPrecision(d);
-      if (Number(s) > bound) return lead + s.replace(/0+$/, '');
+      if (Number(s) > bound) return lead + s;
     }
     return 'just over ' + formatNumber(bound);
   }
