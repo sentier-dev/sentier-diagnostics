@@ -1980,6 +1980,7 @@
       route();
     }
     function refuseFixes(said) {
+      if (released) return; // a load that ends after the page was unmounted
       FX = null; FXROWS = null;
       fixfile = { state: 'refused', said: said };
       if (view.mode === 'fixes') setMode('chain');
@@ -2037,18 +2038,8 @@
         return;
       }
       if (!/^https?:$/.test(win.location.protocol)) { refuseFixes(name + ' is read over http only; `sentier-diagnostics page --fixes` writes it beside the page as a script'); return; }
-      // held to its size in bytes, as `check` holds the file: a text's length counts UTF-16
-      // units, which a file written beyond ASCII outgrows
-      win.fetch(base + name).then(function (r) {
-        if (!r.ok) throw new Error(name + ' could not be read (' + r.status + ')');
-        return r.arrayBuffer();
-      }).then(function (bytes) {
-        if (bytes.byteLength > FIXES_MAX_BYTES) throw new Error(name + ' is larger than ' + groupThousands(FIXES_MAX_BYTES) + ' bytes');
-        var text, fx;
-        try { text = new win.TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch (error) { throw new Error(name + ' is not UTF-8 text'); }
-        try { fx = JSON.parse(text); } catch (error) { throw new Error(name + ' is not JSON'); }
-        takeFixes(fx);
-      }).catch(function (error) { refuseFixes(error.message || (name + ' could not be read')); });
+      win.fetch(base + name).then(function (r) { return jsonOver(r, name, FIXES_MAX_BYTES); }).then(takeFixes)
+        .catch(function (error) { refuseFixes(error.message || (name + ' could not be read')); });
     }
 
     // ---------------------------------------------------------------- choosing steps
@@ -3207,15 +3198,21 @@
         refuseMatrix(name + ' is read over http only; `sentier-diagnostics page` writes it beside the page as a script, which opens from disk');
         return;
       }
-      win.fetch(base + name).then(function (r) {
-        if (!r.ok) throw new Error(name + ' could not be read (' + r.status + ')');
-        return r.text();
-      }).then(function (text) {
-        if (text.length > MATRIX_MAX_BYTES) throw new Error(name + ' is larger than ' + groupThousands(MATRIX_MAX_BYTES) + ' bytes');
-        var m;
-        try { m = JSON.parse(text); } catch (error) { throw new Error(name + ' is not JSON'); }
-        takeMatrix(m);
-      }).catch(function (error) { refuseMatrix(error.message || (name + ' could not be read')); });
+      win.fetch(base + name).then(function (r) { return jsonOver(r, name, MATRIX_MAX_BYTES); }).then(takeMatrix)
+        .catch(function (error) { refuseMatrix(error.message || (name + ' could not be read')); });
+    }
+    // A JSON file read over http (a matrix, a file of fixes), held to its size in bytes as
+    // `check` holds the file on disk: a text's length counts UTF-16 units, which a file
+    // written beyond ASCII outgrows. It is read as UTF-8, and a byte that is not is refused,
+    // never read as a replacement character.
+    function jsonOver(r, name, max) {
+      if (!r.ok) throw new Error(name + ' could not be read (' + r.status + ')');
+      return r.arrayBuffer().then(function (bytes) {
+        if (bytes.byteLength > max) throw new Error(name + ' is larger than ' + groupThousands(max) + ' bytes');
+        var text;
+        try { text = new win.TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch (error) { throw new Error(name + ' is not UTF-8 text'); }
+        try { return JSON.parse(text); } catch (error) { throw new Error(name + ' is not JSON'); }
+      });
     }
 
     // ---------------------------------------------------------------- drawing a file
@@ -3408,6 +3405,7 @@
       if (lastKey !== null && keys[lastKey] === self) delete keys[lastKey];
       closeItem();
       D = null; M = null; LISTED = []; shown = null;
+      FX = null; FXROWS = null; FXCHECKED = {}; C = null; // the file of fixes and the set drawn from it
       q('content').hidden = true;
       q('load').hidden = true;
       root.removeAttribute('data-sd-mounted');

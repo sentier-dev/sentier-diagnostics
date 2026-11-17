@@ -255,7 +255,9 @@ claim's lists are in the file), and holds the file to it: with every item at han
 counts, attribution, `items_count.all` and `qualifying` must be what the matrix holds,
 exactly, and every listed item must be in the matrix with the same name and results.
 `sentier-diagnostics check` does both when the matrix lies beside its file. A matrix holds
-up to 200,000 items and 64 MB.
+up to 200,000 items and 64 MB. The page holds a matrix it reads over http to the same
+size in bytes, never to the length of its text, which counts UTF-16 units, and reads it
+as UTF-8, refusing a byte that is not.
 
 ## 5. The counting rule
 
@@ -1261,8 +1263,9 @@ construction; the check of independence above is the one that can fail it.
   checks the file of fixes against the file and its matrix and writes it beside the page as
   `fixes.js`, which adds `{src, fixes}` to `SENTIER_DIAGNOSTICS_FIXES_FILES`, as `matrix.js`
   does; the root names it (`data-sd-fixes`) and the page takes the entry of that script
-  only. A host may name `fixes.json` instead (read over http), or set one file of fixes
-  for one page, `SENTIER_DIAGNOSTICS_FIXES`. A file of fixes that does not hang on the file
+  only. A host may name `fixes.json` instead (read over http, and held to its size in bytes
+  and to UTF-8 as a matrix is), or set one file of fixes for one page,
+  `SENTIER_DIAGNOSTICS_FIXES`. A file of fixes that does not hang on the file
   shown is refused, and the page says why: its title, a base that is no state of it or
   whose noise is not that state's (none where it is the published results), other
   indicators or words, other floors (16.4), other items than the matrix's in its order and

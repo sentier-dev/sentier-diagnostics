@@ -416,6 +416,84 @@ test('a page whose key is refused loads no file of fixes, and keeps saying why',
   assert.equal(d.context.location.hash, '#left.set=e', 'the address is left as it was');
 });
 
+test('a page that waits for its key loads its file of fixes once it is drawn (review of 3a80142)', () => {
+  const p = pageOf('fixes that need others');
+  const left = dom.page(p.data, undefined, { attributes: { 'data-sd-key': 'left' }, globals: { SENTIER_DIAGNOSTICS_MATRIX: p.matrix } });
+  const twin = dom.body({ data: p.data });
+  twin.setAttribute('data-sd-key', 'left');
+  twin.setAttribute('data-sd-fixes', 'fixes.js');
+  twin.ownerDocument = left.document;
+  left.context.SentierDiagnostics.mount(twin);
+  const scripts = () => left.head.all().filter((n) => n.tagName === 'SCRIPT' && n.getAttribute('src') === 'fixes.js');
+  const at = (name) => twin.querySelector('[data-sd="' + name + '"]');
+  assert.match(at('load-error').textContent, /^Another page in the document has the key data-sd-key="left"/);
+  assert.equal(scripts().length, 0, 'a waiting page loads no file of fixes');
+  // the other page leaves: the waiting page is drawn, loads its fixes, and opens the set asked for
+  left.root.isConnected = false;
+  left.open('left.set=e');
+  assert.equal(at('content').hidden, false);
+  assert.equal(scripts().length, 1, 'loaded once it is drawn');
+  left.context.SENTIER_DIAGNOSTICS_FIXES_FILES = [{ src: 'fixes.js', fixes: p.fixes }];
+  scripts()[0].onload();
+  assert.match(at('fixes-said').textContent, /^5 fixes/);
+  const boxes = at('fix-list').all().filter((n) => n.getAttribute('data-fix') !== null);
+  assert.deepEqual(boxes.filter((n) => n.checked).map((n) => n.getAttribute('data-fix')), ['a', 'd', 'e']);
+});
+
+test('after unmount, the fixes panel draws nothing and throws nothing, and a late file of fixes is not taken (review of 3a80142)', () => {
+  const p = pageOf('a pair inside a build');
+  const drawn = dom.page(undefined, undefined, { attributes: { 'data-sentier-diagnostics': 'manual' },
+    globals: { SENTIER_DIAGNOSTICS_MATRIX: p.matrix, SENTIER_DIAGNOSTICS_FIXES: p.fixes } });
+  const root = dom.body({ data: p.data });
+  root.ownerDocument = drawn.document;
+  const api = drawn.context.SentierDiagnostics.mount(root);
+  const at = (name) => root.querySelector('[data-sd="' + name + '"]');
+  const boxes = () => at('fix-list').all().filter((n) => n.getAttribute('data-fix') !== null);
+  const ticked = () => boxes().filter((n) => n.checked).map((n) => n.getAttribute('data-fix'));
+  drawn.open('sd.set=a,b');
+  assert.deepEqual(ticked(), ['a', 'b']);
+  const grid = at('grid-table').all().length, said = at('step-said').textContent;
+  api.unmount();
+  // every control of the fixes panel, used after the page was unmounted
+  const box = boxes().find((n) => n.getAttribute('data-fix') === 'c');
+  box.checked = true;
+  box.dispatch('change', {});
+  at('fix-none').dispatch('click', {});
+  at('fix-every').dispatch('click', {});
+  const built = at('fix-built').all().find((n) => n.getAttribute('data-built') !== null);
+  assert.ok(built, 'a built set is offered');
+  built.dispatch('click', {});
+  // the switch's buttons are written in body.html, which the stand-in does not build
+  const mode = new dom.FakeNode('button');
+  mode.setAttribute('data-mode', 'chain');
+  at('mode').appendChild(mode);
+  mode.dispatch('click', {});
+  for (const [name, type, value] of [['fix-find', 'input', 'c'], ['fix-kind', 'change', 'amount'], ['fix-moved', 'change', true]]) {
+    at(name).value = value; at(name).checked = value === true;
+    at(name).dispatch(type, {});
+  }
+  assert.equal(at('content').hidden, true, 'it draws nothing');
+  assert.equal(at('grid-table').all().length, grid);
+  assert.equal(at('step-said').textContent, said);
+  assert.equal(drawn.context.location.hash, '#sd.set=a,b', 'the address is left as it was');
+  // a file of fixes that arrives after unmount, or fails, is neither taken nor said
+  const host = dom.page(undefined, undefined, { attributes: { 'data-sentier-diagnostics': 'manual' }, globals: { SENTIER_DIAGNOSTICS_MATRIX: p.matrix } });
+  const late = dom.body({ data: p.data });
+  late.setAttribute('data-sd-fixes', 'fixes.js');
+  late.ownerDocument = host.document;
+  const lateApi = host.context.SentierDiagnostics.mount(late);
+  const script = host.head.all().find((n) => n.tagName === 'SCRIPT' && n.getAttribute('src') === 'fixes.js');
+  assert.ok(script, 'the script is added');
+  lateApi.unmount();
+  const lateSaid = late.querySelector('[data-sd="fixes-said"]').textContent;
+  assert.match(lateSaid, /^Loading the file of fixes/);
+  host.context.SENTIER_DIAGNOSTICS_FIXES_FILES = [{ src: 'fixes.js', fixes: p.fixes }];
+  script.onload();
+  script.onerror();
+  assert.equal(late.querySelector('[data-sd="fixes-said"]').textContent, lateSaid);
+  assert.equal(late.querySelector('[data-sd="content"]').hidden, true);
+});
+
 // ------------------------------------------------------------------ review of 57ceb6a
 
 test('the drawer judges a fix as the file counts it: with its noise and that of what it was measured against', () => {
