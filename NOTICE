@@ -32,3 +32,13 @@ no file was copied whole. Their notice:
 
 Nothing is taken from the private repositories of the backtest dashboards. Their
 defects are described in SPEC.md, in words, as acceptance cases.
+
+The sentier_diagnostics.quality evidence contract, reader, registry, scoring
+and regression comparison are adapted from sentier-bafu-agribalyse. Its code:
+Copyright (c) 2026 Départ de Sentier and contributors. The MIT permission and
+warranty notice in LICENSE applies to these portions.
+
+The draft EF and exchange uncertainty modules adapt the methods of
+lci-workbench (Copyright 2024–2026 Eaternity AG, Apache-2.0). The Sentier
+implementation takes normalised observations rather than workbench records.
+See LICENSE-APACHE for the terms covering these portions.

@@ -7,8 +7,8 @@ name = "sentier-diagnostics"
 dynamic = ["version"]
 description = "What changed, before and after, in the impact assessment results of a life cycle inventory database, and why."
 readme = "README.md"
-license = "MIT"
-license-files = ["LICENSE", "NOTICE"]
+license = "MIT AND Apache-2.0"
+license-files = ["LICENSE", "LICENSE-APACHE", "NOTICE"]
 authors = [{ name = "Départ de Sentier" }]
 requires-python = ">=3.10"
 # Standard library only, at run time and in the tests. Keep it so: the projects that use

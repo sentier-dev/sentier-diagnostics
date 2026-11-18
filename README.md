@@ -59,3 +59,9 @@ Python 3.10 or later, standard library only.
 Status: first release, `v0.1.0`. See its [release notes](https://github.com/sentier-dev/sentier-diagnostics/releases/tag/v0.1.0).
 
 Licence: MIT, see [LICENSE](LICENSE).
+
+## Inventory quality
+
+The Python package also measures inventory and mapping quality from project-supplied
+evidence. It includes weighted quality bands, baseline comparisons, draft Environmental
+Footprint ratings and exchange uncertainty checks. [Inventory quality interfaces](docs/inventory-quality.md)
