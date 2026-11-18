@@ -109,7 +109,7 @@ class InventoryQualityTest(unittest.TestCase):
             RulesFile.model_validate({**policy(), "weights": {"count": float("nan")}})
 
     def test_gate_and_threshold(self):
-        rules = Rules(RulesFile.model_validate(policy()), "rules", "digest")
+        rules = Rules(RulesFile.model_validate(policy()), "rules", "a" * 64)
 
         def document(result, mean):
             return {
@@ -150,6 +150,40 @@ class InventoryQualityTest(unittest.TestCase):
             gate(document(Result.absent("count", Absence.INPUT_NOT_HERE, "missing input"), 0.8)).code, 3
         )
         self.assertEqual(gate({**prior, "rules": {"sha256": "different"}}).code, 3)
+
+    def test_gate_refuses_ambiguous_or_unavailable_evidence(self):
+        def row(value):
+            return {"id": "example", "said": "low", "standing": {"mean": 0}, "results": [value.as_written()]}
+
+        current = {"links": [row(quantity(1))], "rules": {"sha256": "a" * 64}}
+        original = {
+            "schema": "v1",
+            "rules_sha256": "a" * 64,
+            "links": [{"id": "example", **pinned_links(current)["example"]}],
+        }
+
+        def compare_to(baseline):
+            return compare(current, baseline, order=("high", "low"), mean_drop=0.05, schema="v1")
+
+        current["links"][0]["results"].insert(0, quantity(0).as_written())
+        self.assertEqual(compare_to(original).code, 3)
+        with self.assertRaisesRegex(ValueError, "Duplicate criterion"):
+            pinned_links(current)
+        current["links"] = [row(quantity(1))]
+        original["links"][0]["answers"] = {"count": "absent:input_not_here"}
+        self.assertEqual(compare_to(original).code, 3)
+        current["links"] = [row(Result.absent("count", Absence.INPUT_NOT_HERE, "The input was unavailable."))]
+        with self.assertRaisesRegex(ValueError, "unavailable"):
+            pinned_links(current)
+
+    def test_gate_requires_a_rules_identity_in_both_editions(self):
+        for missing in ({}, {"sha256": None}, {"sha256": ""}, {"sha256": "unknown"}):
+            current = {"rules": missing, "links": []}
+            baseline = {"schema": "v1", "links": []}
+            result = compare(current, baseline, order=("low",), mean_drop=0.05, schema="v1")
+            self.assertEqual(result.code, 3)
+            with self.assertRaisesRegex(ValueError, "digest"):
+                pinned_links(current)
 
     def test_representativeness(self):
         for args, expected in [
