@@ -244,6 +244,15 @@
 .sentier-diagnostics:not(#sd-none):not(#sd-none) td + td::before { content: none; }
 .sentier-diagnostics:not(#sd-none):not(#sd-none) th { font-weight: 700; background: var(--sd-paper-deep); }
 .sentier-diagnostics:not(#sd-none):not(#sd-none) td.num, .sentier-diagnostics:not(#sd-none):not(#sd-none) th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Keep the two endpoint scores together inside a narrow item drawer. */
+.sentier-diagnostics:not(#sd-none):not(#sd-none) [data-sd="score-summary"] { width: 100%; }
+.sentier-diagnostics:not(#sd-none):not(#sd-none) [data-sd="score-summary"] caption { margin-bottom: .45rem; text-align: left; font-weight: 700; }
+.sentier-diagnostics:not(#sd-none):not(#sd-none) [data-sd="score-summary"] :is(th, td) { padding-inline: .25rem; hyphens: auto; }
+.sentier-diagnostics:not(#sd-none):not(#sd-none) [data-sd="score-summary"] th { white-space: normal; }
+.sentier-diagnostics:not(#sd-none):not(#sd-none) [data-sd="score-summary"] thead th:nth-last-child(-n+2) { text-align: right; }
+@media (max-width: 22rem) {
+  .sentier-diagnostics:not(#sd-none):not(#sd-none) [data-sd="score-summary"] :is(tbody th, td:not(.num)) { overflow-wrap: anywhere; }
+}
 .sentier-diagnostics:not(#sd-none):not(#sd-none) tr.sd-row { cursor: pointer; }
 .sentier-diagnostics:not(#sd-none):not(#sd-none) tr.sd-row:hover > *, .sentier-diagnostics:not(#sd-none):not(#sd-none) tr.sd-row:focus-visible > * { background: var(--sd-paper-deep); }
 .sentier-diagnostics:not(#sd-none):not(#sd-none) tr.sd-row:focus { outline: none; }
