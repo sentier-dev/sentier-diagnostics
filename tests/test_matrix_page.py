@@ -166,10 +166,11 @@ class Body(unittest.TestCase):
         self.assertEqual(json.loads(found.group(1)), data)
 
     def test_base_matrix_and_title_are_the_hosts(self):
-        text = page.body(example.build(), base='runs/1/"x', title=False, matrix="m.json")
+        text = page.body(example.build(), base='runs/1/"x', title=False, matrix="m.json", score_summary=True)
         root = tags_of(text)[0][1]
         self.assertEqual(root["data-sd-base"], 'runs/1/"x')
         self.assertEqual(root["data-sd-matrix"], "m.json")
+        self.assertEqual(root["data-sd-score-summary"], "true")
         self.assertNotIn("data-sd-standalone", root)
         title = next(a for t, a in tags_of(text) if a.get("data-sd") == "title")
         self.assertIn("hidden", title)

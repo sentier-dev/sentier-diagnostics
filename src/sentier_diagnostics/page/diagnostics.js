@@ -3238,6 +3238,26 @@
       return el('div', { cls: 'sd-wrap' }, [table]);
     }
 
+    function scoreSummary(row) {
+      var last = D.steps.length;
+      var heads = [capital(indWord(false)), 'Unit per ' + (row.unit || D.item.one), D.states[0].label, D.states[last].label];
+      var table = el('table', { 'data-sd': 'score-summary' }, [
+        el('caption', { text: 'Scores across the whole build' }),
+        el('thead', null, [el('tr', null, heads.map(function (h) { return el('th', { scope: 'col', text: h }); }))])
+      ]);
+      var rows = el('tbody');
+      D.indicators.forEach(function (ind) {
+        var pair = pairOf(row, ind.id, last);
+        var cells = [el('th', { scope: 'row', text: ind.name }), el('td', { text: ind.unit || 'unknown' })];
+        pair.forEach(function (score) {
+          cells.push(el('td', { cls: 'num', text: formatNumber(score), title: exactText(score) }));
+        });
+        rows.appendChild(el('tr', null, cells));
+      });
+      table.appendChild(rows);
+      return el('div', { cls: 'sd-wrap' }, [table]);
+    }
+
     function renderItem(id, quiet) {
       var row = rowById(id);
       var drawer = q('item');
@@ -3247,9 +3267,10 @@
       drawer.hidden = false;
       drawer.setAttribute('aria-label', row.name);
       showDrawer(drawer);
+      var showScores = root.getAttribute('data-sd-score-summary') === 'true';
       q('item-title').textContent = row.name;
       q('item-meta').textContent = [row.id, row.place, row.group, row.unit ? 'per ' + row.unit : 'unit unknown',
-        row.item ? null : 'from the matrix: not listed in this file'].filter(Boolean).join(' · ');
+        row.item || showScores ? null : 'from the matrix: not listed in this file'].filter(Boolean).join(' · ');
       var body = clear(q('item-body'));
       if (fixesOn()) {
         body.appendChild(el('h4', { text: 'What the fixes did' }));
@@ -3264,9 +3285,12 @@
         body.appendChild(el('h3', { cls: 'sd-drawer-part', text: 'Along the chain' }));
         row = row.chain;
       }
-      body.appendChild(el('h4', { text: 'Why it differs' }));
-      body.appendChild(whyNode(row));
-      body.appendChild(el('p', { cls: 'sd-quiet', text: 'The explanations about this ' + D.item.one + ' first, then those about a step or ' + indWord(false) + ' in which it moved: those may not be about it. An explanation is a claim; it changes no class.' }));
+      if (showScores) body.appendChild(scoreSummary(row));
+      if (!showScores || D.explanations.length) {
+        body.appendChild(el('h4', { text: 'Why it differs' }));
+        body.appendChild(whyNode(row));
+        body.appendChild(el('p', { cls: 'sd-quiet', text: 'The explanations about this ' + D.item.one + ' first, then those about a step or ' + indWord(false) + ' in which it moved: those may not be about it. An explanation is a claim; it changes no class.' }));
+      }
       // the indicators, the one whose whole way lies furthest apart first
       var last = D.steps.length;
       var order = D.indicators.slice().sort(function (a, b) {

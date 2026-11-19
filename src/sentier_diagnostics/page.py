@@ -108,6 +108,7 @@ def body(
     breakdowns: Mapping[str, Mapping] | None = None,
     base: str = "",
     title: bool = True,
+    score_summary: bool = False,
     matrix: str | None = None,
     fixes: str | None = None,
     score_table_identity: str | None = None,
@@ -119,18 +120,20 @@ def body(
     site. `matrix` names the file of the matrix the page loads after it has drawn, where it
     is not the one the file names (a site that serves `matrix.json` needs none). `fixes`
     names a file of fixes of this file (`fixes.json`, or a script as `fixes_script` writes
-    it), which the page loads after it has drawn.
+    it), which the page loads after it has drawn. With `score_summary=True`, the item drawer
+    opens with the absolute scores of the first and last state for every indicator.
     `score_table_identity` names the state identity holding a SHA-256 of the complete,
     consistently keyed score table. A host can use it to compare ranges with the same
     endpoints and rule as a measured step while keeping private rows off its site.
     """
     return _body(
         data, breakdowns=breakdowns, base=base, title=title, matrix=matrix, fixes=fixes,
-        score_table_identity=score_table_identity, standalone=False
+        score_summary=score_summary, score_table_identity=score_table_identity, standalone=False
     )
 
 
-def _body(data, *, breakdowns, base, title, matrix, fixes=None, score_table_identity=None, standalone) -> str:
+def _body(data, *, breakdowns, base, title, matrix, fixes=None, score_summary=False,
+          score_table_identity=None, standalone) -> str:
     breakdowns = dict(breakdowns or {})
     _checked(data, breakdowns)
     for what, name in (("matrix", matrix), ("file of fixes", fixes)):
@@ -150,6 +153,8 @@ def _body(data, *, breakdowns, base, title, matrix, fixes=None, score_table_iden
         if not all(isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) for value in hashes):
             raise ValueError("every state must identify its complete score table by SHA-256")
         attributes += f' data-sd-score-key="{html.escape(score_table_identity, quote=True)}"'
+    if score_summary:
+        attributes += ' data-sd-score-summary="true"'
     if base:
         attributes += f' data-sd-base="{html.escape(base, quote=True)}"'
     if matrix:
