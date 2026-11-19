@@ -120,6 +120,16 @@
 .sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-cell[aria-pressed="true"] .sd-cell-no { color: inherit; }
 .sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-cell.sd-unexplained { border-top: 2px solid var(--sd-fail); }
 .sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-cell.sd-look::after { content: ""; position: absolute; top: 2px; right: 2px; width: 4px; height: 4px; border-radius: 50%; background: currentColor; opacity: 0.7; }
+/* Give each numbered step a full touch target on narrow screens. */
+@media (max-width: 40rem) {
+  .sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-strip.sd-numbered { flex-direction: column; }
+  .sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-numbered .sd-whole { align-self: flex-start; min-height: 44px; }
+  .sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-numbered .sd-cells {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); grid-auto-rows: 44px;
+    height: auto; gap: 4px; overflow: visible;
+  }
+  .sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-numbered .sd-cell { min-width: 44px; max-width: none; }
+}
 /* the list: find steps, tick any set */
 .sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-pick-panel { margin-top: var(--sd-s2); padding: var(--sd-s2) var(--sd-s3); border: 1px solid var(--sd-line); border-radius: var(--sd-radius); }
 .sentier-diagnostics:not(#sd-none):not(#sd-none) .sd-pick-panel[hidden] { display: none; }

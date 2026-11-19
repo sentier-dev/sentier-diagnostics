@@ -3375,3 +3375,80 @@ test('a page moved with its drawer open shows it again where it now stands (issu
   assert.deepEqual(failing.calls, ['popover']);
   assert.equal(failing.drawer.hidden, false);
 });
+
+test('counts-only selections show measured indicator rows instead of item controls', () => {
+  const data = countsOf(example());
+  const drawn = dom.page(data);
+  const table = drawn.byId['indicator-table'];
+  assert.ok(table, 'the selected comparison has a table of counts');
+  assert.equal(drawn.byId['item-results'].hidden, true);
+  assert.equal(drawn.byId.worst.hidden, true);
+  for (const comp of ['total', 'fix-1', 'rebuilt']) {
+    drawn.open(comp === 'total' ? '' : 'sd.step=' + comp);
+    assert.deepEqual(pressed(drawn), [comp]);
+    const rows = table.querySelectorAll('tr[data-indicator]');
+    assert.equal(rows.length, data.indicators.length);
+    for (const row of rows) {
+      const id = row.getAttribute('data-indicator');
+      const block = (comp === 'total' ? data.counts.total : data.counts.steps[comp])[id];
+      const paired = block.pairs - block.classes.missing;
+      const moved = ['differs', 'beyond 10x', 'zero reference', 'zero result', 'sign change'].reduce((a, cls) => a + block.classes[cls], 0);
+      assert.deepEqual(row.childNodes.slice(1).map((c) => c.textContent),
+        [paired, paired ? moved : '—', paired ? block.directions.up : '—',
+          paired ? block.directions.down : '—', block.classes.missing].map(String));
+    }
+    assert.doesNotMatch(drawn.byId['dist-said'].textContent, /matrix/);
+  }
+  const named = dom.page(example());
+  assert.equal(named.byId['indicator-results'].hidden, true);
+  assert.equal(named.byId['item-results'].hidden, false);
+  assert.ok(gridRows(named).length);
+});
+
+test('a counts-only range keeps each selected step separate, including all-missing results', () => {
+  const data = countsOf(example());
+  const block = data.counts.steps['fix-1']['x:water'];
+  for (const cls of Object.keys(block.classes)) block.classes[cls] = cls === 'missing' ? block.pairs : 0;
+  const drawn = dom.page(data);
+  drawn.open('sd.steps=fix-1:rebuilt');
+  assert.deepEqual(pressed(drawn), ['fix-1', 'rebuilt']);
+  assert.match(drawn.byId['step-said'].textContent, /separately/);
+  assert.equal(drawn.byId.distributions.hidden, true);
+  const tables = drawn.byId['indicator-table'].querySelectorAll('tbody[data-comp]');
+  assert.deepEqual(tables.map((b) => b.getAttribute('data-comp')), ['fix-1', 'rebuilt']);
+  for (const body of tables) assert.equal(body.querySelectorAll('tr[data-indicator]').length, data.indicators.length);
+  const water = tables[0].querySelectorAll('tr[data-indicator]').find((r) => r.getAttribute('data-indicator') === 'x:water');
+  assert.deepEqual(water.childNodes.slice(1).map((c) => c.textContent), ['0', '—', '—', '—', String(block.pairs)]);
+  drawn.open('sd.step=fix-1');
+  assert.equal(drawn.byId.distributions.hidden, false);
+});
+
+test('a single-step counts chain keeps the step distinct from the whole way on reload and by keyboard', () => {
+  const data = countsOf(example());
+  data.steps = data.steps.slice(0, 1);
+  data.states = data.states.slice(0, 2);
+  data.explanations = [];
+  for (const att of Object.values(data.attribution)) att.dominant = { 'step-0': 0 };
+  const drawn = dom.page(data, undefined, { hash: 'sd.step=step-0' });
+  assert.equal(drawn.byId.load.hidden, true, drawn.byId['load-error'].textContent);
+  assert.deepEqual(pressed(drawn), ['step-0']);
+  chipOf(drawn, 'step-0').dispatch('keydown', { key: 'ArrowLeft' });
+  assert.deepEqual(pressed(drawn), ['total']);
+  chipOf(drawn, 'total').dispatch('keydown', { key: 'ArrowRight' });
+  assert.deepEqual(pressed(drawn), ['step-0']);
+  assert.match(drawn.context.location.hash, /sd.step=step-0/);
+});
+
+test('the selected step links to its source only when it has a safe address', () => {
+  const data = countsOf(example());
+  data.steps[1].link = 'https://example.org/checked-patch';
+  data.steps[2].link = 'file:///internal/patch';
+  const drawn = dom.page(data);
+  drawn.open('sd.step=fix-1');
+  const links = tagged(drawn.byId['step-said'], 'A');
+  assert.equal(links.length, 1);
+  assert.equal(links[0].getAttribute('href'), data.steps[1].link);
+  assert.equal(links[0].textContent, 'Step source');
+  drawn.open('sd.step=rebuilt');
+  assert.equal(tagged(drawn.byId['step-said'], 'A').length, 0);
+});

@@ -58,26 +58,35 @@
       </div>
     </div>
     <div class="sd-step" data-sd="step-said" aria-live="polite"></div>
-    <p class="sd-note sd-grid-note">Each cell is the result after divided by the result before, for one <span data-sd-word="one">item</span> and <span data-sd-word="indicator">indicator</span>, in the comparison chosen above;
-      the grid opens with the <span data-sd-word="many">items</span> furthest apart. A heading sorts by that column. Choose a row (click it, or press Enter on it) to open the <span data-sd-word="one">item</span>.</p>
-    <div class="sd-controls">
-      <div class="sd-filters">
-        <label class="sd-field sd-grow"><span>Name</span><input type="search" data-sd="grid-find" placeholder="Filter by name, place or id" autocomplete="off" spellcheck="false"></label>
-        <label class="sd-field"><span>Group</span><select data-sd="grid-group"></select></label>
-        <label class="sd-field"><span>Class</span><select data-sd="grid-class"></select></label>
-        <label class="sd-field"><span>Verdict</span><select data-sd="grid-verdict"></select></label>
-        <label class="sd-field" title="Hides smaller changes in the grid and the worst list; it changes no count."><span>Size at least</span>
-          <select data-sd="size"><option value="0">any</option><option value="1.1">×1.1</option><option value="1.25">×1.25</option><option value="2">×2</option><option value="10">×10</option></select></label>
+    <section data-sd="indicator-results" hidden>
+      <h3 data-sd="indicator-heading">Results by indicator</h3>
+      <div class="sd-wrap" tabindex="0" role="region" aria-label="Result counts">
+        <table class="sd-table" data-sd="indicator-table"></table>
       </div>
-      <div class="sd-status">
-        <p class="sd-count" data-sd="grid-said" role="status" aria-live="polite"></p>
-        <p class="sd-quiet sd-matrix-said" data-sd="matrix-said"></p>
-        <p class="sd-legend" data-sd="grid-legend" aria-hidden="true"></p>
+      <p class="sd-note">Paired results have a value in both states. A dash means there were no paired results to compare.</p>
+    </section>
+    <div data-sd="item-results">
+      <p class="sd-note sd-grid-note">Each cell is the result after divided by the result before, for one <span data-sd-word="one">item</span> and <span data-sd-word="indicator">indicator</span>, in the comparison chosen above;
+        the grid opens with the <span data-sd-word="many">items</span> furthest apart. A heading sorts by that column. Choose a row (click it, or press Enter on it) to open the <span data-sd-word="one">item</span>.</p>
+      <div class="sd-controls">
+        <div class="sd-filters">
+          <label class="sd-field sd-grow"><span>Name</span><input type="search" data-sd="grid-find" placeholder="Filter by name, place or id" autocomplete="off" spellcheck="false"></label>
+          <label class="sd-field"><span>Group</span><select data-sd="grid-group"></select></label>
+          <label class="sd-field"><span>Class</span><select data-sd="grid-class"></select></label>
+          <label class="sd-field"><span>Verdict</span><select data-sd="grid-verdict"></select></label>
+          <label class="sd-field" title="Hides smaller changes in the grid and the worst list; it changes no count."><span>Size at least</span>
+            <select data-sd="size"><option value="0">any</option><option value="1.1">×1.1</option><option value="1.25">×1.25</option><option value="2">×2</option><option value="10">×10</option></select></label>
+        </div>
+        <div class="sd-status">
+          <p class="sd-count" data-sd="grid-said" role="status" aria-live="polite"></p>
+          <p class="sd-quiet sd-matrix-said" data-sd="matrix-said"></p>
+          <p class="sd-legend" data-sd="grid-legend" aria-hidden="true"></p>
+        </div>
       </div>
-    </div>
-    <div class="sd-wrap sd-grid-wrap" data-sd="grid-region" role="region" aria-label="After divided by before, per item and indicator">
-      <table class="sd-grid" data-sd="grid-table"></table>
-      <p class="sd-more"><button type="button" class="sd-button" data-sd="grid-more" hidden>Show more</button></p>
+      <div class="sd-wrap sd-grid-wrap" data-sd="grid-region" role="region" aria-label="After divided by before, per item and indicator">
+        <table class="sd-grid" data-sd="grid-table"></table>
+        <p class="sd-more"><button type="button" class="sd-button" data-sd="grid-more" hidden>Show more</button></p>
+      </div>
     </div>
   </div>
 

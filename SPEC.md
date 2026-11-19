@@ -624,7 +624,15 @@ items, the length of every row) before a row of it is drawn; its codes are check
 The text a page renders comes from the file or from words chosen to be neutral: it avoids
 stage, triage, ledger, layer, upstream, provider and candidate (a test holds this).
 
-**The page is a matrix page.** From the top: the header (10.1); the steps (10.1a), which
+**Counts-only comparisons** show one row per indicator directly below the selected step.
+The table reads the selected step or the whole way from the file. It gives paired, moved,
+up, down and missing counts. A zero movement count requires a pair with values on both
+sides. Where there are no such pairs, movement and directions are unavailable. A selected
+partial run shows a separate group of rows for each step. The same item can move in
+several steps, so these groups cannot determine the movement between the ends of the run.
+Item filters and the worst-item list are hidden.
+
+**Comparisons with named items** present a matrix. From the top: the header (10.1); the steps (10.1a), which
 choose what is compared: the whole way, one step, or a run of steps; under them one line
 for what is chosen: for a step, the states it goes between, what it is, its claim with who
 made it, what the claim found, its tolerance and its noise; for a run, the two states it
@@ -670,8 +678,8 @@ a host keeps the page out of the address with `data-sd-address="off"`: the page 
 its parts itself, neither reads nor writes the address, and no address opens it. The
 attribute is read once, when the page is mounted. A host that wants to open a step or an
 item on such a page has no call for it yet. An
-address naming a step the file does not have, steps apart, or a run the page cannot judge
-(no matrix), says so and shows the whole way. Below
+address naming a step the file does not have, steps apart, or a run in an item-tier file that the page cannot judge
+(no complete item results), says so and shows the whole way. Below
 them, each closed until a reader opens it: the steps and the whole way (10.2), the worst
 values (10.4), the explanations and the rule (10.7). A host's page never offers to open a
 file; it says only why nothing is drawn.
@@ -693,13 +701,15 @@ moved in it alone (on a log scale, so one value still shows), red at the top whe
 explains it, a dot where a verdict is worth a look; numbered up to 40 steps, 2 px wide past
 60, and scrolling inside its frame. A click chooses one step; Shift (or ⌘ or Ctrl) chooses
 every step from the one chosen before, a run. The arrow keys move a step at a time; with
-Shift they grow or shrink the run. Chosen steps are filled and underlined.
+Shift they grow or shrink the run. On narrow screens the numbered steps wrap into rows with
+at least 44 × 44 pixels per step. A selected step links to its source when an HTTPS link is supplied.
+Chosen steps are filled and underlined.
 
 **A list**, opened by "Find and choose steps": every step with its number, label, kind and
 what moved in it; a click chooses it, Shift a run; consecutive steps of one kind under one
 heading that chooses their run; a search by number, name or kind; "Only steps where
-something moved"; "Every step: the whole way". Without every item the list says why a run
-cannot be judged yet, and one step and the whole way remain.
+something moved"; "Every step: the whole way". In an item-tier file without every item the list explains why a run
+cannot be judged yet. In a counts-only file a run shows the published counts for each selected step.
 
 ### 10.2 Steps and the whole way
 Steps are numbered from 0 where the first state is `published`: step 0 is then the
