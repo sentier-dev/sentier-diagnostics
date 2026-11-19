@@ -424,6 +424,21 @@
     }).length;
   }
 
+  // Identical hashes cover all item IDs and scores, even when just a few rows are public.
+  // A comparison can supply counts only for the same ordered endpoints and judgement rule.
+  function measuredRangeStep(data, scoreKey, first, last) {
+    if (!scoreKey || !statesCarryNoise(data)) return -1;
+    function hash(k) { return (data.states[k].identity || {})[scoreKey]; }
+    var a = hash(first), b = hash(last + 1);
+    if (!/^[a-f0-9]{64}$/.test(a) || !/^[a-f0-9]{64}$/.test(b)) return -1;
+    var tolerance = Math.max.apply(null, data.steps.slice(first, last + 1).map(function (s) { return s.tolerance.value; }));
+    var noise = noiseOfStates(data.states[first], data.states[last + 1]);
+    return data.steps.findIndex(function (s, k) {
+      return hash(k) === a && hash(k + 1) === b && s.tolerance.value === tolerance
+        && sameJSON(noiseOfStates(data.states[k], data.states[k + 1]), noise);
+    });
+  }
+
   // the reader's own size filter: it hides values, it changes no class and no count.
   // A value without a ratio (a zero or a sign change) and a missing one always pass.
   function sizeAtLeast(cls, band, threshold) {
@@ -1794,6 +1809,7 @@
       return D.tier !== 'counts' && D.items_count.listed === D.items_count.all ? LISTED : null;
     }
     // why no run of steps can be judged now; null where one can
+    var scoreKey = root.getAttribute('data-sd-score-key');
     function runRefused() {
       if (D.tier === 'counts') return 'This file holds counts only: a run of steps is judged from every ' + D.item.one + '\'s results, which it does not hold.';
       if (heldAll()) return null;
@@ -1810,7 +1826,7 @@
     var CHECKED = {}, C = null;
     function checkStep(k) {
       if (Object.prototype.hasOwnProperty.call(CHECKED, k)) return CHECKED[k];
-      var s = D.steps[k], ids = indicatorIds(), held = heldAll(), said = null;
+      var s = D.steps[k], ids = indicatorIds(), held = heldAll() || LISTED, said = null;
       for (var r = 0; r < held.length && said === null; r++) {
         var row = held[r];
         for (var x = 0; x < ids.length; x++) {
@@ -1846,19 +1862,23 @@
     function judgeRun(set) {
       var key = set.join(',');
       if (C && C.key === key) return null;
-      var why = runRefused();
-      if (why) return why;
+      var first = set[0], last = set[set.length - 1];
+      var source = heldAll() ? -1 : measuredRangeStep(D, scoreKey, first, last);
+      if (source < 0) {
+        var why = runRefused();
+        if (why) return why;
+      }
       for (var i = 0; i < set.length; i++) {
         var problem = checkStep(set[i]);
         if (problem) return 'This page\'s rule does not give the file\'s classes in step ' + stepNo(set[i]) + ' (' + problem + '), so it judges no run of steps that takes it in. Run sentier-diagnostics check on the file.';
       }
       var steps = set.map(function (k) { return D.steps[k]; });
       var tolerance = Math.max.apply(null, steps.map(function (s) { return s.tolerance.value; }));
-      var first = set[0], last = set[set.length - 1], ids = indicatorIds();
+      var ids = indicatorIds();
       var noise = statesCarryNoise(D) ? noiseOfStates(D.states[first], D.states[last + 1]) || {} : {};
       var blocks = {};
       ids.forEach(function (id) { blocks[id] = emptyBlock(id); });
-      heldAll().forEach(function (row) {
+      (heldAll() || LISTED).forEach(function (row) {
         var t = { key: key, cls: {}, dir: {}, band: {}, pair: {} };
         ids.forEach(function (id) {
           var values = row.values[id], pair = runPair(values, first, last);
@@ -1873,6 +1893,12 @@
         });
         row.together = t;
       });
+      if (source >= 0) {
+        var measured = D.counts.steps[D.steps[source].id];
+        ids.forEach(function (id) {
+          blocks[id] = Object.assign({}, measured[id], { verdicts: null, closer: null, further: null });
+        });
+      }
       C = { key: key, set: set, tolerance: tolerance, noise: noise, blocks: blocks };
       return null;
     }
@@ -2465,7 +2491,7 @@
         var on = comp === 'total' ? whole : (!whole || !countsView()) && view.set.indexOf(stepIndex(comp)) >= 0;
         cells[i].setAttribute('aria-pressed', on ? 'true' : 'false');
       }
-      var locked = countsView() ? null : runRefused();
+      var locked = countsView() || scoreKey ? null : runRefused();
       var list = q('pick-list');
       if (list) {
         var rowsShown = list.querySelectorAll('button[data-pick]');
@@ -4396,7 +4422,7 @@
     sizeAtLeast: sizeAtLeast, cellView: cellView, ratioView: ratioView, severityKey: severityKey, compareKeys: compareKeys,
     bandStep: bandStep, bandOf: bandOf, readJSON: readJSON, checkShape: checkShape, checkMatrix: checkMatrix, matrixRows: matrixRows,
     safeLink: safeLink, safeName: safeName, splitOf: splitOf, splitText: splitText, distance: distance, quantileTexts: quantileTexts, RANK: RANK,
-    judge: judge, runsOf: runsOf, runPair: runPair, noiseOfStates: noiseOfStates, endsKnown: endsKnown, statesCarryNoise: statesCarryNoise,
+    judge: judge, measuredRangeStep: measuredRangeStep, runsOf: runsOf, runPair: runPair, noiseOfStates: noiseOfStates, endsKnown: endsKnown, statesCarryNoise: statesCarryNoise,
     colourOf: colourOf, luminance: luminance, seenThrough: seenThrough, schemeIsDark: schemeIsDark,
     fixChosen: fixChosen, fixCompose: fixCompose, fixCounts: fixCounts, fixOwnCounts: fixOwnCounts, fixCountsDiffer: fixCountsDiffer, checkFixes: checkFixes,
     fixesAgainst: fixesAgainst, fixesProblem: fixesProblem, fixPageBlocks: fixPageBlocks, inOrder: inOrder,

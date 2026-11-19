@@ -110,6 +110,7 @@ def body(
     title: bool = True,
     matrix: str | None = None,
     fixes: str | None = None,
+    score_table_identity: str | None = None,
 ) -> str:
     """The diagnostics as one element for a site's page, the file and its breakdowns inside.
 
@@ -119,13 +120,17 @@ def body(
     is not the one the file names (a site that serves `matrix.json` needs none). `fixes`
     names a file of fixes of this file (`fixes.json`, or a script as `fixes_script` writes
     it), which the page loads after it has drawn.
+    `score_table_identity` names the state identity holding a SHA-256 of the complete,
+    consistently keyed score table. A host can use it to compare ranges with the same
+    endpoints and rule as a measured step while keeping private rows off its site.
     """
     return _body(
-        data, breakdowns=breakdowns, base=base, title=title, matrix=matrix, fixes=fixes, standalone=False
+        data, breakdowns=breakdowns, base=base, title=title, matrix=matrix, fixes=fixes,
+        score_table_identity=score_table_identity, standalone=False
     )
 
 
-def _body(data, *, breakdowns, base, title, matrix, fixes=None, standalone) -> str:
+def _body(data, *, breakdowns, base, title, matrix, fixes=None, score_table_identity=None, standalone) -> str:
     breakdowns = dict(breakdowns or {})
     _checked(data, breakdowns)
     for what, name in (("matrix", matrix), ("file of fixes", fixes)):
@@ -140,6 +145,11 @@ def _body(data, *, breakdowns, base, title, matrix, fixes=None, standalone) -> s
             "list fewer items, and keep every item in the matrix"
         )
     attributes = ""
+    if score_table_identity:
+        hashes = [(state.get("identity") or {}).get(score_table_identity) for state in data["states"]]
+        if not all(isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) for value in hashes):
+            raise ValueError("every state must identify its complete score table by SHA-256")
+        attributes += f' data-sd-score-key="{html.escape(score_table_identity, quote=True)}"'
     if base:
         attributes += f' data-sd-base="{html.escape(base, quote=True)}"'
     if matrix:

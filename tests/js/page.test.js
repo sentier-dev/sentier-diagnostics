@@ -3477,3 +3477,20 @@ test('choosing one search result reveals the comparison and puts focus on its nu
   rowOf(drawn, 2).dispatch('click', { shiftKey: true });
   assert.equal(drawn.byId['pick-panel'].hidden, false);
 });
+
+test('a public range reuses a measured population only for identical score tables and rule', () => {
+  const states = ['a', 'b', 'b', 'c'].map(x => ({
+    kind: 'build', identity: {scores: x.repeat(64)}, noise: {measured: false, by: null}
+  }));
+  const steps = [0, 1, 2].map(k => ({id: String(k), tolerance: {value: 0.01}}));
+  const data = {states, steps};
+  assert.equal(page.measuredRangeStep(data, 'scores', 0, 1), 0);
+  assert.equal(page.measuredRangeStep(data, 'scores', 1, 2), 2);
+  assert.equal(page.measuredRangeStep(data, 'scores', 0, 2), -1);
+  steps[1].tolerance.value = 0.1;
+  assert.equal(page.measuredRangeStep(data, 'scores', 0, 1), -1);
+  steps[1].tolerance.value = 0.01;
+  states[2].noise = {measured: true, by: {climate: 0.5}};
+  assert.equal(page.measuredRangeStep(data, 'scores', 0, 1), -1);
+  assert.equal(page.measuredRangeStep(data, 'other', 0, 1), -1);
+});
