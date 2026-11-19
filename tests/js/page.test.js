@@ -3452,3 +3452,15 @@ test('the selected step links to its source only when it has a safe address', ()
   drawn.open('sd.step=rebuilt');
   assert.equal(tagged(drawn.byId['step-said'], 'A').length, 0);
 });
+
+test('choosing one search result reveals the comparison and puts focus on its numbered step', () => {
+  const drawn = dom.page(example());
+  assert.equal(drawn.byId['pick-panel'].hidden, false);
+  rowOf(drawn, 1).dispatch('click', {});
+  assert.equal(drawn.byId['pick-panel'].hidden, true);
+  assert.equal(drawn.byId['pick-open'].getAttribute('aria-expanded'), 'false');
+  assert.equal(chipOf(drawn, 'fix-1').focused, true);
+  drawn.byId['pick-open'].dispatch('click', {});
+  rowOf(drawn, 2).dispatch('click', { shiftKey: true });
+  assert.equal(drawn.byId['pick-panel'].hidden, false);
+});

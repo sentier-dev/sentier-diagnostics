@@ -706,7 +706,8 @@ at least 44 × 44 pixels per step. A selected step links to its source when an H
 Chosen steps are filled and underlined.
 
 **A list**, opened by "Find and choose steps": every step with its number, label, kind and
-what moved in it; a click chooses it, Shift a run; consecutive steps of one kind under one
+what moved in it. It starts closed for counts or chains longer than four steps. Choosing one
+search result closes the list and focuses its numbered step. Shift keeps the list open to choose a run; consecutive steps of one kind under one
 heading that chooses their run; a search by number, name or kind; "Only steps where
 something moved"; "Every step: the whole way". In an item-tier file without every item the list explains why a run
 cannot be judged yet. In a counts-only file a run shows the published counts for each selected step.

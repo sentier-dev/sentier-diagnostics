@@ -2398,11 +2398,20 @@
         ]));
       });
       strip.appendChild(cells);
-      var open = q('pick-open');
-      if (open) open.setAttribute('aria-expanded', view.pickOpen ? 'true' : 'false');
-      if (q('pick-panel')) q('pick-panel').hidden = !view.pickOpen;
+      setPickerOpen(view.pickOpen);
       if (q('pick-moved')) q('pick-moved').checked = view.pickMoved;
       renderPickList();
+    }
+
+    function setPickerOpen(open) {
+      view.pickOpen = open;
+      if (q('pick-open')) q('pick-open').setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (q('pick-panel')) q('pick-panel').hidden = !open;
+    }
+
+    function focusStripButton(index) {
+      var button = q('comparison').querySelectorAll('button[data-comp]')[index];
+      if (button && button.focus) button.focus();
     }
 
     function renderPickList() {
@@ -3623,7 +3632,7 @@
       view.anchor = null;
       view.notice = '';
       // Keep aggregate results in view. Short item chains also have room for the step list.
-      view.pickOpen = !countsView() && D.steps.length <= 16;
+      view.pickOpen = !countsView() && D.steps.length <= 4;
       view.limit = PAGE;
       q('load').hidden = true;
       q('content').hidden = false;
@@ -3901,10 +3910,15 @@
 
     // one step by hand. "one": that step alone. "to" (Shift, or ⌘ or Ctrl, on the strip or in
     // the list): every step from the one chosen before to this one.
-    function pickStep(k, how) {
+    function pickStep(k, how, fromList) {
       var anchor = view.anchor === null ? k : view.anchor;
       if (how === 'to') pickSet(stepsFrom(anchor, k));
-      else { view.anchor = k; pickSet([k], true); }
+      else {
+        view.anchor = k;
+        pickSet([k], true);
+        if (view.pickOpen) setPickerOpen(false);
+        if (fromList) focusStripButton(k + 1); // the whole way is the first button
+      }
     }
 
     // the run of a group of the list: every step of it
@@ -4225,7 +4239,7 @@
         var cell = e.target.closest ? e.target.closest('button[data-comp]') : null;
         if (!cell || !D) return;
         var comp = cell.getAttribute('data-comp');
-        if (comp === 'total') { view.anchor = null; pickSet(allSteps()); return; }
+        if (comp === 'total') { view.anchor = null; pickSet(allSteps()); setPickerOpen(false); return; }
         pickStep(stepIndex(comp), e.shiftKey || e.metaKey || e.ctrlKey ? 'to' : 'one');
       });
       // the arrow keys move along the strip, a step alone at a time; with Shift they grow or
@@ -4256,21 +4270,25 @@
         listen(q('pick-list'), 'click', function (e) {
           if (!D) return;
           var row = e.target.closest ? e.target.closest('button[data-pick]') : null;
-          if (row) { pickStep(+row.getAttribute('data-pick'), e.shiftKey || e.metaKey || e.ctrlKey ? 'to' : 'one'); return; }
+          if (row) { pickStep(+row.getAttribute('data-pick'), e.shiftKey || e.metaKey || e.ctrlKey ? 'to' : 'one', true); return; }
           var group = e.target.closest ? e.target.closest('button[data-group]') : null;
           if (group) pickGroup(+group.getAttribute('data-group'));
         });
       }
       if (q('pick-open')) {
         listen(q('pick-open'), 'click', function () {
-          view.pickOpen = !view.pickOpen;
-          q('pick-open').setAttribute('aria-expanded', view.pickOpen ? 'true' : 'false');
-          q('pick-panel').hidden = !view.pickOpen;
+          setPickerOpen(!view.pickOpen);
         });
       }
       if (q('pick-find')) listen(q('pick-find'), 'input', function (e) { view.pickFind = e.target.value; renderPickList(); });
       if (q('pick-moved')) listen(q('pick-moved'), 'change', function (e) { view.pickMoved = !!e.target.checked; renderPickList(); });
-      if (q('pick-all')) listen(q('pick-all'), 'click', function () { if (D) { view.anchor = null; pickSet(allSteps()); } });
+      if (q('pick-all')) listen(q('pick-all'), 'click', function () {
+        if (!D) return;
+        view.anchor = null;
+        pickSet(allSteps());
+        setPickerOpen(false);
+        focusStripButton(0);
+      });
       if (q('mode')) {
         listen(q('mode'), 'click', function (e) {
           var button = e.target.closest ? e.target.closest('button[data-mode]') : null;
