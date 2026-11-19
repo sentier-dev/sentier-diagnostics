@@ -3848,7 +3848,7 @@
       });
       return { set: set.sort(function (a, b) { return a - b; }), unknown: unknown };
     }
-    function setHash(item) {
+    function setHash(item, chooseWhole) {
       if (!present()) return false; // out of the document, or without its key: the address is another's
       var said = [], k = kNow();
       if (fixesOn()) said.push(KEY + 'set=' + view.fixSet.map(encodeURIComponent).join(','));
@@ -3860,8 +3860,12 @@
       if (!addressed) { ownAddress = wanted; return false; } // kept, and drawn by the caller
       if ((win.location.hash || '').replace(/^#/, '') === wanted) return false;
       if (wanted) win.location.hash = wanted;
-      // nothing left to say: the address loses its "#", and the host keeps its history state
-      else if (win.history && win.history.replaceState) win.history.replaceState(win.history.state, '', win.location.pathname + win.location.search);
+      else if (win.history && win.history.replaceState) {
+        var url = win.location.pathname + win.location.search;
+        // Choosing the whole way is a destination a reader can go back from.
+        if (chooseWhole && win.history.pushState) win.history.pushState(win.history.state, '', url);
+        else win.history.replaceState(win.history.state, '', url);
+      }
       return true;
     }
 
@@ -3905,7 +3909,7 @@
         renderStepSaid();
         return;
       }
-      setHash(view.open);
+      setHash(view.open, kNow() === D.steps.length);
     }
 
     // one step by hand. "one": that step alone. "to" (Shift, or ⌘ or Ctrl, on the strip or in

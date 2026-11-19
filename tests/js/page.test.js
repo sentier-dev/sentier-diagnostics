@@ -1868,6 +1868,19 @@ test('two pages on one host each take their own key, by the order they were moun
   assert.equal(drawerOf(second).hidden, false);
 });
 
+test('choosing the whole way adds a history entry with the case query and host state', () => {
+  const drawn = dom.page(example(), undefined, { search: '?case=F1', hash: 'sd.step=fix-1', historyState: { caseId: 'F1' } });
+  const pushed = [];
+  drawn.context.history.pushState = (state, title, url) => {
+    pushed.push({ state, url });
+    drawn.context.location.hash = '';
+  };
+  chipOf(drawn, 'total').dispatch('click', {});
+  chipOf(drawn, 'total').dispatch('click', {});
+  assert.deepEqual(pushed, [{ state: { caseId: 'F1' }, url: '/index.html?case=F1' }]);
+  assert.equal(drawn.context.history.replaced.length, 0);
+});
+
 test('closing the drawer keeps the host\'s history state (issue 27)', () => {
   const drawn = dom.page(example(), undefined, { historyState: { host: 'kept' } });
   drawn.open('sd.item=p01');
