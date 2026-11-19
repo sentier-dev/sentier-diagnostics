@@ -3241,9 +3241,10 @@
       drawer.hidden = false;
       drawer.setAttribute('aria-label', row.name);
       showDrawer(drawer);
+      var showScores = root.getAttribute('data-sd-score-summary') === 'true';
       q('item-title').textContent = row.name;
       q('item-meta').textContent = [row.id, row.place, row.group, row.unit ? 'per ' + row.unit : 'unit unknown',
-        row.item ? null : 'from the matrix: not listed in this file'].filter(Boolean).join(' · ');
+        row.item || showScores ? null : 'from the matrix: not listed in this file'].filter(Boolean).join(' · ');
       var body = clear(q('item-body'));
       if (fixesOn()) {
         body.appendChild(el('h4', { text: 'What the fixes did' }));
@@ -3258,10 +3259,12 @@
         body.appendChild(el('h3', { cls: 'sd-drawer-part', text: 'Along the chain' }));
         row = row.chain;
       }
-      if (root.getAttribute('data-sd-score-summary') === 'true') body.appendChild(scoreSummary(row));
-      body.appendChild(el('h4', { text: 'Why it differs' }));
-      body.appendChild(whyNode(row));
-      body.appendChild(el('p', { cls: 'sd-quiet', text: 'The explanations about this ' + D.item.one + ' first, then those about a step or ' + indWord(false) + ' in which it moved: those may not be about it. An explanation is a claim; it changes no class.' }));
+      if (showScores) body.appendChild(scoreSummary(row));
+      if (!showScores || D.explanations.length) {
+        body.appendChild(el('h4', { text: 'Why it differs' }));
+        body.appendChild(whyNode(row));
+        body.appendChild(el('p', { cls: 'sd-quiet', text: 'The explanations about this ' + D.item.one + ' first, then those about a step or ' + indWord(false) + ' in which it moved: those may not be about it. An explanation is a claim; it changes no class.' }));
+      }
       // the indicators, the one whose whole way lies furthest apart first
       var last = D.steps.length;
       var order = D.indicators.slice().sort(function (a, b) {
