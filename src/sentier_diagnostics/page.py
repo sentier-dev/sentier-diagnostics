@@ -108,6 +108,7 @@ def body(
     breakdowns: Mapping[str, Mapping] | None = None,
     base: str = "",
     title: bool = True,
+    score_summary: bool = False,
     matrix: str | None = None,
     fixes: str | None = None,
 ) -> str:
@@ -118,14 +119,16 @@ def body(
     site. `matrix` names the file of the matrix the page loads after it has drawn, where it
     is not the one the file names (a site that serves `matrix.json` needs none). `fixes`
     names a file of fixes of this file (`fixes.json`, or a script as `fixes_script` writes
-    it), which the page loads after it has drawn.
+    it), which the page loads after it has drawn. With `score_summary=True`, the item drawer
+    opens with the absolute scores of the first and last state for every indicator.
     """
     return _body(
-        data, breakdowns=breakdowns, base=base, title=title, matrix=matrix, fixes=fixes, standalone=False
+        data, breakdowns=breakdowns, base=base, title=title, matrix=matrix, fixes=fixes, standalone=False,
+        score_summary=score_summary
     )
 
 
-def _body(data, *, breakdowns, base, title, matrix, fixes=None, standalone) -> str:
+def _body(data, *, breakdowns, base, title, matrix, fixes=None, standalone, score_summary=False) -> str:
     breakdowns = dict(breakdowns or {})
     _checked(data, breakdowns)
     for what, name in (("matrix", matrix), ("file of fixes", fixes)):
@@ -140,6 +143,8 @@ def _body(data, *, breakdowns, base, title, matrix, fixes=None, standalone) -> s
             "list fewer items, and keep every item in the matrix"
         )
     attributes = ""
+    if score_summary:
+        attributes += ' data-sd-score-summary="true"'
     if base:
         attributes += f' data-sd-base="{html.escape(base, quote=True)}"'
     if matrix:

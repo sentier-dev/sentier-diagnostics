@@ -367,6 +367,21 @@ const tableRows = (table) => {
 };
 const within = (node) => [node, ...node.childNodes.flatMap(within)];
 
+test('a host can lead with the absolute scores from the first and last state', () => {
+  const data = example(), drawn = dom.page(data);
+  drawn.root.setAttribute('data-sd-score-summary', 'true');
+  drawn.open('sd.item=p01');
+  const table = drawn.byId['item-body'].firstChild.firstChild;
+  assert.equal(table.getAttribute('data-sd'), 'score-summary');
+  const rows = tableRows(table);
+  const item = data.items.find((i) => i.id === 'p01');
+  assert.equal(rows.length, data.indicators.length);
+  data.indicators.forEach((ind, i) => {
+    assert.equal(rows[i][data.states[0].label], page.formatNumber(item.values[ind.id][0]));
+    assert.equal(rows[i][data.states.at(-1).label], page.formatNumber(item.values[ind.id].at(-1)));
+  });
+});
+
 test('the item view draws each result in its own row and column, and each part of a breakdown on its own line (issue 14)', () => {
   const d = example();
   const drawn = dom.page(d, { 'p01-fix-1.json': wheat() });
